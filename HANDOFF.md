@@ -29,6 +29,7 @@ public/
   chat.html      Chat con Claude (historial, imágenes adjuntas).
   areas.html     Todas las áreas (sueño, gym, nutrición, proyectos, contenido, tareas, finanzas). Navega por hash.
   config.html    Cuenta (nombre, contexto del asistente, contraseña), tema, integraciones bancarias, memoria.
+  bienvenida.html Onboarding de cuentas nuevas (sin sidebar).
   admin.html     Solo admin: crear cuentas, ver una cuenta, reset de contraseña, quitar/devolver acceso.
   login.html     Login con cookie de sesión.
   ui.js          Sidebar compartido inyectado en todas las páginas + caché sessionStorage.
@@ -99,6 +100,7 @@ Las credenciales bancarias (Airwallex, Mercury) **no** van en env: se pegan desd
 - **user**: solo su cuenta. Cambia su nombre, contexto y contraseña en Configuración → Cuenta.
 - Contraseñas con `scrypt`; sesión = cookie firmada `id.exp.hmac` que incluye `pw_version`, así cambiar la contraseña cierra las demás sesiones. Basic auth (`usuario:contraseña`) sigue valiendo para scripts.
 - No hay borrado de cuentas desde la UI, solo quitar acceso (los datos se conservan).
+- **Bienvenida (onboarding)**: `users.onboarded`. Una cuenta nueva (creada desde `/admin.html`) entra por `/bienvenida.html` la primera vez: nombre → contexto para el asistente → hábitos y puntos (activar, renombrar, añadir, «Repartir a 100», umbral de horas y objetivo kcal) → tema → resumen. Guarda con `/api/me/profile`, `/api/state` (`config.senales`, `config_nutricion`) y `/api/me/onboarded`. «Saltar por ahora» la marca hecha; se repite desde Configuración → Cuenta → Repetir bienvenida (o el admin con `onboarded:false` en `/api/admin/users/:id`). `ui.js` redirige si `onboarded === false`, nunca cuando un admin está viendo otra cuenta.
 - **Grupos (workspaces)**: etiqueta opcional por cuenta (Amigos, una empresa…) para agrupar en `/admin.html` y, en el futuro, clasificaciones o defaults por grupo. No aíslan datos (ya van por usuario). Tabla `workspaces (id, nombre, created)` + `users.workspace_id`. Borrar un grupo deja a sus cuentas sin grupo.
 
 ---
@@ -144,7 +146,7 @@ Ver «Usuarios y roles» en la sección 3.
 
 Tablas, todas creadas por `initSchema` (esquema aditivo, sin migraciones):
 
-- `users (id, username, password_hash, display_name, context, role, active, pw_version, created, last_login, workspace_id)`.
+- `users (id, username, password_hash, display_name, context, role, active, pw_version, created, last_login, workspace_id, onboarded)`.
 - `workspaces (id, nombre, created)`: grupos de cuentas.
 - `user_state (user_id, data JSONB, updated_at)`: **todo el estado de un usuario** en una fila.
 - `chat_images (id, mime, data base64, created, user_id)`: imágenes adjuntas al chat, fuera del JSONB para no engordar cada escritura.
@@ -184,7 +186,7 @@ Autenticación: cookie `os_session` (login del navegador) o Basic auth (`-u user
 | GET | `/health`, `/diag` | salud y tamaño del estado |
 | POST | `/api/login`, `/api/logout` | sesión |
 | GET | `/api/me` | quién soy (`user`, `actor`, `viewing_as`, `is_admin`) |
-| POST | `/api/me/profile`, `/api/me/password` | mi nombre/contexto, mi contraseña |
+| POST | `/api/me/profile`, `/api/me/password`, `/api/me/onboarded` | mi nombre/contexto, mi contraseña, bienvenida hecha |
 | GET/POST | `/api/admin/users`, `/api/admin/users/:id`, `/api/admin/users/:id/password`, `/api/admin/view-as` | solo admin |
 | GET/POST/DELETE | `/api/admin/workspaces`, `/api/admin/workspaces/:id` | grupos (solo admin) |
 | GET | `/api/state` | estado completo menos `integraciones` y `chats` |

@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#f3f3f5">
+<title>Bienvenida · OS</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #f3f3f5; --surface: #ffffff; --surface-2: #f4f4f7; --border: #e9e9ee;
+    --ink: #17171c; --ink-2: #4c4c56; --ink-3: #8b8b94; --accent: #5546e8; --accent-2: #7b6cff;
+    --good: #0a7d0a; --bad: #d03b3b; --radius: 18px;
+  }
+  html, body {
+    background: var(--bg); color: var(--ink); min-height: 100%;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased; font-size: 15px; line-height: 1.45;
+  }
+  body { display: flex; align-items: flex-start; justify-content: center; padding: 28px 16px 60px; }
+  .box { width: 100%; max-width: 560px; }
+  .top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 750; letter-spacing: -0.01em; }
+  .brand .chip { width: 34px; height: 34px; border-radius: 11px; background: linear-gradient(135deg, var(--accent-2), var(--accent)); color: #fff; font-size: 13px; font-weight: 800; display: flex; align-items: center; justify-content: center; }
+  .skip { background: none; border: none; color: var(--ink-3); font-family: inherit; font-size: 13px; cursor: pointer; padding: 6px 8px; border-radius: 8px; }
+  .skip:hover { color: var(--ink); background: var(--surface-2); }
+  .dots { display: flex; gap: 6px; margin-bottom: 14px; }
+  .dots span { height: 4px; flex: 1; border-radius: 4px; background: var(--border); transition: background 0.2s; }
+  .dots span.on { background: var(--accent); }
+  .card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 26px 24px;
+    box-shadow: 0 1px 2px rgba(23,23,40,0.04), 0 12px 32px rgba(23,23,40,0.07);
+  }
+  .step { display: none; }
+  .step.on { display: block; animation: in 0.22s ease; }
+  @keyframes in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  .k { font-size: 11px; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.09em; font-weight: 650; margin-bottom: 8px; }
+  h1 { font-size: 24px; font-weight: 750; letter-spacing: -0.02em; line-height: 1.2; margin-bottom: 8px; }
+  .lead { font-size: 14px; color: var(--ink-2); line-height: 1.55; margin-bottom: 18px; }
+  label { display: block; font-size: 11px; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.07em; margin: 14px 0 6px 2px; }
+  input, textarea {
+    width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 11px;
+    color: var(--ink); font-family: inherit; font-size: 15px; padding: 12px 13px;
+  }
+  textarea { resize: vertical; line-height: 1.5; min-height: 120px; }
+  input:focus, textarea:focus { outline: none; border-color: var(--accent); }
+  input::placeholder, textarea::placeholder { color: var(--ink-3); opacity: 0.8; }
+  .hint { font-size: 12.5px; color: var(--ink-3); margin-top: 8px; line-height: 1.55; }
+  .ejemplos { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+  .ejemplos button { background: var(--surface-2); border: 1px solid transparent; color: var(--ink-2); border-radius: 999px; padding: 5px 11px; font-size: 12.5px; font-family: inherit; cursor: pointer; }
+  .ejemplos button:hover { border-color: var(--border); color: var(--ink); }
+
+  /* hábitos */
+  .hab { display: grid; grid-template-columns: 26px 1fr auto; gap: 10px; align-items: center; padding: 10px 4px; border-bottom: 1px solid var(--border); }
+  .hab:last-of-type { border-bottom: none; }
+  .hab.off .l input, .hab.off .meta { opacity: 0.45; }
+  .hab .chk { width: 22px; height: 22px; border-radius: 7px; border: 1.5px solid var(--border); background: var(--surface); cursor: pointer; display: flex; align-items: center; justify-content: center; color: #fff; }
+  .hab.on .chk { background: var(--accent); border-color: var(--accent); }
+  .hab .chk svg { width: 14px; height: 14px; }
+  .hab .l input { border: none; background: transparent; padding: 4px 6px; font-size: 14.5px; font-weight: 600; border-radius: 7px; }
+  .hab .l input:hover, .hab .l input:focus { background: var(--bg); }
+  .hab .meta { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; justify-content: flex-end; font-size: 12.5px; color: var(--ink-3); }
+  .hab .meta .tipo { background: var(--surface-2); border-radius: 999px; padding: 3px 9px; font-weight: 550; }
+  .hab .meta .num { display: inline-flex; align-items: center; gap: 4px; }
+  .hab .meta input { width: 58px; padding: 6px 8px; font-size: 13.5px; text-align: right; border-radius: 8px; font-variant-numeric: tabular-nums; }
+  .hab .del { background: none; border: none; color: var(--ink-3); cursor: pointer; padding: 4px; border-radius: 6px; font-size: 14px; line-height: 1; }
+  .hab .del:hover { color: var(--bad); background: var(--surface-2); }
+  .total { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 14px; padding: 12px 14px; border-radius: 12px; background: var(--surface-2); font-size: 13.5px; }
+  .total b { font-variant-numeric: tabular-nums; }
+  .total.ok b { color: var(--good); }
+  .total.bad b { color: var(--bad); }
+  .total button { background: var(--surface); border: 1px solid var(--border); border-radius: 9px; padding: 6px 11px; font-size: 12.5px; font-family: inherit; cursor: pointer; color: var(--ink-2); }
+  .total button:hover { color: var(--ink); }
+  .add { margin-top: 12px; display: flex; gap: 8px; }
+  .add input { flex: 1; padding: 10px 12px; font-size: 14px; }
+  .add button { background: var(--surface); border: 1px solid var(--border); border-radius: 11px; padding: 0 14px; font-family: inherit; font-size: 13.5px; cursor: pointer; color: var(--ink-2); white-space: nowrap; }
+  .add button:hover { color: var(--ink); }
+
+  /* temas */
+  .temas { display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); gap: 10px; }
+  .tema { background: var(--surface); border: 1.5px solid var(--border); border-radius: 12px; padding: 8px; cursor: pointer; font-family: inherit; font-size: 12.5px; font-weight: 550; color: var(--ink-2); display: flex; flex-direction: column; gap: 7px; text-align: center; }
+  .tema.active { border-color: var(--accent); color: var(--ink); }
+  .tema .prev { height: 46px; border-radius: 8px; position: relative; overflow: hidden; border: 1px solid rgba(128,128,128,0.18); }
+  .tema .prev .pcard { position: absolute; left: 9px; top: 9px; right: 9px; bottom: -8px; border-radius: 6px; }
+  .tema .prev .pdot { position: absolute; left: 16px; top: 16px; width: 18px; height: 5px; border-radius: 3px; }
+
+  /* resumen final */
+  .res { display: grid; gap: 8px; margin-top: 6px; }
+  .res div { display: flex; justify-content: space-between; gap: 12px; padding: 10px 12px; border-radius: 11px; background: var(--surface-2); font-size: 13.5px; }
+  .res div span:first-child { color: var(--ink-3); flex-shrink: 0; }
+  .res div span:last-child { text-align: right; }
+  .ejemplo-chat { margin-top: 16px; padding: 14px; border-radius: 12px; border: 1px dashed var(--border); font-size: 13.5px; color: var(--ink-2); line-height: 1.55; }
+  .ejemplo-chat b { color: var(--ink); }
+
+  .nav { display: flex; gap: 8px; margin-top: 22px; justify-content: space-between; align-items: center; }
+  .nav .msg { font-size: 12.5px; color: var(--bad); min-height: 16px; flex: 1; }
+  .btn { background: var(--surface); border: 1px solid var(--border); color: var(--ink-2); border-radius: 11px; padding: 11px 18px; font-size: 14px; font-weight: 550; cursor: pointer; font-family: inherit; }
+  .btn:hover { color: var(--ink); }
+  .btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 650; }
+  .btn.primary:hover { opacity: 0.92; }
+  .btn:disabled { opacity: 0.5; cursor: default; }
+  @media (max-width: 520px) {
+    .card { padding: 20px 16px; }
+    .hab { grid-template-columns: 26px 1fr; }
+    .hab .meta { grid-column: 2; justify-content: flex-start; }
+  }
+</style>
+</head>
+<body>
+<script src="/theme.js"></script>
+<script src="/icons.js"></script>
+<div class="box">
+  <div class="top">
+    <div class="brand"><span class="chip">OS</span><span id="brandName">OS</span></div>
+    <button class="skip" id="skip" title="Puedes volver desde Configuración → Repetir bienvenida">Saltar por ahora</button>
+  </div>
+  <div class="dots" id="dots"></div>
+  <div class="card">
+
+    <section class="step" data-step="0">
+      <div class="k">1 de 5 · Tú</div>
+      <h1>Empecemos por lo básico</h1>
+      <p class="lead">Este panel es tuyo: cada día le cuentas al asistente cómo ha ido, él lo apunta y tú ves si vas hacia donde quieres. Primero, ¿cómo quieres que te llame?</p>
+      <label for="nombre">Tu nombre</label>
+      <input id="nombre" autocomplete="nickname" placeholder="p. ej. Dani">
+    </section>
+
+    <section class="step" data-step="1">
+      <div class="k">2 de 5 · Contexto</div>
+      <h1>Cuéntale quién eres</h1>
+      <p class="lead">Dos o tres frases que el asistente tendrá delante en cada conversación: a qué te dedicas, qué persigues estos meses y cómo prefieres que te hable. Lo puedes cambiar cuando quieras en Configuración.</p>
+      <textarea id="ctx" placeholder="p. ej. Comercial en una inmobiliaria, 29 años. Quiero ser constante con el gym y dormir mejor. Háblame directo, sin frases motivacionales."></textarea>
+      <div class="ejemplos" id="ejemplos"></div>
+      <div class="hint">Cuanto más concreto, mejor entiende lo que te importa. No hace falta que sea perfecto.</div>
+    </section>
+
+    <section class="step" data-step="2">
+      <div class="k">3 de 5 · Hábitos</div>
+      <h1>¿Qué cuenta en tu día?</h1>
+      <p class="lead">Cada día se puntúa de 0 a 100 con estos hábitos. Activa los que quieras seguir, cámbiales el nombre y reparte los puntos según lo que más te importe. Los de horas dan crédito parcial: 3h de 4h suman el 75%.</p>
+      <div id="habs"></div>
+      <div class="add"><input id="nuevoHab" placeholder="Otro hábito, p. ej. Leer 20 min"><button type="button" id="addHab">Añadir</button></div>
+      <div class="total" id="total"></div>
+    </section>
+
+    <section class="step" data-step="3">
+      <div class="k">4 de 5 · Aspecto</div>
+      <h1>Elige cómo lo quieres ver</h1>
+      <p class="lead">Se aplica al instante y se recuerda en este dispositivo.</p>
+      <div class="temas" id="temas"></div>
+    </section>
+
+    <section class="step" data-step="4">
+      <div class="k">5 de 5 · Listo</div>
+      <h1 id="finTitulo">Todo listo</h1>
+      <p class="lead">Así queda tu panel. A partir de ahora, la forma de usarlo es simple: al final del día (o durante) le cuentas al chat qué has hecho, y él marca los hábitos, guarda el resto y calcula tu score.</p>
+      <div class="res" id="resumen"></div>
+      <div class="ejemplo-chat" id="ejemploChat"></div>
+    </section>
+
+    <div class="nav">
+      <button class="btn" id="atras">Atrás</button>
+      <div class="msg" id="msg"></div>
+      <button class="btn primary" id="sig">Siguiente</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const I = window.OSIcons || {};
+const esc = (t) => String(t ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const N_STEPS = 5;
+let step = 0;
+let ME = null, STATE = null;
+let HABS = []; // { id, label, tipo, peso, umbral?, hint?, on }
+let KCAL = 2500;
+
+async function api(path, opts = {}) {
+  const res = await fetch(path, { credentials: "include", headers: { "Content-Type": "application/json" }, ...opts });
+  if (res.status === 401) { location.href = "/login.html"; throw new Error("sesión caducada"); }
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || "HTTP " + res.status);
+  return body;
+}
+
+const EJEMPLOS = [
+  "Autónomo, quiero ser constante con el deporte y dormir 7h. Directo y sin rodeos.",
+  "Estudio y trabajo. Mi prioridad estos meses es estudiar 3h al día sin móvil. Tono cercano.",
+  "Comercial. Persigo una rutina de mañanas: madrugar, entrenar y llegar al trabajo con el día planificado.",
+];
+
+function paintDots() {
+  $("dots").innerHTML = Array.from({ length: N_STEPS }, (_, i) => `<span class="${i <= step ? "on" : ""}"></span>`).join("");
+}
+
+function show(i) {
+  step = Math.max(0, Math.min(N_STEPS - 1, i));
+  document.querySelectorAll(".step").forEach((s) => s.classList.toggle("on", Number(s.dataset.step) === step));
+  $("atras").style.visibility = step === 0 ? "hidden" : "visible";
+  $("sig").textContent = step === N_STEPS - 1 ? "Ir a mi panel" : "Siguiente";
+  $("msg").textContent = "";
+  paintDots();
+  if (step === 2) paintHabs();
+  if (step === 4) paintResumen();
+  window.scrollTo({ top: 0 });
+}
+
+/* ---------- hábitos ---------- */
+function slug(label) {
+  const base = label.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 30) || "habito";
+  const ids = new Set(HABS.map((h) => h.id));
+  if (!ids.has(base)) return base;
+  let n = 2; while (ids.has(base + "_" + n)) n++;
+  return base + "_" + n;
+}
+function totalOn() { return HABS.filter((h) => h.on).reduce((a, h) => a + (Number(h.peso) || 0), 0); }
+
+function paintHabs() {
+  const box = $("habs");
+  box.innerHTML = HABS.map((h, i) => `<div class="hab ${h.on ? "on" : "off"}" data-i="${i}">
+      <button type="button" class="chk" data-a="toggle" aria-label="activar">${I.check || "✓"}</button>
+      <div class="l"><input data-f="label" value="${esc(h.label)}" ${h.hint ? `title="${esc(h.hint)}"` : ""}></div>
+      <div class="meta">
+        ${h.tipo === "horas" ? `<span class="num"><input data-f="umbral" type="number" inputmode="decimal" step="0.5" min="0.5" value="${h.umbral ?? 1}"> h/día</span>`
+          : h.tipo === "kcal" ? `<span class="num"><input data-f="kcal" type="number" inputmode="numeric" step="50" min="500" value="${KCAL}"> kcal</span>`
+          : `<span class="tipo">sí / no</span>`}
+        <span class="num"><input data-f="peso" type="number" inputmode="numeric" min="0" max="100" value="${h.peso}"> pts</span>
+        ${h.custom ? `<button type="button" class="del" data-a="del" title="Quitar">✕</button>` : ""}
+      </div>
+    </div>`).join("");
+  box.querySelectorAll(".hab").forEach((row) => {
+    const h = HABS[Number(row.dataset.i)];
+    row.querySelector('[data-a="toggle"]').onclick = () => { h.on = !h.on; paintHabs(); };
+    const del = row.querySelector('[data-a="del"]');
+    if (del) del.onclick = () => { HABS.splice(HABS.indexOf(h), 1); paintHabs(); };
+    row.querySelectorAll("input[data-f]").forEach((inp) => {
+      inp.oninput = () => {
+        const f = inp.dataset.f;
+        if (f === "label") h.label = inp.value;
+        else if (f === "peso") { h.peso = Math.max(0, Math.round(Number(inp.value) || 0)); paintTotal(); }
+        else if (f === "umbral") h.umbral = Math.max(0.5, Number(inp.value) || 1);
+        else if (f === "kcal") KCAL = Math.max(500, Math.round(Number(inp.value) || 2500));
+      };
+      inp.onfocus = () => { if (!h.on) { h.on = true; row.classList.remove("off"); row.classList.add("on"); paintTotal(); } };
+    });
+  });
+  paintTotal();
+}
+function paintTotal() {
+  const t = totalOn();
+  const nOn = HABS.filter((h) => h.on).length;
+  const el = $("total");
+  el.className = "total " + (t === 100 ? "ok" : "bad");
+  el.innerHTML = `<span>${nOn} hábito${nOn === 1 ? "" : "s"} activo${nOn === 1 ? "" : "s"} · total <b>${t}</b> / 100</span>` +
+    (t !== 100 && nOn ? `<button type="button" id="ajustar">Repartir a 100</button>` : "");
+  const b = $("ajustar");
+  if (b) b.onclick = () => { repartir(); paintHabs(); };
+}
+/* reparto proporcional a los pesos actuales (o igual si todos son 0), redondeado a enteros que suman 100 */
+function repartir() {
+  const on = HABS.filter((h) => h.on);
+  if (!on.length) return;
+  const base = on.map((h) => Math.max(0, Number(h.peso) || 0));
+  const suma = base.reduce((a, b) => a + b, 0);
+  const pesos = suma > 0 ? base.map((p) => (p / suma) * 100) : on.map(() => 100 / on.length);
+  const ent = pesos.map(Math.floor);
+  let resto = 100 - ent.reduce((a, b) => a + b, 0);
+  const orden = pesos.map((p, i) => [p - ent[i], i]).sort((a, b) => b[0] - a[0]);
+  for (let k = 0; resto > 0; k = (k + 1) % orden.length, resto--) ent[orden[k][1]]++;
+  on.forEach((h, i) => { h.peso = ent[i]; });
+}
+$("addHab").onclick = () => {
+  const label = $("nuevoHab").value.trim();
+  if (!label) return $("nuevoHab").focus();
+  HABS.push({ id: slug(label), label, tipo: "bool", peso: 10, on: true, custom: true });
+  $("nuevoHab").value = "";
+  paintHabs();
+};
+$("nuevoHab").onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); $("addHab").click(); } };
+
+/* ---------- temas ---------- */
+const TEMAS = [
+  { id: "claro", label: "Claro",   bg: "#f3f3f5", surface: "#ffffff", accent: "#5546e8" },
+  { id: "crema", label: "Crema",   bg: "#f3ede2", surface: "#fdfaf3", accent: "#bc5f2e" },
+  { id: "azul",  label: "Azulado", bg: "#0d1830", surface: "#15233f", accent: "#4d8dff" },
+  { id: "negro", label: "Negro",   bg: "#0e0e12", surface: "#17171d", accent: "#7b6cff" },
+];
+for (const t of TEMAS) {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = "tema" + (OSTheme.get() === t.id ? " active" : "");
+  b.innerHTML = `<span class="prev" style="background:${t.bg}"><span class="pcard" style="background:${t.surface}"></span><span class="pdot" style="background:${t.accent}"></span></span>${t.label}`;
+  b.onclick = () => { OSTheme.set(t.id); document.querySelectorAll(".tema").forEach((x) => x.classList.remove("active")); b.classList.add("active"); };
+  $("temas").appendChild(b);
+}
+
+/* ---------- resumen ---------- */
+function paintResumen() {
+  const nombre = $("nombre").value.trim() || ME?.user?.display_name || "";
+  const on = HABS.filter((h) => h.on && h.peso > 0);
+  $("finTitulo").textContent = nombre ? `Todo listo, ${nombre}` : "Todo listo";
+  $("resumen").innerHTML = [
+    ["Te llama", nombre || "—"],
+    ["Hábitos que puntúan", on.map((h) => `${h.label} (${h.peso})`).join(" · ") || "ninguno"],
+    ["Tema", TEMAS.find((t) => t.id === OSTheme.get())?.label || "Claro"],
+  ].map(([k, v]) => `<div><span>${k}</span><span>${esc(v)}</span></div>`).join("");
+  const ej = on.slice(0, 3).map((h) => h.tipo === "horas" ? `${h.label.toLowerCase()} ${h.umbral}h` : h.tipo === "kcal" ? `unas ${KCAL} kcal` : h.label.toLowerCase()).join(", ");
+  $("ejemploChat").innerHTML = `<b>Por ejemplo, esta noche escríbele:</b> «Hoy ${ej || "he cumplido todo"}. Mañana quiero madrugar.» Él lo apunta y te devuelve el score del día.`;
+}
+
+/* ---------- guardar ---------- */
+async function guardar() {
+  const nombre = $("nombre").value.trim();
+  if (!nombre) { show(0); $("msg").textContent = "Dime cómo quieres que te llame."; return false; }
+  const on = HABS.filter((h) => h.on && Number(h.peso) > 0);
+  if (!on.length) { show(2); $("msg").textContent = "Activa al menos un hábito con puntos."; return false; }
+  if (totalOn() !== 100) repartir();
+  const senales = HABS.filter((h) => h.on && Number(h.peso) > 0).map((h) => {
+    const s = { id: h.id, label: (h.label || "").trim() || h.id, tipo: h.tipo, peso: Number(h.peso) };
+    if (h.tipo === "horas") s.umbral = Number(h.umbral) || 1;
+    if (h.hint) s.hint = h.hint;
+    return s;
+  });
+  $("sig").disabled = true;
+  try {
+    await api("/api/me/profile", { method: "POST", body: JSON.stringify({ display_name: nombre, context: $("ctx").value }) });
+    const fresh = await api("/api/state"); // config es top-level: se refresca antes de escribir para no pisar racha_min u otras claves
+    const config = { ...(fresh.config || {}), senales };
+    const config_nutricion = { ...(fresh.config_nutricion || {}), kcal_obj: KCAL };
+    await api("/api/state", { method: "POST", body: JSON.stringify({ config, config_nutricion }) });
+    await api("/api/me/onboarded", { method: "POST", body: JSON.stringify({ done: true }) });
+    try { sessionStorage.clear(); } catch (e) {}
+    return true;
+  } catch (e) {
+    $("msg").textContent = "No se pudo guardar: " + e.message;
+    $("sig").disabled = false;
+    return false;
+  }
+}
+
+$("sig").onclick = async () => {
+  if (step === 0 && !$("nombre").value.trim()) { $("msg").textContent = "Dime cómo quieres que te llame."; $("nombre").focus(); return; }
+  if (step === 2 && !HABS.some((h) => h.on && h.peso > 0)) { $("msg").textContent = "Activa al menos un hábito con puntos."; return; }
+  if (step < N_STEPS - 1) return show(step + 1);
+  if (await guardar()) location.href = "/";
+};
+$("atras").onclick = () => show(step - 1);
+$("skip").onclick = async () => {
+  try { await api("/api/me/onboarded", { method: "POST", body: JSON.stringify({ done: true }) }); } catch (e) {}
+  try { sessionStorage.clear(); } catch (e) {}
+  location.href = "/";
+};
+$("nombre").onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); $("sig").click(); } };
+
+/* ---------- carga ---------- */
+(async () => {
+  try {
+    [ME, STATE] = await Promise.all([api("/api/me"), api("/api/state")]);
+    $("brandName").textContent = "OS";
+    $("nombre").value = ME.user?.display_name && ME.user.display_name.toLowerCase() !== ME.user.username ? ME.user.display_name : "";
+    if (!$("nombre").value && ME.user?.display_name) $("nombre").value = ME.user.display_name;
+    $("ctx").value = ME.user?.context || "";
+    HABS = (STATE.config?.senales || []).map((s) => ({ ...s, on: true }));
+    KCAL = Number(STATE.config_nutricion?.kcal_obj) || 2500;
+    $("ejemplos").innerHTML = EJEMPLOS.map((t, i) => `<button type="button" data-i="${i}">Ejemplo ${i + 1}</button>`).join("");
+    $("ejemplos").querySelectorAll("button").forEach((b) => { b.onclick = () => { $("ctx").value = EJEMPLOS[Number(b.dataset.i)]; $("ctx").focus(); }; });
+    show(0);
+    $("nombre").focus();
+  } catch (e) {
+    $("msg").textContent = "Error cargando: " + e.message;
+  }
+})();
+</script>
+</body>
+</html>

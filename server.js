@@ -119,6 +119,13 @@ async function initSchema() {
     );
   `);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS workspace_id TEXT;`);
+  /* onboarding: las cuentas nuevas pasan por /bienvenida.html la primera vez. Al añadir la columna,
+     los admins ya existentes se dan por configurados; el resto (cuentas creadas antes de esta versión) lo verá una vez. */
+  const colOnb = await pool.query("SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'onboarded'");
+  if (!colOnb.rows.length) {
+    await pool.query(`ALTER TABLE users ADD COLUMN onboarded BOOLEAN NOT NULL DEFAULT false;`);
+    await pool.query(`UPDATE users SET onboarded = true WHERE role = 'admin';`);
+  }
   await pool.query(`ALTER TABLE chat_images ADD COLUMN IF NOT EXISTS user_id TEXT;`);
   await pool.query(`ALTER TABLE app_files ADD COLUMN IF NOT EXISTS user_id TEXT;`);
 
@@ -128,7 +135,7 @@ async function initSchema() {
   if (nUsers === 0) {
     const adminId = uid("u");
     await pool.query(
-      "INSERT INTO users (id, username, password_hash, display_name, context, role, created) VALUES ($1, $2, $3, $4, $5, 'admin', $6)",
+      "INSERT INTO users (id, username, password_hash, display_name, context, role, created, onboarded) VALUES ($1, $2, $3, $4, $5, 'admin', $6, true)",
       [adminId, AUTH_USER.toLowerCase(), await hashPassword(AUTH_PASS), OWNER_NAME || capital(AUTH_USER), OWNER_CONTEXT || null, Date.now()]
     );
     const legacy = await pool.query("SELECT data FROM app_state WHERE id = 1");
@@ -155,7 +162,7 @@ function seedDefaults(data) {
     cuentas: [],     // { id, nombre, tipo: banco|efectivo|ahorro|otro, saldo, updated }
     suscripciones: [], // { id, nombre, importe, periodicidad: mensual|anual, dia_cobro?, tipo: sub|deuda, cuotas_restantes?, fin?, activa }
     config_finanzas: { objetivo_ahorro: 10800 },
-    config_nutricion: { kcal_obj: 3500 },
+    config_nutricion: { kcal_obj: 2500 },
     integraciones: {}, // { airwallex: {client_id, api_key, base}, mercury: {token}, last_sync, last_result } — credenciales en BD, se configuran desde /config.html
     peso: [],        // { fecha, kg }
     chats: {},
@@ -284,7 +291,7 @@ function verifyPassword(pass, stored) {
     });
   });
 }
-const USER_COLS = "id, username, display_name, context, role, active, pw_version, created, last_login, workspace_id";
+const USER_COLS = "id, username, display_name, context, role, active, pw_version, created, last_login, workspace_id, onboarded";
 async function getUser(id) {
   const r = await pool.query(`SELECT ${USER_COLS} FROM users WHERE id = $1`, [id]);
   return r.rows[0] || null;
@@ -537,6 +544,14 @@ app.post("/api/me/profile", async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+app.post("/api/me/onboarded", async (req, res) => {
+  try {
+    const done = req.body?.done !== false;
+    await pool.query("UPDATE users SET onboarded = $2 WHERE id = $1", [req.user.id, done]);
+    res.json({ ok: true, onboarded: done });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 app.post("/api/me/password", async (req, res) => {
   try {
     if (req.viewingAs) return res.status(400).json({ error: "estás viendo otra cuenta: cambia su contraseña desde Usuarios" });
@@ -601,7 +616,8 @@ app.post("/api/admin/users/:id", requireAdmin, async (req, res) => {
       workspace_id = await workspaceIdValido(b.workspace_id);
       if (workspace_id === false) return res.status(400).json({ error: "grupo no encontrado" });
     }
-    await pool.query("UPDATE users SET display_name = $2, context = $3, role = $4, active = $5, workspace_id = $6 WHERE id = $1", [u.id, display_name, context, role, active, workspace_id]);
+    const onboarded = b.onboarded === undefined ? u.onboarded : Boolean(b.onboarded);
+    await pool.query("UPDATE users SET display_name = $2, context = $3, role = $4, active = $5, workspace_id = $6, onboarded = $7 WHERE id = $1", [u.id, display_name, context, role, active, workspace_id, onboarded]);
     if (!active) basicCache.clear();
     res.json({ ok: true, user: await getUser(u.id) });
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -898,12 +914,12 @@ app.post("/api/sync", async (req, res) => {
 /* ======================================================================
    CHAT IA
    ====================================================================== */
-const systemPromptFor = (N, CTX) => `Eres el asistente personal de ${N}.${CTX ? " Contexto sobre esta persona: " + CTX : ""}
+const systemPromptFor = (N, CTX, HAB) => `Eres el asistente personal de ${N}.${CTX ? " Contexto sobre esta persona: " + CTX : ""}
 
 Esta app es su panel de vida: él te cuenta su día (al final o durante) y TÚ estructuras y guardas los datos. El dashboard calcula un score diario 0-100 con matemática fija a partir de las señales — tú NUNCA calculas ni inventas el score, solo registras señales.
 
 Estructura del estado:
-- config.senales: [{ id, label, tipo: "bool"|"horas"|"kcal", peso, umbral? }] — los HÁBITOS que puntúan (${N} los llama "hábitos"; en conversación di siempre hábito, nunca señal — la clave interna sigue siendo senales). Actuales: contenido (bool), deep_work (horas, umbral 4), entreno (bool), sueno (horas, umbral 7), despertar (bool, 6:00), nutricion (tipo kcal: DERIVADO, ver abajo), no_movil (bool).
+- config.senales: [{ id, label, tipo: "bool"|"horas"|"kcal", peso, umbral? }] — los HÁBITOS que puntúan (${N} los llama "hábitos"; en conversación di siempre hábito, nunca señal — la clave interna sigue siendo senales). Actuales: ${HAB}
 - days: por fecha { senales: {id: valor}, resumen } — el registro diario.
 - journal: [{ fecha, area, texto }] — apuntes de contexto por área: general|sueno|gym|nutricion|proyectos|contenido|finanzas.
 - memoria: [{ id, texto, fecha }] — TU memoria durable entre conversaciones. Se te inyecta entera al final de este prompt en cada mensaje: lo que guardes ahí lo "recuerdas" siempre, sin tener que leerlo.
@@ -941,7 +957,10 @@ Reglas de comportamiento:
 
 /* la memoria durable del chat va entera en el system prompt: no depende de que el modelo la lea */
 function systemConMemoria(data, user) {
-  const SYSTEM_PROMPT = systemPromptFor(user?.display_name || capital(user?.username) || "ti", user?.context || "");
+  const hab = (data?.config?.senales || []).map((s) =>
+    `${s.id} "${s.label}" (${s.tipo === "horas" ? `horas, umbral ${s.umbral}` : s.tipo === "kcal" ? "tipo kcal: DERIVADO, ver abajo" : "bool"}, ${s.peso} pts)`
+  ).join(", ") || "ninguno configurado todavía";
+  const SYSTEM_PROMPT = systemPromptFor(user?.display_name || capital(user?.username) || "ti", user?.context || "", hab + ".");
   const mems = Array.isArray(data?.memoria) ? data.memoria : [];
   if (!mems.length) {
     return SYSTEM_PROMPT + "\n\nMEMORIA: vacía todavía — ve guardando hechos durables con add_item en memoria.";

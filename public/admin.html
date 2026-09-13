@@ -161,6 +161,7 @@ function filaUsuario(u) {
           ${u.role === "admin" ? `<span class="tag admin">admin</span>` : ""}
           ${esYo ? `<span class="tag tu">tú</span>` : ""}
           ${!u.active ? `<span class="tag off">sin acceso</span>` : ""}
+          ${u.active && u.onboarded === false ? `<span class="tag tu" title="Aún no ha completado la bienvenida">sin configurar</span>` : ""}
         </div>
         <div class="meta"><span>@${esc(u.username)}</span><span>último acceso ${fmtRel(u.last_login)}</span><span>datos ${fmtKB(u.state_bytes)}</span><span>desde ${fmtFecha(u.created)}</span></div>
       </div>

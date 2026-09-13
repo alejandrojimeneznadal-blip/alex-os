@@ -101,6 +101,7 @@
     <div class="btns">
       <button class="primary" id="accGuardar">Guardar</button>
       <button id="accPass">Cambiar contraseña</button>
+      <button id="accOnb" title="Vuelve a pasar por la configuración inicial: nombre, contexto, hábitos y tema">Repetir bienvenida</button>
     </div>
     <div class="msg" id="accMsg"></div>
   </div>
@@ -281,6 +282,13 @@ $("accGuardar").onclick = async () => {
     await api("/api/me/profile", { method: "POST", body: JSON.stringify({ display_name: $("accNombre").value, context: $("accCtx").value }) });
     await OSMe.refresh();
     setAccMsg("Guardado.", "ok");
+  } catch (e) { setAccMsg("Error: " + e.message, "err"); }
+};
+$("accOnb").onclick = async () => {
+  try {
+    await api("/api/me/onboarded", { method: "POST", body: JSON.stringify({ done: false }) });
+    try { sessionStorage.removeItem("os_me_v1"); } catch (e) {}
+    location.href = "/bienvenida.html";
   } catch (e) { setAccMsg("Error: " + e.message, "err"); }
 };
 $("accPass").onclick = async () => {
