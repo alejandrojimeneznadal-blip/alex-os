@@ -19,10 +19,13 @@ const {
   PORT = 3200,
   OWNER_NAME,
   OWNER_CONTEXT = "",
+  SESSION_SECRET,
 } = process.env;
 
-// Nombre del dueño de la instancia (para el asistente). Por defecto, el usuario del login capitalizado.
-const N = OWNER_NAME || (AUTH_USER.charAt(0).toUpperCase() + AUTH_USER.slice(1));
+/* AUTH_USER / AUTH_PASS / OWNER_* solo sirven para crear el PRIMER usuario (admin) cuando la
+   tabla users está vacía. Después las cuentas viven en la BD y se gestionan desde /admin.html. */
+const SECRET = SESSION_SECRET || AUTH_PASS;
+const capital = (t) => (t ? t.charAt(0).toUpperCase() + t.slice(1) : t);
 
 if (!DATABASE_URL) { console.error("ERROR: DATABASE_URL no está definido"); process.exit(1); }
 if (!AUTH_PASS) { console.error("ERROR: AUTH_PASS no está definido"); process.exit(1); }
@@ -87,7 +90,50 @@ async function initSchema() {
     );
   `);
 
-  const data = await readData();
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS users (
+      id TEXT PRIMARY KEY,
+      username TEXT UNIQUE NOT NULL,
+      password_hash TEXT NOT NULL,
+      display_name TEXT,
+      context TEXT,
+      role TEXT NOT NULL DEFAULT 'user',
+      active BOOLEAN NOT NULL DEFAULT true,
+      pw_version INT NOT NULL DEFAULT 1,
+      created BIGINT,
+      last_login BIGINT
+    );
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS user_state (
+      user_id TEXT PRIMARY KEY REFERENCES users(id),
+      data JSONB NOT NULL DEFAULT '{}'::jsonb,
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    );
+  `);
+  await pool.query(`ALTER TABLE chat_images ADD COLUMN IF NOT EXISTS user_id TEXT;`);
+  await pool.query(`ALTER TABLE app_files ADD COLUMN IF NOT EXISTS user_id TEXT;`);
+
+  /* Bootstrap: sin usuarios → el admin sale de AUTH_USER/AUTH_PASS y hereda el estado
+     mono-usuario antiguo (app_state id=1), que se conserva intacto como copia. */
+  const nUsers = Number((await pool.query("SELECT COUNT(*)::int AS n FROM users")).rows[0].n);
+  if (nUsers === 0) {
+    const adminId = uid("u");
+    await pool.query(
+      "INSERT INTO users (id, username, password_hash, display_name, context, role, created) VALUES ($1, $2, $3, $4, $5, 'admin', $6)",
+      [adminId, AUTH_USER.toLowerCase(), await hashPassword(AUTH_PASS), OWNER_NAME || capital(AUTH_USER), OWNER_CONTEXT || null, Date.now()]
+    );
+    const legacy = await pool.query("SELECT data FROM app_state WHERE id = 1");
+    const legacyData = legacy.rows[0]?.data || {};
+    await pool.query("INSERT INTO user_state (user_id, data) VALUES ($1, $2::jsonb)", [adminId, JSON.stringify(legacyData)]);
+    await pool.query("UPDATE chat_images SET user_id = $1 WHERE user_id IS NULL", [adminId]);
+    await pool.query("UPDATE app_files SET user_id = $1 WHERE user_id IS NULL", [adminId]);
+    console.log(`Bootstrap: admin "${AUTH_USER}" creado${Object.keys(legacyData).length ? " y estado anterior migrado" : ""}`);
+  }
+}
+
+/* Defaults por usuario: se siembran las claves que falten (usuario nuevo o clave nueva en una versión). */
+function seedDefaults(data) {
   const seeds = {
     config: DEFAULT_CONFIG,
     days: {},        // "YYYY-MM-DD" → { senales: {id: valor}, resumen }
@@ -119,9 +165,7 @@ async function initSchema() {
     changed = true;
     console.log("Migrado hábito nutricion → tipo kcal");
   }
-  // se escribe siempre: persiste también las normalizaciones (ids deduplicados, estados migrados)
-  await writeData(data);
-  if (changed) console.log("Seeded state keys");
+  return changed;
 }
 
 /* El hábito `nutricion` NO se marca a mano: se deriva de days.<fecha>.kcal.
@@ -192,18 +236,77 @@ function normalizar(data) {
   return normalizarTareas(normalizarSubs(derivarNutricion(data)));
 }
 
-async function readData() {
-  const { rows } = await pool.query("SELECT data FROM app_state WHERE id = 1");
-  return normalizar(rows[0]?.data ?? {});
+async function readData(userId) {
+  if (!userId) throw new Error("readData sin usuario");
+  const { rows } = await pool.query("SELECT data FROM user_state WHERE user_id = $1", [userId]);
+  const data = rows[0]?.data ?? {};
+  const seeded = seedDefaults(data);
+  const out = normalizar(data);
+  if (seeded || !rows.length) await writeData(userId, out);
+  return out;
 }
 
-async function writeData(data) {
+async function writeData(userId, data) {
+  if (!userId) throw new Error("writeData sin usuario");
   const payload = JSON.stringify(normalizar(data));
   await pool.query(
-    "INSERT INTO app_state (id, data) VALUES (1, $1::jsonb) ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()",
-    [payload]
+    "INSERT INTO user_state (user_id, data) VALUES ($1, $2::jsonb) ON CONFLICT (user_id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()",
+    [userId, payload]
   );
   return payload.length;
+}
+
+/* ======================================================================
+   USUARIOS — contraseñas con scrypt (sin dependencias), sesiones firmadas
+   ====================================================================== */
+function hashPassword(pass) {
+  return new Promise((ok, ko) => {
+    const salt = crypto.randomBytes(16).toString("hex");
+    crypto.scrypt(String(pass), salt, 64, (e, k) => (e ? ko(e) : ok(`scrypt$${salt}$${k.toString("hex")}`)));
+  });
+}
+function verifyPassword(pass, stored) {
+  return new Promise((ok) => {
+    const [alg, salt, hex] = String(stored || "").split("$");
+    if (alg !== "scrypt" || !salt || !hex) return ok(false);
+    crypto.scrypt(String(pass), salt, 64, (e, k) => {
+      if (e) return ok(false);
+      const a = Buffer.from(hex, "hex");
+      ok(a.length === k.length && crypto.timingSafeEqual(a, k));
+    });
+  });
+}
+const USER_COLS = "id, username, display_name, context, role, active, pw_version, created, last_login";
+async function getUser(id) {
+  const r = await pool.query(`SELECT ${USER_COLS} FROM users WHERE id = $1`, [id]);
+  return r.rows[0] || null;
+}
+async function getUserByName(username) {
+  const r = await pool.query(`SELECT ${USER_COLS}, password_hash FROM users WHERE username = $1`, [String(username || "").toLowerCase().trim()]);
+  return r.rows[0] || null;
+}
+function publicUser(u) {
+  if (!u) return null;
+  const { password_hash, ...rest } = u;
+  return rest;
+}
+/* token = id.exp.firma — la firma incluye pw_version: cambiar la contraseña invalida todas las sesiones */
+function signSession(u) {
+  const exp = Date.now() + 1000 * 60 * 60 * 24 * 90;
+  const body = `${u.id}.${exp}`;
+  const sig = crypto.createHmac("sha256", SECRET).update(body + "." + u.pw_version).digest("hex");
+  return `${body}.${sig}`;
+}
+async function userFromSession(token) {
+  const parts = String(token || "").split(".");
+  if (parts.length !== 3) return null;
+  const [id, exp, sig] = parts;
+  if (!/^\d+$/.test(exp) || Number(exp) < Date.now()) return null;
+  const u = await getUser(id);
+  if (!u || !u.active) return null;
+  const want = crypto.createHmac("sha256", SECRET).update(`${id}.${exp}.${u.pw_version}`).digest("hex");
+  const a = Buffer.from(sig, "utf8"), b = Buffer.from(want, "utf8");
+  return a.length === b.length && crypto.timingSafeEqual(a, b) ? u : null;
 }
 
 /* ======================================================================
@@ -315,7 +418,7 @@ app.get("/health", (req, res) => res.json({ ok: true }));
 app.get("/diag", async (req, res) => {
   try {
     const { rows } = await pool.query(
-      "SELECT updated_at, octet_length(data::text) AS bytes FROM app_state WHERE id = 1"
+      "SELECT updated_at, octet_length(data::text) AS bytes FROM user_state WHERE user_id = $1", [req.user?.id]
     );
     res.json({ db: "ok", ia: anthropic ? "ok" : "sin ANTHROPIC_API_KEY", row: rows[0] || null });
   } catch (e) {
@@ -323,12 +426,12 @@ app.get("/diag", async (req, res) => {
   }
 });
 
-/* Sesión: cookie httpOnly con token derivado de las credenciales.
-   Basic auth sigue aceptado para scripts (test-e2e, curl). */
-const SESSION_TOKEN = crypto.createHmac("sha256", AUTH_PASS).update("alexos-session:" + AUTH_USER).digest("hex");
+/* Sesión: cookie httpOnly con token firmado por usuario.
+   Basic auth (usuario:contraseña de la BD) sigue aceptado para scripts (test-e2e, curl). */
 const SESSION_COOKIE = "os_session";
+const VIEWAS_COOKIE = "os_as"; // solo admin: id de la cuenta que está viendo
 const PUBLIC_PATHS = new Set([
-  "/health", "/diag", "/login.html", "/api/login", "/favicon.ico",
+  "/health", "/login.html", "/api/login", "/favicon.ico",
   // PWA: el navegador los pide sin cookies
   "/manifest.json", "/sw.js", "/icon-180.png", "/icon-192.png", "/icon-512.png", "/theme.js",
 ]);
@@ -341,41 +444,186 @@ function getCookie(req, name) {
   }
   return null;
 }
+const cookieStr = (name, value, maxAge) => `${name}=${value}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}`;
 
-function validBasic(req) {
+/* Basic auth verificado contra la BD, con caché corta para no recalcular scrypt en cada petición */
+const basicCache = new Map(); // header → { userId, exp }
+async function userFromBasic(req) {
   const header = req.headers.authorization;
-  if (!header || !header.startsWith("Basic ")) return false;
+  if (!header || !header.startsWith("Basic ")) return null;
+  const hit = basicCache.get(header);
+  if (hit && hit.exp > Date.now()) return getUser(hit.userId);
   const decoded = Buffer.from(header.slice(6), "base64").toString();
   const sep = decoded.indexOf(":");
-  return decoded.slice(0, sep) === AUTH_USER && decoded.slice(sep + 1) === AUTH_PASS;
+  if (sep < 0) return null;
+  const u = await getUserByName(decoded.slice(0, sep));
+  if (!u || !u.active || !(await verifyPassword(decoded.slice(sep + 1), u.password_hash))) return null;
+  basicCache.set(header, { userId: u.id, exp: Date.now() + 5 * 60 * 1000 });
+  return publicUser(u);
 }
 
-app.post("/api/login", (req, res) => {
-  const { user, pass } = req.body || {};
-  if (user === AUTH_USER && pass === AUTH_PASS) {
-    res.setHeader("Set-Cookie",
-      `${SESSION_COOKIE}=${SESSION_TOKEN}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${60 * 60 * 24 * 90}`);
-    return res.json({ ok: true });
-  }
-  res.status(401).json({ error: "Credenciales incorrectas" });
+app.post("/api/login", async (req, res) => {
+  try {
+    const { user, pass } = req.body || {};
+    const u = await getUserByName(user);
+    if (!u || !(await verifyPassword(pass, u.password_hash))) return res.status(401).json({ error: "Credenciales incorrectas" });
+    if (!u.active) return res.status(403).json({ error: "Cuenta desactivada. Habla con el administrador." });
+    await pool.query("UPDATE users SET last_login = $2 WHERE id = $1", [u.id, Date.now()]);
+    res.setHeader("Set-Cookie", [cookieStr(SESSION_COOKIE, signSession(u), 60 * 60 * 24 * 90), cookieStr(VIEWAS_COOKIE, "", 0)]);
+    res.json({ ok: true, user: publicUser(u) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.post("/api/logout", (req, res) => {
-  res.setHeader("Set-Cookie", `${SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`);
+  res.setHeader("Set-Cookie", [cookieStr(SESSION_COOKIE, "", 0), cookieStr(VIEWAS_COOKIE, "", 0)]);
   res.json({ ok: true });
 });
 
-app.use((req, res, next) => {
+/* req.actor = quien ha iniciado sesión · req.user = cuenta cuyos datos se sirven
+   (la misma, salvo que un admin esté viendo otra cuenta con la cookie os_as). */
+app.use(async (req, res, next) => {
   if (PUBLIC_PATHS.has(req.path)) return next();
-  if (getCookie(req, SESSION_COOKIE) === SESSION_TOKEN) return next();
-  if (validBasic(req)) return next();
-  if (req.path.startsWith("/api/")) return res.status(401).json({ error: "no autenticado" });
-  return res.redirect("/login.html");
+  try {
+    let actor = await userFromSession(getCookie(req, SESSION_COOKIE));
+    if (!actor) actor = await userFromBasic(req);
+    if (!actor) {
+      if (req.path.startsWith("/api/")) return res.status(401).json({ error: "no autenticado" });
+      return res.redirect("/login.html");
+    }
+    req.actor = actor;
+    req.user = actor;
+    const asId = getCookie(req, VIEWAS_COOKIE);
+    if (asId && actor.role === "admin" && asId !== actor.id) {
+      const target = await getUser(asId);
+      if (target) { req.user = target; req.viewingAs = true; }
+    }
+    next();
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+const isAdmin = (req) => req.actor?.role === "admin";
+function requireAdmin(req, res, next) {
+  if (!isAdmin(req)) return res.status(403).json({ error: "solo administradores" });
+  next();
+}
+const USERNAME_RE = /^[a-z0-9._-]{2,32}$/;
+
+/* ---------- cuenta propia ---------- */
+app.get("/api/me", (req, res) => {
+  res.json({
+    user: publicUser(req.user),
+    actor: publicUser(req.actor),
+    viewing_as: req.viewingAs ? publicUser(req.user) : null,
+    is_admin: isAdmin(req),
+  });
+});
+
+app.post("/api/me/profile", async (req, res) => {
+  try {
+    const { display_name, context } = req.body || {};
+    const name = String(display_name ?? req.user.display_name ?? "").trim().slice(0, 60);
+    const ctx = context === undefined ? req.user.context : String(context || "").trim().slice(0, 2000) || null;
+    if (!name) return res.status(400).json({ error: "el nombre no puede estar vacío" });
+    await pool.query("UPDATE users SET display_name = $2, context = $3 WHERE id = $1", [req.user.id, name, ctx]);
+    res.json({ ok: true, user: await getUser(req.user.id) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post("/api/me/password", async (req, res) => {
+  try {
+    if (req.viewingAs) return res.status(400).json({ error: "estás viendo otra cuenta: cambia su contraseña desde Usuarios" });
+    const { current, next: nextPass } = req.body || {};
+    if (typeof nextPass !== "string" || nextPass.length < 8) return res.status(400).json({ error: "la nueva contraseña necesita al menos 8 caracteres" });
+    const full = await getUserByName(req.actor.username);
+    if (!(await verifyPassword(current, full.password_hash))) return res.status(401).json({ error: "la contraseña actual no es correcta" });
+    await pool.query("UPDATE users SET password_hash = $2, pw_version = pw_version + 1 WHERE id = $1", [req.actor.id, await hashPassword(nextPass)]);
+    basicCache.clear();
+    const u = await getUser(req.actor.id);
+    res.setHeader("Set-Cookie", cookieStr(SESSION_COOKIE, signSession(u), 60 * 60 * 24 * 90)); // la sesión actual sigue viva
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/* ---------- administración de cuentas ---------- */
+app.get("/api/admin/users", requireAdmin, async (req, res) => {
+  try {
+    const r = await pool.query(
+      `SELECT u.${USER_COLS.split(", ").join(", u.")}, s.updated_at AS state_updated, octet_length(s.data::text) AS state_bytes
+       FROM users u LEFT JOIN user_state s ON s.user_id = u.id ORDER BY u.created ASC`
+    );
+    res.json({ users: r.rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post("/api/admin/users", requireAdmin, async (req, res) => {
+  try {
+    const username = String(req.body?.username || "").toLowerCase().trim();
+    const password = String(req.body?.password || "");
+    const display_name = String(req.body?.display_name || "").trim().slice(0, 60) || capital(username);
+    const context = String(req.body?.context || "").trim().slice(0, 2000) || null;
+    const role = req.body?.role === "admin" ? "admin" : "user";
+    if (!USERNAME_RE.test(username)) return res.status(400).json({ error: "usuario: 2-32 caracteres, minúsculas, números, . _ -" });
+    if (password.length < 8) return res.status(400).json({ error: "la contraseña necesita al menos 8 caracteres" });
+    if (await getUserByName(username)) return res.status(409).json({ error: "ese usuario ya existe" });
+    const id = uid("u");
+    await pool.query(
+      "INSERT INTO users (id, username, password_hash, display_name, context, role, created) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+      [id, username, await hashPassword(password), display_name, context, role, Date.now()]
+    );
+    await readData(id); // siembra su estado vacío con los defaults
+    res.json({ ok: true, user: await getUser(id) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post("/api/admin/users/:id", requireAdmin, async (req, res) => {
+  try {
+    const u = await getUser(req.params.id);
+    if (!u) return res.status(404).json({ error: "usuario no encontrado" });
+    const b = req.body || {};
+    const display_name = b.display_name === undefined ? u.display_name : String(b.display_name || "").trim().slice(0, 60) || u.display_name;
+    const context = b.context === undefined ? u.context : String(b.context || "").trim().slice(0, 2000) || null;
+    let role = b.role === undefined ? u.role : (b.role === "admin" ? "admin" : "user");
+    let active = b.active === undefined ? u.active : Boolean(b.active);
+    if (u.id === req.actor.id) { role = "admin"; active = true; } // nunca te bloqueas a ti mismo
+    await pool.query("UPDATE users SET display_name = $2, context = $3, role = $4, active = $5 WHERE id = $1", [u.id, display_name, context, role, active]);
+    if (!active) basicCache.clear();
+    res.json({ ok: true, user: await getUser(u.id) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post("/api/admin/users/:id/password", requireAdmin, async (req, res) => {
+  try {
+    const u = await getUser(req.params.id);
+    if (!u) return res.status(404).json({ error: "usuario no encontrado" });
+    const password = String(req.body?.password || "");
+    if (password.length < 8) return res.status(400).json({ error: "la contraseña necesita al menos 8 caracteres" });
+    await pool.query("UPDATE users SET password_hash = $2, pw_version = pw_version + 1 WHERE id = $1", [u.id, await hashPassword(password)]);
+    basicCache.clear();
+    const headers = [];
+    if (u.id === req.actor.id) headers.push(cookieStr(SESSION_COOKIE, signSession(await getUser(u.id)), 60 * 60 * 24 * 90));
+    if (headers.length) res.setHeader("Set-Cookie", headers);
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/* ver otra cuenta: cookie os_as (null para volver a la propia) */
+app.post("/api/admin/view-as", requireAdmin, async (req, res) => {
+  try {
+    const id = req.body?.user_id;
+    if (!id || id === req.actor.id) {
+      res.setHeader("Set-Cookie", cookieStr(VIEWAS_COOKIE, "", 0));
+      return res.json({ ok: true, viewing_as: null });
+    }
+    const u = await getUser(id);
+    if (!u) return res.status(404).json({ error: "usuario no encontrado" });
+    res.setHeader("Set-Cookie", cookieStr(VIEWAS_COOKIE, u.id, 60 * 60 * 12));
+    res.json({ ok: true, viewing_as: publicUser(u) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.get("/api/state", async (req, res) => {
   try {
-    const data = await readData();
+    const data = await readData(req.user.id);
     const { integraciones, chats, ...rest } = data; // secretos y chats no salen por aquí
     res.json(rest);
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -387,11 +635,11 @@ app.post("/api/state", async (req, res) => {
     if (!req.body || typeof req.body !== "object" || Array.isArray(req.body)) {
       return res.status(400).json({ error: "body must be a JSON object" });
     }
-    const data = await readData();
+    const data = await readData(req.user.id);
     delete req.body.integraciones; // solo via /api/integraciones
     delete req.body.chats;
     Object.assign(data, req.body);
-    const bytes = await writeData(data);
+    const bytes = await writeData(req.user.id, data);
     res.json({ ok: true, bytes });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -400,7 +648,7 @@ app.post("/api/state", async (req, res) => {
 
 app.get("/api/dashboard", async (req, res) => {
   try {
-    const data = await readData();
+    const data = await readData(req.user.id);
     res.json(buildDashboard(data));
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -412,7 +660,7 @@ app.post("/api/day", async (req, res) => {
   try {
     const { fecha, senales, resumen, kcal } = req.body || {};
     const f = fecha && /^\d{4}-\d{2}-\d{2}$/.test(fecha) ? fecha : todayISO();
-    const data = await readData();
+    const data = await readData(req.user.id);
     if (!data.days || typeof data.days !== "object") data.days = {};
     const day = data.days[f] || { senales: {} };
     if (senales && typeof senales === "object") {
@@ -427,7 +675,7 @@ app.post("/api/day", async (req, res) => {
     if (typeof resumen === "string") day.resumen = resumen;
     data.days[f] = day;
     derivarNutricion(data); // el score de la respuesta ya cuenta la nutrición derivada
-    await writeData(data);
+    await writeData(req.user.id, data);
     res.json({ ok: true, fecha: f, score: computeScore(day.senales, data.config || DEFAULT_CONFIG) });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -452,7 +700,7 @@ function igCodeDeUrl(url) {
 
 app.post("/api/contenido/metricas", async (req, res) => {
   try {
-    const data = await readData();
+    const data = await readData(req.user.id);
     const ytPiezas = (data.contenido || []).filter((c) => ytIdDeUrl(c.url));
     const igPiezas = (data.contenido || []).filter((c) => igCodeDeUrl(c.url));
     if (!YOUTUBE_API_KEY && !APIFY_TOKEN) return res.status(400).json({ error: "Faltan YOUTUBE_API_KEY y APIFY_TOKEN en el servidor" });
@@ -510,7 +758,7 @@ app.post("/api/contenido/metricas", async (req, res) => {
       } catch (e) { errores.push("Instagram: " + e.message); }
     }
 
-    await writeData(data);
+    await writeData(req.user.id, data);
     res.json({ ok: true, actualizadas: nYT + nIG, youtube: nYT, instagram: nIG, errores });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -519,7 +767,7 @@ app.post("/api/contenido/metricas", async (req, res) => {
 
 app.get("/api/integraciones", async (req, res) => {
   try {
-    const data = await readData();
+    const data = await readData(req.user.id);
     res.json(providerStatus(data.integraciones));
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -529,7 +777,7 @@ app.get("/api/integraciones", async (req, res) => {
 app.post("/api/integraciones", async (req, res) => {
   try {
     const body = req.body || {};
-    const data = await readData();
+    const data = await readData(req.user.id);
     const integ = data.integraciones || {};
     if (body.airwallex !== undefined) {
       const a = body.airwallex;
@@ -548,7 +796,7 @@ app.post("/api/integraciones", async (req, res) => {
       else delete integ.mercury;
     }
     data.integraciones = integ;
-    await writeData(data);
+    await writeData(req.user.id, data);
     res.json(providerStatus(integ));
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -557,7 +805,7 @@ app.post("/api/integraciones", async (req, res) => {
 
 app.post("/api/integraciones/test", async (req, res) => {
   try {
-    const data = await readData();
+    const data = await readData(req.user.id);
     res.json(await testProviders(data.integraciones));
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -567,9 +815,9 @@ app.post("/api/integraciones/test", async (req, res) => {
 app.post("/api/sync", async (req, res) => {
   const t0 = Date.now();
   try {
-    const data = await readData();
+    const data = await readData(req.user.id);
     const summary = await runSync(data);
-    await writeData(data);
+    await writeData(req.user.id, data);
     console.log(`POST /api/sync OK en ${((Date.now() - t0) / 1000).toFixed(1)}s:`, JSON.stringify(summary));
     res.json({ ok: true, ...summary });
   } catch (e) {
@@ -581,7 +829,7 @@ app.post("/api/sync", async (req, res) => {
 /* ======================================================================
    CHAT IA
    ====================================================================== */
-const SYSTEM_PROMPT = `Eres el asistente personal de ${N}.${OWNER_CONTEXT ? " Contexto sobre esta persona: " + OWNER_CONTEXT : ""}
+const systemPromptFor = (N, CTX) => `Eres el asistente personal de ${N}.${CTX ? " Contexto sobre esta persona: " + CTX : ""}
 
 Esta app es su panel de vida: él te cuenta su día (al final o durante) y TÚ estructuras y guardas los datos. El dashboard calcula un score diario 0-100 con matemática fija a partir de las señales — tú NUNCA calculas ni inventas el score, solo registras señales.
 
@@ -623,7 +871,8 @@ Reglas de comportamiento:
 - Cuando des lectura de su evolución, básate en los days/journal reales. Sé crítico pero sin machacar: señala el patrón, no la culpa, y termina con la siguiente acción concreta.`;
 
 /* la memoria durable del chat va entera en el system prompt: no depende de que el modelo la lea */
-function systemConMemoria(data) {
+function systemConMemoria(data, user) {
+  const SYSTEM_PROMPT = systemPromptFor(user?.display_name || capital(user?.username) || "ti", user?.context || "");
   const mems = Array.isArray(data?.memoria) ? data.memoria : [];
   if (!mems.length) {
     return SYSTEM_PROMPT + "\n\nMEMORIA: vacía todavía — ve guardando hechos durables con add_item en memoria.";
@@ -854,7 +1103,7 @@ const MAX_TOOL_ITERATIONS = 8;
 
 app.get("/api/chats", async (req, res) => {
   try {
-    const data = await readData();
+    const data = await readData(req.user.id);
     const list = Object.entries(data.chats || {})
       .map(([id, c]) => ({ id, title: c.title, updated: c.updated, count: c.messages.length }))
       .sort((a, b) => (b.updated || 0) - (a.updated || 0));
@@ -866,7 +1115,7 @@ app.get("/api/chats", async (req, res) => {
 
 app.get("/api/chats/:id", async (req, res) => {
   try {
-    const data = await readData();
+    const data = await readData(req.user.id);
     const chat = data.chats?.[req.params.id];
     if (!chat) return res.status(404).json({ error: "chat no encontrado" });
     res.json({ id: req.params.id, title: chat.title, messages: chat.messages });
@@ -879,11 +1128,11 @@ app.patch("/api/chats/:id", async (req, res) => {
   try {
     const title = String(req.body?.title || "").trim().slice(0, 80);
     if (!title) return res.status(400).json({ error: "title requerido" });
-    const data = await readData();
+    const data = await readData(req.user.id);
     const chat = data.chats?.[req.params.id];
     if (!chat) return res.status(404).json({ error: "chat no encontrado" });
     chat.title = title;
-    await writeData(data);
+    await writeData(req.user.id, data);
     res.json({ ok: true, title });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -892,12 +1141,12 @@ app.patch("/api/chats/:id", async (req, res) => {
 
 app.delete("/api/chats/:id", async (req, res) => {
   try {
-    const data = await readData();
+    const data = await readData(req.user.id);
     if (data.chats?.[req.params.id]) {
       const ids = (data.chats[req.params.id].messages || []).flatMap((m) => m.images || []);
-      if (ids.length) await pool.query("DELETE FROM chat_images WHERE id = ANY($1)", [ids]).catch(() => {});
+      if (ids.length) await pool.query("DELETE FROM chat_images WHERE id = ANY($1) AND user_id = $2", [ids, req.user.id]).catch(() => {});
       delete data.chats[req.params.id];
-      await writeData(data);
+      await writeData(req.user.id, data);
     }
     res.json({ ok: true });
   } catch (e) {
@@ -917,8 +1166,8 @@ app.post("/api/archivos", async (req, res) => {
     const id = "f" + Date.now() + Math.random().toString(36).slice(2, 7);
     const size = Math.round(data.length * 0.75);
     await pool.query(
-      "INSERT INTO app_files (id, nombre, mime, data, size, created) VALUES ($1, $2, $3, $4, $5, $6)",
-      [id, nombre.trim().slice(0, 160), mime, data, size, Date.now()]
+      "INSERT INTO app_files (id, nombre, mime, data, size, created, user_id) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+      [id, nombre.trim().slice(0, 160), mime, data, size, Date.now(), req.user.id]
     );
     res.json({ ok: true, id, size });
   } catch (e) {
@@ -928,7 +1177,7 @@ app.post("/api/archivos", async (req, res) => {
 
 app.get("/api/archivos/:id", async (req, res) => {
   try {
-    const r = await pool.query("SELECT nombre, mime, data FROM app_files WHERE id = $1", [req.params.id]);
+    const r = await pool.query("SELECT nombre, mime, data FROM app_files WHERE id = $1 AND user_id = $2", [req.params.id, req.user.id]);
     if (!r.rows.length) return res.status(404).end();
     const { nombre, mime, data } = r.rows[0];
     const inline = MIMES_INLINE.test(mime);
@@ -943,7 +1192,7 @@ app.get("/api/archivos/:id", async (req, res) => {
 
 app.delete("/api/archivos/:id", async (req, res) => {
   try {
-    await pool.query("DELETE FROM app_files WHERE id = $1", [req.params.id]);
+    await pool.query("DELETE FROM app_files WHERE id = $1 AND user_id = $2", [req.params.id, req.user.id]);
     res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -961,7 +1210,7 @@ app.post("/api/imagenes", async (req, res) => {
     }
     if (data.length > 8 * 1024 * 1024) return res.status(413).json({ error: "imagen demasiado grande" });
     const id = "img" + Date.now() + Math.random().toString(36).slice(2, 7);
-    await pool.query("INSERT INTO chat_images (id, mime, data, created) VALUES ($1, $2, $3, $4)", [id, mime, data, Date.now()]);
+    await pool.query("INSERT INTO chat_images (id, mime, data, created, user_id) VALUES ($1, $2, $3, $4, $5)", [id, mime, data, Date.now(), req.user.id]);
     res.json({ ok: true, id });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -970,7 +1219,7 @@ app.post("/api/imagenes", async (req, res) => {
 
 app.get("/api/imagenes/:id", async (req, res) => {
   try {
-    const r = await pool.query("SELECT mime, data FROM chat_images WHERE id = $1", [req.params.id]);
+    const r = await pool.query("SELECT mime, data FROM chat_images WHERE id = $1 AND user_id = $2", [req.params.id, req.user.id]);
     if (!r.rows.length) return res.status(404).end();
     res.set("Content-Type", r.rows[0].mime);
     res.set("Cache-Control", "private, max-age=31536000, immutable");
@@ -990,7 +1239,7 @@ app.post("/api/chat", async (req, res) => {
 
   const t0 = Date.now();
   try {
-    const data = await readData();
+    const data = await readData(req.user.id);
     if (!data.chats || typeof data.chats !== "object") data.chats = {};
 
     let chatId = req.body?.chat_id;
@@ -1006,7 +1255,7 @@ app.post("/api/chat", async (req, res) => {
     const idsCtx = history.flatMap((m) => m.images || []);
     const imgMap = {};
     if (idsCtx.length) {
-      const r = await pool.query("SELECT id, mime, data FROM chat_images WHERE id = ANY($1)", [idsCtx]);
+      const r = await pool.query("SELECT id, mime, data FROM chat_images WHERE id = ANY($1) AND user_id = $2", [idsCtx, req.user.id]);
       for (const row of r.rows) imgMap[row.id] = row;
     }
     const messages = history.map((m) => {
@@ -1030,7 +1279,7 @@ app.post("/api/chat", async (req, res) => {
       response = await callClaude({
         model: MODEL,
         max_tokens: 8000,
-        system: [{ type: "text", text: systemConMemoria(data), cache_control: { type: "ephemeral" } }],
+        system: [{ type: "text", text: systemConMemoria(data, req.user), cache_control: { type: "ephemeral" } }],
         tools: TOOLS,
         messages,
       });
@@ -1060,11 +1309,11 @@ app.post("/api/chat", async (req, res) => {
     chat.messages.push({ role: "assistant", content: reply, ts: Date.now(), ...(actions.length ? { actions } : {}) });
     if (chat.messages.length > CHAT_HISTORY_MAX) {
       const fuera = chat.messages.slice(0, -CHAT_HISTORY_MAX).flatMap((m) => m.images || []);
-      if (fuera.length) await pool.query("DELETE FROM chat_images WHERE id = ANY($1)", [fuera]).catch(() => {});
+      if (fuera.length) await pool.query("DELETE FROM chat_images WHERE id = ANY($1) AND user_id = $2", [fuera, req.user.id]).catch(() => {});
       chat.messages = chat.messages.slice(-CHAT_HISTORY_MAX);
     }
     chat.updated = Date.now();
-    await writeData(data);
+    await writeData(req.user.id, data);
 
     console.log(`POST /api/chat OK en ${((Date.now() - t0) / 1000).toFixed(1)}s (${actions.length} acciones)`);
     res.json({ reply, actions, chat_id: chatId });
@@ -1078,7 +1327,7 @@ app.use(express.static(path.join(__dirname, "public")));
 
 initSchema()
   .then(() => {
-    app.listen(PORT, () => console.log(`AlexOS up on :${PORT} (IA: ${anthropic ? MODEL : "off"})`));
+    app.listen(PORT, () => console.log(`OS up on :${PORT} (IA: ${anthropic ? MODEL : "off"})`));
   })
   .catch((e) => {
     console.error("Schema init failed:", e.message);

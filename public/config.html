@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#f3f3f5">
-<title>Configuración · OS · Alex</title>
+<title>Configuración · OS</title>
 <link rel="expect" href="#ready" blocking="render">
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -40,11 +40,12 @@
   .estado.on .dot { background: var(--ok); }
 
   label { display: block; font-size: 11px; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.07em; margin: 12px 0 5px 2px; }
-  input, select {
+  input, select, textarea {
     width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 10px;
     color: var(--ink); font-family: inherit; font-size: 14px; padding: 10px 12px;
   }
-  input:focus, select:focus { outline: none; border-color: var(--accent); }
+  textarea { resize: vertical; line-height: 1.45; }
+  input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); }
   input::placeholder { color: var(--placeholder); }
 
   .btns { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
@@ -89,6 +90,20 @@
 <script src="/ui.js"></script>
 <div class="wrap">
   <div class="page-title">Configuración</div>
+
+  <div class="card">
+    <h2>Cuenta</h2>
+    <div class="desc">Cómo te llama el asistente y qué sabe de ti. El contexto va al principio de su prompt en cada mensaje: dos o tres frases (a qué te dedicas, qué persigues, qué tono prefieres).</div>
+    <label for="accNombre">Nombre</label>
+    <input id="accNombre" autocomplete="off" placeholder="Cómo quieres que te llame">
+    <label for="accCtx">Contexto para el asistente</label>
+    <textarea id="accCtx" rows="4" placeholder="p. ej. Diseñador freelance, 26 años. Quiero ser constante con el gym y publicar en YouTube cada semana. Directo, sin rodeos."></textarea>
+    <div class="btns">
+      <button class="primary" id="accGuardar">Guardar</button>
+      <button id="accPass">Cambiar contraseña</button>
+    </div>
+    <div class="msg" id="accMsg"></div>
+  </div>
 
   <div class="card">
     <h2>Tema</h2>
@@ -249,6 +264,42 @@ $("btnDesconectar").onclick = async () => {
 };
 
 load();
+
+/* ---------- cuenta ---------- */
+function setAccMsg(text, cls) { const m = $("accMsg"); m.textContent = text; m.className = "msg" + (cls ? " " + cls : ""); }
+function paintCuenta(me) {
+  if (!me?.user) return;
+  $("accNombre").value = me.user.display_name || "";
+  $("accCtx").value = me.user.context || "";
+  $("accPass").disabled = !!me.viewing_as;
+  $("accPass").title = me.viewing_as ? "Estás viendo otra cuenta: su contraseña se cambia desde Usuarios" : "";
+}
+if (window.OSMe) OSMe.onChange(paintCuenta);
+$("accGuardar").onclick = async () => {
+  setAccMsg("Guardando…");
+  try {
+    await api("/api/me/profile", { method: "POST", body: JSON.stringify({ display_name: $("accNombre").value, context: $("accCtx").value }) });
+    await OSMe.refresh();
+    setAccMsg("Guardado.", "ok");
+  } catch (e) { setAccMsg("Error: " + e.message, "err"); }
+};
+$("accPass").onclick = async () => {
+  const r = await OSUI.form({
+    titulo: "Cambiar contraseña",
+    campos: [
+      { id: "current", label: "Contraseña actual", tipo: "password" },
+      { id: "next", label: "Nueva contraseña (mín. 8)", tipo: "password" },
+      { id: "again", label: "Repite la nueva", tipo: "password" },
+    ],
+    ok: "Cambiar",
+  });
+  if (!r) return;
+  if (r.next !== r.again) return setAccMsg("Las dos contraseñas nuevas no coinciden.", "err");
+  try {
+    await api("/api/me/password", { method: "POST", body: JSON.stringify({ current: r.current, next: r.next }) });
+    setAccMsg("Contraseña cambiada. Las demás sesiones abiertas se han cerrado.", "ok");
+  } catch (e) { setAccMsg("Error: " + e.message, "err"); }
+};
 
 /* ---------- memoria del chat ---------- */
 let MEMORIA = [];

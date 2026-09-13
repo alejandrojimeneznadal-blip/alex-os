@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#f3f3f5">
+<title>Usuarios · OS</title>
+<link rel="expect" href="#ready" blocking="render">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #f3f3f5;
+    --surface: #ffffff;
+    --surface-2: #f4f4f7;
+    --border: #e9e9ee;
+    --ink: #17171c;
+    --ink-2: #4c4c56;
+    --ink-3: #8b8b94;
+    --accent: #5546e8;
+    --good: #0a7d0a;
+    --good-bg: #e5f6e5;
+    --bad: #d03b3b;
+    --radius: 18px;
+  }
+  html, body {
+    background: var(--bg); color: var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased; font-size: 15px; line-height: 1.45;
+  }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 22px 18px 90px; }
+  .head { display: flex; align-items: flex-end; justify-content: space-between; gap: 14px; margin-bottom: 16px; flex-wrap: wrap; }
+  .page-title { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; }
+  .sub { font-size: 13px; color: var(--ink-3); margin-top: 2px; }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 6px; margin-bottom: 16px; box-shadow: 0 1px 2px rgba(23,23,40,0.04), 0 8px 24px rgba(23,23,40,0.05); }
+  .card.pad { padding: 20px; }
+  .card h2 { font-size: 15px; font-weight: 650; color: var(--ink); letter-spacing: -0.01em; margin-bottom: 4px; }
+  .card .desc { font-size: 12.5px; color: var(--ink-3); }
+
+  button {
+    background: var(--surface); border: 1px solid var(--border); color: var(--ink-2);
+    border-radius: 10px; padding: 9px 14px; font-size: 13.5px; font-weight: 500; cursor: pointer; font-family: inherit;
+    display: inline-flex; align-items: center; gap: 7px;
+  }
+  button:hover { color: var(--ink); border-color: var(--border-strong); }
+  button.primary { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 600; }
+  button.primary:hover { opacity: 0.92; }
+  button:disabled { opacity: 0.45; cursor: default; }
+  button .tic { width: 15px; height: 15px; }
+
+  .u {
+    display: grid; grid-template-columns: 42px 1fr auto; gap: 14px; align-items: center;
+    padding: 13px 14px; border-radius: 13px;
+  }
+  .u + .u { border-top: 1px solid var(--hairline, var(--border)); border-radius: 0; }
+  .u:hover { background: var(--surface-2); }
+  .u.off { opacity: 0.55; }
+  .u .av {
+    width: 42px; height: 42px; border-radius: 13px; color: #fff; font-weight: 800; font-size: 16px;
+    display: flex; align-items: center; justify-content: center;
+    background: linear-gradient(135deg, var(--accent-2, #7b6cff), var(--accent));
+  }
+  .u.off .av { background: var(--ink-3); }
+  .u .who { min-width: 0; }
+  .u .name { font-weight: 650; font-size: 14.5px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .u .meta { font-size: 12.5px; color: var(--ink-3); margin-top: 2px; display: flex; gap: 10px; flex-wrap: wrap; }
+  .u .meta span { white-space: nowrap; }
+  .tag { font-size: 10.5px; font-weight: 650; padding: 2px 8px; border-radius: 999px; text-transform: uppercase; letter-spacing: 0.06em; }
+  .tag.admin { background: var(--accent-soft, #ecebff); color: var(--accent); }
+  .tag.tu { background: var(--surface-2); color: var(--ink-3); }
+  .tag.off { background: var(--bad-bg, #fbe9e9); color: var(--bad); }
+  .acts { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+  .acts button { padding: 7px 10px; font-size: 12.5px; }
+  .acts button.ic { padding: 7px 9px; }
+  .empty { padding: 26px 16px; text-align: center; color: var(--ink-3); font-size: 13.5px; }
+  .msg { font-size: 13px; margin: 6px 4px 0; min-height: 18px; color: var(--ink-2); white-space: pre-wrap; }
+  .msg.ok { color: var(--good); }
+  .msg.err { color: var(--bad); }
+
+  .osui-card textarea {
+    width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 10px;
+    color: var(--ink); font-family: inherit; font-size: 14px; padding: 9px 11px; resize: vertical; line-height: 1.45;
+  }
+  .osui-card textarea:focus { outline: none; border-color: var(--accent); }
+  .osui-card .pwrow { display: flex; gap: 6px; align-items: center; }
+  .osui-card .pwrow input { flex: 1; }
+  .osui-card .pwrow button { flex-shrink: 0; padding: 8px 10px; font-size: 12.5px; }
+  .osui-card .hint { font-size: 12px; color: var(--ink-3); margin-top: 8px; line-height: 1.5; }
+
+  @media (max-width: 640px) {
+    .u { grid-template-columns: 42px 1fr; }
+    .acts { grid-column: 1 / -1; justify-content: flex-start; }
+  }
+</style>
+</head>
+<body>
+<script src="/theme.js"></script>
+<script src="/icons.js"></script>
+<script src="/ui.js"></script>
+<div class="wrap">
+  <div class="head">
+    <div>
+      <div class="page-title">Usuarios</div>
+      <div class="sub">Cada cuenta tiene sus propios datos, su chat y su memoria. Tú puedes entrar a verlas, crear nuevas y recuperar contraseñas.</div>
+    </div>
+    <button class="primary" id="btnNuevo"></button>
+  </div>
+
+  <div class="card" id="lista"><div class="empty">Cargando…</div></div>
+  <div class="msg" id="msg"></div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const I = window.OSIcons || {};
+const esc = (t) => String(t ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+let USERS = [];
+let ME = null;
+
+$("btnNuevo").innerHTML = `${I.user_plus || ""}Nueva cuenta`;
+
+function setMsg(text, cls) { const m = $("msg"); m.textContent = text; m.className = "msg" + (cls ? " " + cls : ""); }
+
+async function api(path, opts = {}) {
+  const res = await fetch(path, { credentials: "include", headers: { "Content-Type": "application/json" }, ...opts });
+  const body = await res.json().catch(() => ({}));
+  if (res.status === 403) { location.href = "/"; throw new Error("solo administradores"); }
+  if (!res.ok) throw new Error(body.error || "HTTP " + res.status);
+  return body;
+}
+
+const fmtFecha = (ms) => (ms ? new Date(Number(ms)).toLocaleDateString("es", { day: "numeric", month: "short", year: "numeric" }) : "—");
+const fmtRel = (ms) => {
+  if (!ms) return "nunca";
+  const d = Math.floor((Date.now() - Number(ms)) / 86400000);
+  return d === 0 ? "hoy" : d === 1 ? "ayer" : `hace ${d} días`;
+};
+const fmtKB = (b) => (b ? (b > 1024 * 1024 ? (b / 1048576).toFixed(1) + " MB" : Math.round(b / 1024) + " KB") : "vacío");
+
+function paint() {
+  const box = $("lista");
+  if (!USERS.length) { box.innerHTML = `<div class="empty">Sin cuentas todavía.</div>`; return; }
+  box.innerHTML = USERS.map((u) => {
+    const esYo = u.id === ME?.actor?.id;
+    const viendo = ME?.viewing_as?.id === u.id;
+    return `<div class="u${u.active ? "" : " off"}" data-id="${u.id}">
+      <div class="av">${esc((u.display_name || u.username || "?").charAt(0).toUpperCase())}</div>
+      <div class="who">
+        <div class="name">${esc(u.display_name || u.username)}
+          ${u.role === "admin" ? `<span class="tag admin">admin</span>` : ""}
+          ${esYo ? `<span class="tag tu">tú</span>` : ""}
+          ${!u.active ? `<span class="tag off">sin acceso</span>` : ""}
+        </div>
+        <div class="meta"><span>@${esc(u.username)}</span><span>último acceso ${fmtRel(u.last_login)}</span><span>datos ${fmtKB(u.state_bytes)}</span><span>desde ${fmtFecha(u.created)}</span></div>
+      </div>
+      <div class="acts">
+        ${esYo ? "" : `<button data-a="ver" title="Ver esta cuenta como si fueras esta persona">${I.eye || ""}${viendo ? "Viendo" : "Ver cuenta"}</button>`}
+        <button data-a="pass" title="Poner una contraseña nueva">${I.key || ""}Contraseña</button>
+        <button data-a="editar" class="ic" title="Nombre, contexto y rol">${I.editar || "✎"}</button>
+        ${esYo ? "" : `<button data-a="acceso" class="ic" title="${u.active ? "Quitar el acceso" : "Devolver el acceso"}">${u.active ? (I.cerrar || "✕") : (I.check || "✓")}</button>`}
+      </div>
+    </div>`;
+  }).join("");
+  box.querySelectorAll(".u button").forEach((b) => {
+    const u = USERS.find((x) => x.id === b.closest(".u").dataset.id);
+    b.onclick = () => ({ ver: verCuenta, pass: cambiarPass, editar, acceso: toggleAcceso })[b.dataset.a](u);
+  });
+}
+
+async function load() {
+  try {
+    ME = await OSMe.refresh();
+    if (ME && !ME.is_admin) { location.href = "/"; return; }
+    const r = await api("/api/admin/users");
+    USERS = r.users || [];
+    paint();
+  } catch (e) { setMsg("Error: " + e.message, "err"); }
+}
+
+function passAleatoria() {
+  const abc = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789";
+  const b = crypto.getRandomValues(new Uint8Array(14));
+  return Array.from(b, (x) => abc[x % abc.length]).join("");
+}
+
+/* modal de cuenta (crear / editar) — campos propios porque OSUI.form no tiene textarea */
+function modalCuenta({ titulo, u = null, ok }) {
+  return new Promise((resolve) => {
+    const ov = document.createElement("div"); ov.className = "osui-ov";
+    const card = document.createElement("div"); card.className = "osui-card";
+    card.style.maxWidth = "420px";
+    const nuevo = !u;
+    card.innerHTML = `<h3>${titulo}</h3>
+      ${nuevo ? `<label>Usuario (para entrar)</label><input data-id="username" autocapitalize="none" autocomplete="off" placeholder="p. ej. juanca">` : ""}
+      <label>Nombre</label><input data-id="display_name" value="${esc(u?.display_name || "")}" placeholder="Cómo le llama el asistente">
+      <label>Contexto para el asistente</label><textarea data-id="context" rows="3" placeholder="Dos o tres frases: a qué se dedica, qué persigue, qué tono prefiere. Lo puede editar después en Configuración.">${esc(u?.context || "")}</textarea>
+      ${nuevo ? `<label>Contraseña inicial</label><div class="pwrow"><input data-id="password" type="text" autocomplete="off" value="${passAleatoria()}"><button type="button" data-a="gen">Otra</button></div><div class="hint">Cópiala y pásasela: es la que usará para entrar. Después puede cambiarla en Configuración.</div>` : ""}
+      <label>Rol</label><select data-id="role"><option value="user" ${u?.role !== "admin" ? "selected" : ""}>Usuario</option><option value="admin" ${u?.role === "admin" ? "selected" : ""}>Administrador</option></select>
+      <div class="osui-btns"><button data-a="no">Cancelar</button><button class="primary" data-a="si">${ok}</button></div>`;
+    ov.appendChild(card); document.body.appendChild(ov);
+    const done = (v) => { ov.remove(); resolve(v); };
+    card.querySelector('[data-a="no"]').onclick = () => done(null);
+    const gen = card.querySelector('[data-a="gen"]');
+    if (gen) gen.onclick = () => { card.querySelector('[data-id="password"]').value = passAleatoria(); };
+    card.querySelector('[data-a="si"]').onclick = () => {
+      const out = {};
+      card.querySelectorAll("[data-id]").forEach((el) => { out[el.dataset.id] = el.value; });
+      done(out);
+    };
+    ov.onclick = (e) => { if (e.target === ov) done(null); };
+    card.onkeydown = (e) => { if (e.key === "Escape") done(null); };
+    const first = card.querySelector("input"); if (first) first.focus();
+  });
+}
+
+$("btnNuevo").onclick = async () => {
+  const r = await modalCuenta({ titulo: "Nueva cuenta", ok: "Crear" });
+  if (!r) return;
+  try {
+    const res = await api("/api/admin/users", { method: "POST", body: JSON.stringify(r) });
+    setMsg(`Cuenta @${res.user.username} creada. Contraseña inicial: ${r.password}`, "ok");
+    load();
+  } catch (e) { setMsg("Error: " + e.message, "err"); }
+};
+
+async function editar(u) {
+  const r = await modalCuenta({ titulo: `Editar @${u.username}`, u, ok: "Guardar" });
+  if (!r) return;
+  try {
+    await api(`/api/admin/users/${u.id}`, { method: "POST", body: JSON.stringify(r) });
+    setMsg("Guardado.", "ok");
+    load();
+    if (u.id === ME?.actor?.id || u.id === ME?.user?.id) OSMe.refresh();
+  } catch (e) { setMsg("Error: " + e.message, "err"); }
+}
+
+async function cambiarPass(u) {
+  const sugerida = passAleatoria();
+  const r = await OSUI.form({
+    titulo: `Nueva contraseña para @${u.username}`,
+    texto: u.id === ME?.actor?.id ? "Tu sesión actual sigue abierta; las demás se cierran." : "Sus sesiones abiertas se cierran. Pásale la nueva contraseña por un canal seguro.",
+    campos: [{ id: "password", label: "Contraseña nueva (mín. 8)", tipo: "text", valor: sugerida }],
+    ok: "Cambiar",
+  });
+  if (!r) return;
+  try {
+    await api(`/api/admin/users/${u.id}/password`, { method: "POST", body: JSON.stringify({ password: r.password }) });
+    setMsg(`Contraseña de @${u.username} cambiada a: ${r.password}`, "ok");
+  } catch (e) { setMsg("Error: " + e.message, "err"); }
+}
+
+async function toggleAcceso(u) {
+  const quitar = u.active;
+  const ok = await OSUI.confirm(
+    quitar ? `Quitar acceso a @${u.username}` : `Devolver acceso a @${u.username}`,
+    quitar ? "No podrá entrar y sus sesiones se cierran. Sus datos se conservan intactos." : "Podrá volver a entrar con su contraseña.",
+    { ok: quitar ? "Quitar acceso" : "Devolver acceso", danger: quitar }
+  );
+  if (!ok) return;
+  try {
+    await api(`/api/admin/users/${u.id}`, { method: "POST", body: JSON.stringify({ active: !quitar }) });
+    setMsg(quitar ? "Acceso retirado." : "Acceso devuelto.", "ok");
+    load();
+  } catch (e) { setMsg("Error: " + e.message, "err"); }
+}
+
+async function verCuenta(u) {
+  try {
+    await api("/api/admin/view-as", { method: "POST", body: JSON.stringify({ user_id: u.id }) });
+    try { sessionStorage.removeItem("os_cache_v1"); sessionStorage.removeItem("os_me_v1"); } catch (e) {}
+    location.href = "/";
+  } catch (e) { setMsg("Error: " + e.message, "err"); }
+}
+
+load();
+</script>
+<div id="ready"></div>
+</body>
+</html>

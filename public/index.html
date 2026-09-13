@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#f3f3f5">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="OS">
-<title>OS · Alex</title>
+<title>Panel · OS</title>
 <link rel="expect" href="#ready" blocking="render">
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -316,7 +316,7 @@
 <div class="wrap">
 
   <div class="greet">
-    <h1 id="saludo">Hola, Alex</h1>
+    <h1 id="saludo">Hola</h1>
     <div class="sub" id="fechaHoy"></div>
   </div>
   <div class="sync" id="sync"><span class="dot"></span><span id="syncText"></span></div>
@@ -428,25 +428,29 @@ function setSync(ok, text) {
 /* saludo con personalidad: pool por franja, estable dentro de la misma hora
    (cambia entre visitas, no parpadea entre renders) */
 function saludo() {
+  const N = (window.OSMe && window.OSMe.name()) || "";
+  const fin = (t) => (N ? t : t.replace(/, $/, ""));
   const ahora = new Date();
   const h = ahora.getHours();
   let pool;
   if (h < 6) {
-    pool = ["Trasnochando, Alex", "Las horas de nadie, Alex", "La ciudad duerme, Alex", "Madrugada profunda, Alex"];
+    pool = [`Trasnochando, ${N}`, `Las horas de nadie, ${N}`, `La ciudad duerme, ${N}`, `Madrugada profunda, ${N}`];
   } else if (h < 9) {
-    pool = ["Primera hora, Alex", "El día es tuyo, Alex", "Arriba antes que nadie, Alex", "Buenos días, Alex"];
+    pool = [`Primera hora, ${N}`, `El día es tuyo, ${N}`, `Arriba antes que nadie, ${N}`, `Buenos días, ${N}`];
   } else if (h < 13) {
-    pool = ["Buenos días, Alex", "A lo importante, Alex", "La mañana rinde, Alex", "Buen momento para construir, Alex"];
+    pool = [`Buenos días, ${N}`, `A lo importante, ${N}`, `La mañana rinde, ${N}`, `Buen momento para construir, ${N}`];
   } else if (h < 17) {
-    pool = ["Buenas tardes, Alex", "Segunda mitad, Alex", "Sigue el ritmo, Alex", "La tarde es larga, Alex"];
+    pool = [`Buenas tardes, ${N}`, `Segunda mitad, ${N}`, `Sigue el ritmo, ${N}`, `La tarde es larga, ${N}`];
   } else if (h < 21) {
-    pool = ["Buenas tardes, Alex", "Recta final del día, Alex", "Aún queda tarde, Alex", "Cierra fuerte, Alex"];
+    pool = [`Buenas tardes, ${N}`, `Recta final del día, ${N}`, `Aún queda tarde, ${N}`, `Cierra fuerte, ${N}`];
   } else {
-    pool = ["Buenas noches, Alex", "Cerrando el día, Alex", "Último repaso, Alex", "El día está hecho, Alex"];
+    pool = [`Buenas noches, ${N}`, `Cerrando el día, ${N}`, `Último repaso, ${N}`, `El día está hecho, ${N}`];
   }
-  const seed = Number(ahora.toISOString().slice(0, 10).replace(/-/g, "")) + h;
-  return pool[seed % pool.length];
+  const seed = Number(ahora.toISOString().slice(0, 10).replace(/-/g, ``)) + h;
+  return fin(pool[seed % pool.length]);
 }
+
+document.addEventListener("os:me", () => { const h = document.getElementById("saludo"); if (h) h.textContent = saludo(); });
 
 async function load() {
   try {

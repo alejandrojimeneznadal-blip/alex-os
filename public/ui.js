@@ -2,12 +2,42 @@
    Estilo claro (referencia Cashora/Muzli): sidebar blanco, item activo con barra índigo.
    En desktop: barra fija a la izquierda (padding-left en html).
    En móvil: off-canvas con botón ☰ (se inserta en .top-bar si existe, si no crea una barra superior). */
+/* ---------- OSMe: quién soy (y, si soy admin, qué cuenta estoy viendo) ----------
+   Caché en sessionStorage para pintar el nombre antes del primer frame; se refresca con /api/me
+   y avisa con el evento "os:me" a las páginas que muestran el nombre (saludo del panel). */
+(function () {
+  const KEY = "os_me_v1";
+  let me = null;
+  try { me = JSON.parse(sessionStorage.getItem(KEY) || "null"); } catch (e) {}
+  const listeners = [];
+  window.OSMe = {
+    get: () => me,
+    name: () => (me?.user?.display_name || ""),
+    onChange: (fn) => { listeners.push(fn); if (me) fn(me); },
+    refresh: async () => {
+      try {
+        const r = await fetch("/api/me", { credentials: "include" });
+        if (r.status === 401) { location.href = "/login.html"; return null; }
+        if (!r.ok) return me;
+        const fresh = await r.json();
+        const changed = JSON.stringify(fresh) !== JSON.stringify(me);
+        me = fresh;
+        try { sessionStorage.setItem(KEY, JSON.stringify(me)); } catch (e) {}
+        if (changed) { listeners.forEach((fn) => fn(me)); document.dispatchEvent(new CustomEvent("os:me", { detail: me })); }
+        return me;
+      } catch (e) { return me; }
+    },
+  };
+  window.OSMe.refresh();
+})();
+
 (function () {
   const SBW = 228;
 
   // iconos Tabler inlineados en /icons.js (debe cargarse antes que ui.js)
   const I = window.OSIcons || {};
   const ic = (k, fb) => I[k] || `<span>${fb}</span>`;
+  const esc = (t) => String(t ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
   const SECTIONS = [
     { href: "/", label: "Panel", icon: ic("panel", "◱") },
@@ -23,6 +53,7 @@
     // { href: "/areas.html#finanzas", label: "Finanzas", icon: ic("finanzas", "€") },
     { group: "Sistema" },
     { href: "/config.html", label: "Configuración", icon: ic("config", "⚙") },
+    { href: "/admin.html", label: "Usuarios", icon: ic("users", "👥"), admin: true },
   ];
 
   const css = `
@@ -56,6 +87,23 @@
       display: flex; align-items: center; justify-content: center;
     }
     #sidebar .sb-brand small { color: var(--ink-3); font-weight: 500; }
+    #sidebar a.sb-item.admin-only { display: none; }
+    #sidebar.is-admin a.sb-item.admin-only { display: flex; }
+    /* banner: admin viendo otra cuenta */
+    #os-viewas {
+      display: none; position: fixed; left: 50%; bottom: calc(14px + env(safe-area-inset-bottom)); transform: translateX(-50%);
+      z-index: 95; background: var(--ink); color: var(--surface); border-radius: 999px;
+      padding: 9px 10px 9px 16px; font-size: 13px; font-weight: 550; box-shadow: 0 10px 30px rgba(23,23,40,0.28);
+      align-items: center; gap: 12px; white-space: nowrap; max-width: calc(100vw - 32px);
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    }
+    #os-viewas.show { display: inline-flex; }
+    #os-viewas b { font-weight: 750; }
+    #os-viewas button {
+      background: var(--surface); color: var(--ink); border: none; border-radius: 999px; padding: 6px 12px;
+      font-family: inherit; font-size: 12.5px; font-weight: 650; cursor: pointer;
+    }
+    @media (min-width: 901px) { #os-viewas { left: calc(var(--sbw) + (100vw - var(--sbw)) / 2); } }
     #sidebar .sb-group {
       font-size: 10.5px; color: var(--ink-3); text-transform: uppercase;
       letter-spacing: 0.09em; padding: 16px 10px 7px; font-weight: 600;
@@ -115,14 +163,39 @@
 
   const nav = document.createElement("nav");
   nav.id = "sidebar";
+  const brandHTML = (name) => `<span class="logo">${esc((name || "O").charAt(0).toUpperCase())}</span><span>${esc(name || "")}<small>${name ? " / " : ""}OS</small></span>`;
   nav.innerHTML =
-    `<div class="sb-brand"><span class="logo">A</span><span>Alex<small> / OS</small></span></div>` +
+    `<div class="sb-brand" id="sbBrand">${brandHTML(window.OSMe?.name())}</div>` +
     SECTIONS.map((s) => s.group
       ? `<div class="sb-group">${s.group}</div>`
-      : `<a class="sb-item" href="${s.href}"><span class="ic">${s.icon}</span>${s.label}</a>`
+      : `<a class="sb-item${s.admin ? " admin-only" : ""}" href="${s.href}"><span class="ic">${s.icon}</span>${s.label}</a>`
     ).join("") +
     `<div class="sb-foot"><button class="sb-logout" id="sbLogout">${ic("salir", "←")} Salir</button></div>`;
   document.body.appendChild(nav);
+
+  const viewas = document.createElement("div");
+  viewas.id = "os-viewas";
+  document.body.appendChild(viewas);
+
+  function paintMe(me) {
+    if (!me) return;
+    nav.classList.toggle("is-admin", !!me.is_admin);
+    document.getElementById("sbBrand").innerHTML = brandHTML(me.user?.display_name);
+    const t = document.querySelector(".sb-topbar .t");
+    if (t) t.innerHTML = `${esc(me.user?.display_name || "")}<small>${me.user?.display_name ? " / " : ""}OS</small>`;
+    if (me.viewing_as) {
+      viewas.innerHTML = `<span>Viendo la cuenta de <b>${esc(me.viewing_as.display_name || me.viewing_as.username)}</b></span><button type="button" id="osViewasBack">Volver a la mía</button>`;
+      viewas.classList.add("show");
+      document.getElementById("osViewasBack").onclick = async () => {
+        try { await fetch("/api/admin/view-as", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ user_id: null }) }); } catch (e) {}
+        try { sessionStorage.removeItem("os_cache_v1"); sessionStorage.removeItem("os_me_v1"); } catch (e) {}
+        location.href = "/admin.html";
+      };
+    } else {
+      viewas.classList.remove("show");
+    }
+  }
+  if (window.OSMe) window.OSMe.onChange(paintMe);
 
   const overlay = document.createElement("div");
   overlay.id = "sb-overlay";
@@ -148,7 +221,8 @@
       tb.appendChild(burger);
       const t = document.createElement("div");
       t.className = "t";
-      t.innerHTML = `Alex<small> / OS</small>`;
+      const n = window.OSMe?.name();
+      t.innerHTML = `${esc(n || "")}<small>${n ? " / " : ""}OS</small>`;
       tb.appendChild(t);
       document.body.insertBefore(tb, document.body.firstChild);
     }
@@ -191,6 +265,7 @@
 
   document.getElementById("sbLogout").onclick = async () => {
     try { await fetch("/api/logout", { method: "POST", credentials: "include" }); } catch (e) {}
+    try { sessionStorage.clear(); } catch (e) {}
     location.href = "/login.html";
   };
 })();

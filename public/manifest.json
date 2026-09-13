@@ -1,6 +1,6 @@
 {
-  "name": "Alex OS",
-  "short_name": "Alex OS",
+  "name": "OS",
+  "short_name": "OS",
   "description": "Panel de vida de Alex: hábitos, contenido, gym, finanzas y chat",
   "start_url": "/",
   "scope": "/",
