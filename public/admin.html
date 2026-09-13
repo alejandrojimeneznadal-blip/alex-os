@@ -48,11 +48,23 @@
   button:disabled { opacity: 0.45; cursor: default; }
   button .tic { width: 15px; height: 15px; }
 
+  .ws {
+    display: flex; align-items: center; gap: 10px; padding: 14px 14px 6px;
+    font-size: 11px; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.09em; font-weight: 650;
+  }
+  .card > .ws:first-child { padding-top: 10px; }
+  .ws .n { color: var(--ink-2); }
+  .ws .c { font-weight: 500; letter-spacing: 0; text-transform: none; font-size: 12px; }
+  .ws button { margin-left: auto; padding: 4px 7px; border-color: transparent; color: var(--ink-3); background: transparent; }
+  .ws button:hover { border-color: var(--border); color: var(--ink); }
+  .ws button .tic { width: 14px; height: 14px; }
+  .ws + .u { border-top: none; }
   .u {
     display: grid; grid-template-columns: 42px 1fr auto; gap: 14px; align-items: center;
     padding: 13px 14px; border-radius: 13px;
   }
   .u + .u { border-top: 1px solid var(--hairline, var(--border)); border-radius: 0; }
+  .head .btns { display: flex; gap: 8px; flex-wrap: wrap; }
   .u:hover { background: var(--surface-2); }
   .u.off { opacity: 0.55; }
   .u .av {
@@ -103,7 +115,7 @@
       <div class="page-title">Usuarios</div>
       <div class="sub">Cada cuenta tiene sus propios datos, su chat y su memoria. Tú puedes entrar a verlas, crear nuevas y recuperar contraseñas.</div>
     </div>
-    <button class="primary" id="btnNuevo"></button>
+    <div class="btns"><button id="btnGrupo"></button><button class="primary" id="btnNuevo"></button></div>
   </div>
 
   <div class="card" id="lista"><div class="empty">Cargando…</div></div>
@@ -118,6 +130,8 @@ let USERS = [];
 let ME = null;
 
 $("btnNuevo").innerHTML = `${I.user_plus || ""}Nueva cuenta`;
+$("btnGrupo").innerHTML = `${I.users || ""}Nuevo grupo`;
+let WS = [];
 
 function setMsg(text, cls) { const m = $("msg"); m.textContent = text; m.className = "msg" + (cls ? " " + cls : ""); }
 
@@ -137,10 +151,7 @@ const fmtRel = (ms) => {
 };
 const fmtKB = (b) => (b ? (b > 1024 * 1024 ? (b / 1048576).toFixed(1) + " MB" : Math.round(b / 1024) + " KB") : "vacío");
 
-function paint() {
-  const box = $("lista");
-  if (!USERS.length) { box.innerHTML = `<div class="empty">Sin cuentas todavía.</div>`; return; }
-  box.innerHTML = USERS.map((u) => {
+function filaUsuario(u) {
     const esYo = u.id === ME?.actor?.id;
     const viendo = ME?.viewing_as?.id === u.id;
     return `<div class="u${u.active ? "" : " off"}" data-id="${u.id}">
@@ -160,10 +171,25 @@ function paint() {
         ${esYo ? "" : `<button data-a="acceso" class="ic" title="${u.active ? "Quitar el acceso" : "Devolver el acceso"}">${u.active ? (I.cerrar || "✕") : (I.check || "✓")}</button>`}
       </div>
     </div>`;
-  }).join("");
+}
+
+/* lista agrupada: un bloque por grupo (también los vacíos) y «Sin grupo» al final */
+function paint() {
+  const box = $("lista");
+  if (!USERS.length && !WS.length) { box.innerHTML = `<div class="empty">Sin cuentas todavía.</div>`; return; }
+  const bloques = WS.map((w) => ({ w, users: USERS.filter((u) => u.workspace_id === w.id) }));
+  const sueltos = USERS.filter((u) => !u.workspace_id || !WS.some((w) => w.id === u.workspace_id));
+  const cab = (titulo, n, w) => `<div class="ws"${w ? ` data-ws="${w.id}"` : ""}><span class="n">${esc(titulo)}</span><span class="c">${n} ${n === 1 ? "cuenta" : "cuentas"}</span>${w ? `<button type="button" data-a="ws" title="Renombrar o borrar el grupo">${I.editar || "✎"}</button>` : ""}</div>`;
+  box.innerHTML =
+    bloques.map(({ w, users }) => cab(w.nombre, users.length, w) + (users.length ? users.map(filaUsuario).join("") : `<div class="empty" style="padding:8px 16px 14px;text-align:left">Nadie todavía. Asigna cuentas desde su ficha (✎) o créalas con este grupo.</div>`)).join("") +
+    (sueltos.length ? cab(WS.length ? "Sin grupo" : "Cuentas", sueltos.length) + sueltos.map(filaUsuario).join("") : "");
   box.querySelectorAll(".u button").forEach((b) => {
     const u = USERS.find((x) => x.id === b.closest(".u").dataset.id);
     b.onclick = () => ({ ver: verCuenta, pass: cambiarPass, editar, acceso: toggleAcceso })[b.dataset.a](u);
+  });
+  box.querySelectorAll('.ws button[data-a="ws"]').forEach((b) => {
+    const w = WS.find((x) => x.id === b.closest(".ws").dataset.ws);
+    b.onclick = () => editarGrupo(w);
   });
 }
 
@@ -173,6 +199,7 @@ async function load() {
     if (ME && !ME.is_admin) { location.href = "/"; return; }
     const r = await api("/api/admin/users");
     USERS = r.users || [];
+    WS = r.workspaces || [];
     paint();
   } catch (e) { setMsg("Error: " + e.message, "err"); }
 }
@@ -195,6 +222,7 @@ function modalCuenta({ titulo, u = null, ok }) {
       <label>Nombre</label><input data-id="display_name" value="${esc(u?.display_name || "")}" placeholder="Cómo le llama el asistente">
       <label>Contexto para el asistente</label><textarea data-id="context" rows="3" placeholder="Dos o tres frases: a qué se dedica, qué persigue, qué tono prefiere. Lo puede editar después en Configuración.">${esc(u?.context || "")}</textarea>
       ${nuevo ? `<label>Contraseña inicial</label><div class="pwrow"><input data-id="password" type="text" autocomplete="off" value="${passAleatoria()}"><button type="button" data-a="gen">Otra</button></div><div class="hint">Cópiala y pásasela: es la que usará para entrar. Después puede cambiarla en Configuración.</div>` : ""}
+      <label>Grupo</label><select data-id="workspace_id"><option value="" ${!u?.workspace_id ? "selected" : ""}>Sin grupo</option>${WS.map((w) => `<option value="${w.id}" ${u?.workspace_id === w.id ? "selected" : ""}>${esc(w.nombre)}</option>`).join("")}</select>
       <label>Rol</label><select data-id="role"><option value="user" ${u?.role !== "admin" ? "selected" : ""}>Usuario</option><option value="admin" ${u?.role === "admin" ? "selected" : ""}>Administrador</option></select>
       <div class="osui-btns"><button data-a="no">Cancelar</button><button class="primary" data-a="si">${ok}</button></div>`;
     ov.appendChild(card); document.body.appendChild(ov);
@@ -211,6 +239,38 @@ function modalCuenta({ titulo, u = null, ok }) {
     card.onkeydown = (e) => { if (e.key === "Escape") done(null); };
     const first = card.querySelector("input"); if (first) first.focus();
   });
+}
+
+$("btnGrupo").onclick = async () => {
+  const nombre = await OSUI.prompt("Nuevo grupo", "", { label: "Nombre", placeholder: "p. ej. Amigos, Growing Inmobiliario", ok: "Crear" });
+  if (!nombre || !nombre.trim()) return;
+  try {
+    await api("/api/admin/workspaces", { method: "POST", body: JSON.stringify({ nombre }) });
+    setMsg(`Grupo «${nombre.trim()}» creado.`, "ok");
+    load();
+  } catch (e) { setMsg("Error: " + e.message, "err"); }
+};
+
+async function editarGrupo(w) {
+  const n = USERS.filter((u) => u.workspace_id === w.id).length;
+  const r = await OSUI.form({
+    titulo: `Grupo «${w.nombre}»`,
+    texto: n ? `${n} ${n === 1 ? "cuenta" : "cuentas"}. Si lo borras, se quedan sin grupo; sus datos no se tocan.` : "Sin cuentas asignadas.",
+    campos: [{ id: "nombre", label: "Nombre", valor: w.nombre }],
+    ok: "Guardar", borrar: true,
+  });
+  if (!r) return;
+  try {
+    if (r === "borrar") {
+      if (!(await OSUI.confirm(`Borrar el grupo «${w.nombre}»`, n ? `Las ${n} cuentas pasan a «Sin grupo».` : "", { ok: "Borrar" }))) return;
+      await api(`/api/admin/workspaces/${w.id}`, { method: "DELETE" });
+      setMsg("Grupo borrado.", "ok");
+    } else {
+      await api(`/api/admin/workspaces/${w.id}`, { method: "POST", body: JSON.stringify({ nombre: r.nombre }) });
+      setMsg("Grupo renombrado.", "ok");
+    }
+    load();
+  } catch (e) { setMsg("Error: " + e.message, "err"); }
 }
 
 $("btnNuevo").onclick = async () => {

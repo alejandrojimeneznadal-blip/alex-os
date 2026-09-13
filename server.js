@@ -111,6 +111,14 @@ async function initSchema() {
       updated_at TIMESTAMPTZ DEFAULT NOW()
     );
   `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS workspaces (
+      id TEXT PRIMARY KEY,
+      nombre TEXT UNIQUE NOT NULL,
+      created BIGINT
+    );
+  `);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS workspace_id TEXT;`);
   await pool.query(`ALTER TABLE chat_images ADD COLUMN IF NOT EXISTS user_id TEXT;`);
   await pool.query(`ALTER TABLE app_files ADD COLUMN IF NOT EXISTS user_id TEXT;`);
 
@@ -276,7 +284,7 @@ function verifyPassword(pass, stored) {
     });
   });
 }
-const USER_COLS = "id, username, display_name, context, role, active, pw_version, created, last_login";
+const USER_COLS = "id, username, display_name, context, role, active, pw_version, created, last_login, workspace_id";
 async function getUser(id) {
   const r = await pool.query(`SELECT ${USER_COLS} FROM users WHERE id = $1`, [id]);
   return r.rows[0] || null;
@@ -548,10 +556,11 @@ app.post("/api/me/password", async (req, res) => {
 app.get("/api/admin/users", requireAdmin, async (req, res) => {
   try {
     const r = await pool.query(
-      `SELECT u.${USER_COLS.split(", ").join(", u.")}, s.updated_at AS state_updated, octet_length(s.data::text) AS state_bytes
-       FROM users u LEFT JOIN user_state s ON s.user_id = u.id ORDER BY u.created ASC`
+      `SELECT u.${USER_COLS.split(", ").join(", u.")}, s.updated_at AS state_updated, octet_length(s.data::text) AS state_bytes, w.nombre AS workspace_nombre
+       FROM users u LEFT JOIN user_state s ON s.user_id = u.id LEFT JOIN workspaces w ON w.id = u.workspace_id ORDER BY u.created ASC`
     );
-    res.json({ users: r.rows });
+    const ws = await pool.query("SELECT id, nombre, created FROM workspaces ORDER BY nombre ASC");
+    res.json({ users: r.rows, workspaces: ws.rows });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -562,13 +571,15 @@ app.post("/api/admin/users", requireAdmin, async (req, res) => {
     const display_name = String(req.body?.display_name || "").trim().slice(0, 60) || capital(username);
     const context = String(req.body?.context || "").trim().slice(0, 2000) || null;
     const role = req.body?.role === "admin" ? "admin" : "user";
+    const workspace_id = await workspaceIdValido(req.body?.workspace_id);
+    if (workspace_id === false) return res.status(400).json({ error: "grupo no encontrado" });
     if (!USERNAME_RE.test(username)) return res.status(400).json({ error: "usuario: 2-32 caracteres, minúsculas, números, . _ -" });
     if (password.length < 8) return res.status(400).json({ error: "la contraseña necesita al menos 8 caracteres" });
     if (await getUserByName(username)) return res.status(409).json({ error: "ese usuario ya existe" });
     const id = uid("u");
     await pool.query(
-      "INSERT INTO users (id, username, password_hash, display_name, context, role, created) VALUES ($1, $2, $3, $4, $5, $6, $7)",
-      [id, username, await hashPassword(password), display_name, context, role, Date.now()]
+      "INSERT INTO users (id, username, password_hash, display_name, context, role, created, workspace_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+      [id, username, await hashPassword(password), display_name, context, role, Date.now(), workspace_id]
     );
     await readData(id); // siembra su estado vacío con los defaults
     res.json({ ok: true, user: await getUser(id) });
@@ -585,7 +596,12 @@ app.post("/api/admin/users/:id", requireAdmin, async (req, res) => {
     let role = b.role === undefined ? u.role : (b.role === "admin" ? "admin" : "user");
     let active = b.active === undefined ? u.active : Boolean(b.active);
     if (u.id === req.actor.id) { role = "admin"; active = true; } // nunca te bloqueas a ti mismo
-    await pool.query("UPDATE users SET display_name = $2, context = $3, role = $4, active = $5 WHERE id = $1", [u.id, display_name, context, role, active]);
+    let workspace_id = u.workspace_id;
+    if (b.workspace_id !== undefined) {
+      workspace_id = await workspaceIdValido(b.workspace_id);
+      if (workspace_id === false) return res.status(400).json({ error: "grupo no encontrado" });
+    }
+    await pool.query("UPDATE users SET display_name = $2, context = $3, role = $4, active = $5, workspace_id = $6 WHERE id = $1", [u.id, display_name, context, role, active, workspace_id]);
     if (!active) basicCache.clear();
     res.json({ ok: true, user: await getUser(u.id) });
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -602,6 +618,59 @@ app.post("/api/admin/users/:id/password", requireAdmin, async (req, res) => {
     const headers = [];
     if (u.id === req.actor.id) headers.push(cookieStr(SESSION_COOKIE, signSession(await getUser(u.id)), 60 * 60 * 24 * 90));
     if (headers.length) res.setHeader("Set-Cookie", headers);
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/* ---------- workspaces (grupos de cuentas: Amigos, una empresa…) ----------
+   Solo etiquetan usuarios: los datos siguen aislados por persona. Sirven para agrupar
+   en el panel de admin y, en el futuro, para clasificaciones o defaults por grupo. */
+async function workspaceIdValido(v) {
+  if (v === null || v === "" || v === undefined) return null; // sin grupo
+  const r = await pool.query("SELECT id FROM workspaces WHERE id = $1", [String(v)]);
+  return r.rows.length ? r.rows[0].id : false;
+}
+const nombreWs = (v) => String(v || "").trim().replace(/\s+/g, " ").slice(0, 40);
+
+app.get("/api/admin/workspaces", requireAdmin, async (req, res) => {
+  try {
+    const r = await pool.query(
+      "SELECT w.id, w.nombre, w.created, COUNT(u.id)::int AS usuarios FROM workspaces w LEFT JOIN users u ON u.workspace_id = w.id GROUP BY w.id ORDER BY w.nombre ASC"
+    );
+    res.json({ workspaces: r.rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post("/api/admin/workspaces", requireAdmin, async (req, res) => {
+  try {
+    const nombre = nombreWs(req.body?.nombre);
+    if (nombre.length < 2) return res.status(400).json({ error: "el grupo necesita un nombre (2-40 caracteres)" });
+    const dup = await pool.query("SELECT 1 FROM workspaces WHERE lower(nombre) = lower($1)", [nombre]);
+    if (dup.rows.length) return res.status(409).json({ error: "ya existe un grupo con ese nombre" });
+    const id = uid("w");
+    await pool.query("INSERT INTO workspaces (id, nombre, created) VALUES ($1, $2, $3)", [id, nombre, Date.now()]);
+    res.json({ ok: true, workspace: { id, nombre } });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post("/api/admin/workspaces/:id", requireAdmin, async (req, res) => {
+  try {
+    const nombre = nombreWs(req.body?.nombre);
+    if (nombre.length < 2) return res.status(400).json({ error: "el grupo necesita un nombre (2-40 caracteres)" });
+    const dup = await pool.query("SELECT 1 FROM workspaces WHERE lower(nombre) = lower($1) AND id <> $2", [nombre, req.params.id]);
+    if (dup.rows.length) return res.status(409).json({ error: "ya existe un grupo con ese nombre" });
+    const r = await pool.query("UPDATE workspaces SET nombre = $2 WHERE id = $1 RETURNING id, nombre", [req.params.id, nombre]);
+    if (!r.rows.length) return res.status(404).json({ error: "grupo no encontrado" });
+    res.json({ ok: true, workspace: r.rows[0] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/* borrar un grupo deja a sus usuarios sin grupo; nunca toca sus datos */
+app.delete("/api/admin/workspaces/:id", requireAdmin, async (req, res) => {
+  try {
+    await pool.query("UPDATE users SET workspace_id = NULL WHERE workspace_id = $1", [req.params.id]);
+    const r = await pool.query("DELETE FROM workspaces WHERE id = $1", [req.params.id]);
+    if (!r.rowCount) return res.status(404).json({ error: "grupo no encontrado" });
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });

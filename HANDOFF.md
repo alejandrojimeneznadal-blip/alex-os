@@ -99,6 +99,7 @@ Las credenciales bancarias (Airwallex, Mercury) **no** van en env: se pegan desd
 - **user**: solo su cuenta. Cambia su nombre, contexto y contraseña en Configuración → Cuenta.
 - Contraseñas con `scrypt`; sesión = cookie firmada `id.exp.hmac` que incluye `pw_version`, así cambiar la contraseña cierra las demás sesiones. Basic auth (`usuario:contraseña`) sigue valiendo para scripts.
 - No hay borrado de cuentas desde la UI, solo quitar acceso (los datos se conservan).
+- **Grupos (workspaces)**: etiqueta opcional por cuenta (Amigos, una empresa…) para agrupar en `/admin.html` y, en el futuro, clasificaciones o defaults por grupo. No aíslan datos (ya van por usuario). Tabla `workspaces (id, nombre, created)` + `users.workspace_id`. Borrar un grupo deja a sus cuentas sin grupo.
 
 ---
 
@@ -143,7 +144,8 @@ Ver «Usuarios y roles» en la sección 3.
 
 Tablas, todas creadas por `initSchema` (esquema aditivo, sin migraciones):
 
-- `users (id, username, password_hash, display_name, context, role, active, pw_version, created, last_login)`.
+- `users (id, username, password_hash, display_name, context, role, active, pw_version, created, last_login, workspace_id)`.
+- `workspaces (id, nombre, created)`: grupos de cuentas.
 - `user_state (user_id, data JSONB, updated_at)`: **todo el estado de un usuario** en una fila.
 - `chat_images (id, mime, data base64, created, user_id)`: imágenes adjuntas al chat, fuera del JSONB para no engordar cada escritura.
 - `app_files (id, nombre, mime, data base64, size, created, user_id)`: archivos de proyectos y subproyectos.
@@ -184,6 +186,7 @@ Autenticación: cookie `os_session` (login del navegador) o Basic auth (`-u user
 | GET | `/api/me` | quién soy (`user`, `actor`, `viewing_as`, `is_admin`) |
 | POST | `/api/me/profile`, `/api/me/password` | mi nombre/contexto, mi contraseña |
 | GET/POST | `/api/admin/users`, `/api/admin/users/:id`, `/api/admin/users/:id/password`, `/api/admin/view-as` | solo admin |
+| GET/POST/DELETE | `/api/admin/workspaces`, `/api/admin/workspaces/:id` | grupos (solo admin) |
 | GET | `/api/state` | estado completo menos `integraciones` y `chats` |
 | POST | `/api/state` | merge superficial de las claves que envíes |
 | GET | `/api/dashboard` | serie de score/acumulado, racha, KPIs |
