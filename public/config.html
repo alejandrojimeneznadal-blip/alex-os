@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#f3f3f5">
+<title>Configuración · OS · Alex</title>
+<link rel="expect" href="#ready" blocking="render">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #f3f3f5;
+    --surface: #ffffff;
+    --surface-2: #f4f4f7;
+    --border: #e9e9ee;
+    --ink: #17171c;
+    --ink-2: #4c4c56;
+    --ink-3: #8b8b94;
+    --accent: #5546e8;
+    --good: #0a7d0a;
+    --good-bg: #e5f6e5;
+    --bad: #d03b3b;
+    --radius: 18px;
+  }
+  html, body {
+    background: var(--bg); color: var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased; font-size: 15px; line-height: 1.45;
+  }
+  .wrap { max-width: 680px; margin: 0 auto; padding: 22px 18px 60px; }
+  .page-title { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 16px; }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; margin-bottom: 16px; box-shadow: 0 1px 2px rgba(23,23,40,0.04), 0 8px 24px rgba(23,23,40,0.05); }
+  .card h2 { font-size: 15px; font-weight: 650; color: var(--ink); letter-spacing: -0.01em; margin-bottom: 4px; }
+  .card .desc { font-size: 12.5px; color: var(--ink-3); margin-bottom: 14px; }
+
+  .estado { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 999px; background: var(--surface-2); color: var(--ink-3); margin-left: 8px; vertical-align: 2px; }
+  .estado .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ink-3); }
+  .estado.on { color: var(--good); background: var(--good-bg); }
+  .estado.on .dot { background: var(--ok); }
+
+  label { display: block; font-size: 11px; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.07em; margin: 12px 0 5px 2px; }
+  input, select {
+    width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 10px;
+    color: var(--ink); font-family: inherit; font-size: 14px; padding: 10px 12px;
+  }
+  input:focus, select:focus { outline: none; border-color: var(--accent); }
+  input::placeholder { color: var(--placeholder); }
+
+  .btns { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
+  button {
+    background: var(--surface); border: 1px solid var(--border); color: var(--ink-2);
+    border-radius: 10px; padding: 9px 16px; font-size: 13.5px; font-weight: 500; cursor: pointer; font-family: inherit;
+  }
+  button:hover { color: var(--ink); border-color: var(--border-strong); }
+  button.primary { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 600; }
+  button.primary:hover { opacity: 0.92; }
+  button:disabled { opacity: 0.45; cursor: default; }
+
+  .msg { font-size: 13px; margin-top: 12px; min-height: 18px; color: var(--ink-2); white-space: pre-wrap; }
+  .msg.ok { color: var(--good); }
+  .msg.err { color: var(--bad); }
+  .meta-line { font-size: 12px; color: var(--ink-3); margin-top: 10px; }
+  .note { font-size: 12.5px; color: var(--ink-3); line-height: 1.6; }
+  code { background: var(--surface-2); border: 1px solid var(--border); border-radius: 5px; padding: 1px 6px; font-size: 12px; }
+
+  .mem-row { display: flex; gap: 10px; padding: 9px 2px; border-bottom: 1px solid var(--border); font-size: 13px; cursor: pointer; align-items: baseline; }
+  .mem-row:last-child { border-bottom: none; }
+  .mem-row:hover { background: var(--surface-2); border-radius: 8px; }
+  .mem-row .f { color: var(--ink-3); font-size: 11.5px; flex-shrink: 0; font-variant-numeric: tabular-nums; }
+  .mem-row .t { color: var(--ink-2); }
+
+  .temas { display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); gap: 10px; }
+  .tema {
+    background: var(--surface); border: 1.5px solid var(--border); border-radius: 12px;
+    padding: 8px; cursor: pointer; font-family: inherit; font-size: 12.5px; font-weight: 550;
+    color: var(--ink-2); display: flex; flex-direction: column; gap: 7px; text-align: center;
+  }
+  .tema:hover { border-color: var(--border-strong); color: var(--ink); }
+  .tema.active { border-color: var(--accent); color: var(--ink); }
+  .tema .prev { height: 46px; border-radius: 8px; position: relative; overflow: hidden; border: 1px solid rgba(128,128,128,0.18); }
+  .tema .prev .pcard { position: absolute; left: 9px; top: 9px; right: 9px; bottom: -8px; border-radius: 6px; }
+  .tema .prev .pdot { position: absolute; left: 16px; top: 16px; width: 18px; height: 5px; border-radius: 3px; }
+</style>
+</head>
+<body>
+<script src="/theme.js"></script>
+<script src="/icons.js"></script>
+<script src="/ui.js"></script>
+<div class="wrap">
+  <div class="page-title">Configuración</div>
+
+  <div class="card">
+    <h2>Tema</h2>
+    <div class="desc">Se aplica al instante y se recuerda en este dispositivo.</div>
+    <div class="temas" id="temas"></div>
+  </div>
+
+  <div class="card">
+    <h2>Airwallex <span class="estado" id="awxEstado"><span class="dot"></span><span>sin conectar</span></span></h2>
+    <div class="desc">API key con scopes de Balances, Financial transactions e Issuing (opcional, para el nombre del comercio). Recuerda el whitelist de IP en Airwallex: al deployar, la IP del servidor.</div>
+    <label for="awxId">Client ID</label>
+    <input id="awxId" autocomplete="off" placeholder="p. ej. AbCdEf...">
+    <label for="awxKey">API key</label>
+    <input id="awxKey" type="password" autocomplete="new-password" placeholder="se guarda en la BD de la app">
+    <label for="awxBase">Entorno</label>
+    <select id="awxBase">
+      <option value="prod">Producción (api.airwallex.com)</option>
+      <option value="demo">Demo (api-demo.airwallex.com)</option>
+    </select>
+  </div>
+
+  <div class="card">
+    <h2>Mercury <span class="estado" id="mcyEstado"><span class="dot"></span><span>sin conectar</span></span></h2>
+    <div class="desc">Token de API read-only (Settings → API en Mercury). Sin caducidad.</div>
+    <label for="mcyToken">API token</label>
+    <input id="mcyToken" type="password" autocomplete="new-password" placeholder="secret-token:mercury_...">
+  </div>
+
+  <div class="card">
+    <h2>Sincronización</h2>
+    <div class="btns">
+      <button class="primary" id="btnGuardar">Guardar credenciales</button>
+      <button id="btnTest">Probar conexión</button>
+      <button id="btnSync">Sync ahora</button>
+      <button id="btnDesconectar" title="Borra las credenciales guardadas">Desconectar todo</button>
+    </div>
+    <div class="msg" id="msg"></div>
+    <div class="meta-line" id="lastSync"></div>
+  </div>
+
+  <div class="card">
+    <h2>Sync bancario</h2>
+    <div class="note">El primer sync trae 365 días de movimientos directamente de los bancos; los siguientes solapan 7 días y deduplican por id externo. Las credenciales viven solo en la base de datos de esta instancia.</div>
+  </div>
+
+  <div class="card">
+    <h2>Memoria del chat</h2>
+    <div class="desc">Hechos durables que el chat tiene delante en cada conversación (decisiones, preferencias, contexto). Él la mantiene solo — «recuerda que…» — y aquí puedes corregir, añadir o borrar. Toca una entrada para editarla.</div>
+    <div id="memLista"></div>
+    <div class="btns"><button id="memAdd">Añadir recuerdo</button></div>
+  </div>
+
+  <div class="card">
+    <h2>Hábitos y score</h2>
+    <div class="note">Los hábitos se editan en el <a href="/" style="color:var(--ink-2)">panel</a> (⋯ en «Hábitos de hoy»: añadir, quitar, reordenar y cambiar puntos) o por el <a href="/chat.html" style="color:var(--ink-2)">chat</a>: «añade un hábito de lectura con 5 puntos»…</div>
+  </div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let STATUS = null;
+
+function setMsg(text, cls) {
+  const m = $("msg");
+  m.textContent = text;
+  m.className = "msg" + (cls ? " " + cls : "");
+}
+
+function paint() {
+  const a = STATUS.airwallex, m = STATUS.mercury;
+  const awxE = $("awxEstado"), mcyE = $("mcyEstado");
+  awxE.className = "estado" + (a.configured ? " on" : "");
+  awxE.lastElementChild.textContent = a.configured ? `conectado ····${a.api_key_last4}` : "sin conectar";
+  if (a.client_id) $("awxId").value = a.client_id;
+  $("awxBase").value = a.base || "prod";
+  $("awxKey").placeholder = a.configured ? `guardada (····${a.api_key_last4}) — pega otra para cambiarla` : "se guarda en la BD de la app";
+  mcyE.className = "estado" + (m.configured ? " on" : "");
+  mcyE.lastElementChild.textContent = m.configured ? `conectado ····${m.token_last4}` : "sin conectar";
+  $("mcyToken").placeholder = m.configured ? `guardado (····${m.token_last4}) — pega otro para cambiarlo` : "secret-token:mercury_...";
+  const ls = $("lastSync");
+  if (STATUS.last_sync) {
+    const r = STATUS.last_result || {};
+    ls.textContent = `Último sync: ${new Date(STATUS.last_sync).toLocaleString("es")} · ${r.movimientos ?? 0} movimientos nuevos, ${r.cuentas_nuevas ?? 0} cuentas nuevas` +
+      (r.errores?.length ? ` · errores: ${r.errores.join(" | ")}` : "");
+  } else {
+    ls.textContent = "Nunca sincronizado.";
+  }
+}
+
+async function api(path, opts = {}) {
+  const res = await fetch(path, {
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    ...opts,
+  });
+  const body = await res.json();
+  if (!res.ok) throw new Error(body.error || "HTTP " + res.status);
+  return body;
+}
+
+async function load() {
+  try {
+    STATUS = await api("/api/integraciones");
+    paint();
+  } catch (e) {
+    setMsg("Error cargando: " + e.message, "err");
+  }
+}
+
+$("btnGuardar").onclick = async () => {
+  setMsg("Guardando…");
+  try {
+    const payload = {};
+    const id = $("awxId").value.trim(), key = $("awxKey").value.trim();
+    if (id || key) payload.airwallex = { client_id: id, api_key: key, base: $("awxBase").value };
+    const token = $("mcyToken").value.trim();
+    if (token) payload.mercury = { token };
+    if (!Object.keys(payload).length) return setMsg("No hay nada nuevo que guardar.", "err");
+    STATUS = await api("/api/integraciones", { method: "POST", body: JSON.stringify(payload) });
+    $("awxKey").value = ""; $("mcyToken").value = "";
+    paint();
+    setMsg("Credenciales guardadas.", "ok");
+  } catch (e) { setMsg("Error: " + e.message, "err"); }
+};
+
+$("btnTest").onclick = async () => {
+  setMsg("Probando conexión…");
+  try {
+    const r = await api("/api/integraciones/test", { method: "POST" });
+    const lines = [];
+    lines.push("Airwallex: " + (r.airwallex.ok ? "✓ OK" : "✕ " + r.airwallex.error));
+    lines.push("Mercury: " + (r.mercury.ok ? `✓ OK (${r.mercury.cuentas} cuentas)` : "✕ " + r.mercury.error));
+    const allOk = r.airwallex.ok || r.mercury.ok;
+    setMsg(lines.join("\n"), allOk ? "ok" : "err");
+  } catch (e) { setMsg("Error: " + e.message, "err"); }
+};
+
+$("btnSync").onclick = async () => {
+  $("btnSync").disabled = true;
+  setMsg("Sincronizando… (el primer sync trae 365 días, puede tardar)");
+  try {
+    const r = await api("/api/sync", { method: "POST" });
+    setMsg(`Sync completado: ${r.movimientos} movimientos nuevos, ${r.cuentas_nuevas} cuentas nuevas.` +
+      (r.errores?.length ? `\nErrores: ${r.errores.join(" | ")}` : ""), r.errores?.length ? "err" : "ok");
+    load();
+  } catch (e) { setMsg("Error: " + e.message, "err"); }
+  finally { $("btnSync").disabled = false; }
+};
+
+$("btnDesconectar").onclick = async () => {
+  if (!(await OSUI.confirm("Desconectar bancos", "Se borran las credenciales guardadas de Airwallex y Mercury.", { ok: "Borrar" }))) return;
+  try {
+    STATUS = await api("/api/integraciones", { method: "POST", body: JSON.stringify({ airwallex: null, mercury: null }) });
+    $("awxId").value = ""; $("awxKey").value = ""; $("mcyToken").value = "";
+    paint();
+    setMsg("Credenciales borradas.", "ok");
+  } catch (e) { setMsg("Error: " + e.message, "err"); }
+};
+
+load();
+
+/* ---------- memoria del chat ---------- */
+let MEMORIA = [];
+
+function paintMemoria() {
+  const box = $("memLista");
+  if (!MEMORIA.length) {
+    box.innerHTML = `<div class="note">Vacía todavía. El chat irá guardando decisiones y datos durables; también puedes añadir tú aquí.</div>`;
+    return;
+  }
+  box.innerHTML = MEMORIA.map((m, i) => `<div class="mem-row" data-i="${i}"><span class="f">${(m.fecha || "").slice(5)}</span><span class="t"></span></div>`).join("");
+  box.querySelectorAll(".mem-row").forEach((r) => {
+    const m = MEMORIA[Number(r.dataset.i)];
+    r.querySelector(".t").textContent = m.texto || "";
+    r.onclick = () => editarMem(m.id);
+  });
+}
+
+async function cargarMemoria() {
+  try {
+    const s = await api("/api/state");
+    MEMORIA = Array.isArray(s.memoria) ? s.memoria : [];
+    paintMemoria();
+  } catch (e) {
+    $("memLista").innerHTML = `<div class="note">Error cargando la memoria: ${e.message}</div>`;
+  }
+}
+
+/* memoria es una clave top-level y el POST la sustituye entera:
+   se refresca justo antes de escribir para no pisar lo que el chat haya guardado mientras */
+async function mutarMemoria(fn) {
+  const s = await api("/api/state");
+  const arr = Array.isArray(s.memoria) ? s.memoria : [];
+  fn(arr);
+  await api("/api/state", { method: "POST", body: JSON.stringify({ memoria: arr }) });
+  MEMORIA = arr;
+  paintMemoria();
+}
+
+async function editarMem(id) {
+  const m = MEMORIA.find((x) => x.id === id);
+  if (!m) return;
+  const r = await OSUI.form({ titulo: "Editar recuerdo", campos: [{ id: "texto", label: "Texto", valor: m.texto || "", placeholder: "un hecho durable, en una frase" }], ok: "Guardar", borrar: true });
+  if (!r) return;
+  try {
+    if (r === "borrar") {
+      await mutarMemoria((arr) => {
+        const i = arr.findIndex((x) => x.id === id);
+        if (i >= 0) arr.splice(i, 1);
+      });
+    } else {
+      if (!r.texto.trim()) return;
+      await mutarMemoria((arr) => {
+        const e = arr.find((x) => x.id === id);
+        if (e) e.texto = r.texto.trim();
+      });
+    }
+  } catch (e) { setMsg("Error guardando memoria: " + e.message, "err"); }
+}
+
+$("memAdd").onclick = async () => {
+  const texto = await OSUI.prompt("Nuevo recuerdo", "", { label: "Un hecho durable, en una frase", placeholder: "p. ej. Prefiero entrenar a primera hora", ok: "Guardar" });
+  if (!texto || !texto.trim()) return;
+  const hoy = new Date();
+  const fecha = hoy.getFullYear() + "-" + String(hoy.getMonth() + 1).padStart(2, "0") + "-" + String(hoy.getDate()).padStart(2, "0");
+  try {
+    await mutarMemoria((arr) => arr.push({ id: "m" + Date.now(), texto: texto.trim(), fecha }));
+  } catch (e) { setMsg("Error guardando memoria: " + e.message, "err"); }
+};
+
+cargarMemoria();
+
+/* ---------- selector de tema ---------- */
+const TEMAS = [
+  { id: "claro", label: "Claro",   bg: "#f3f3f5", surface: "#ffffff", accent: "#5546e8" },
+  { id: "crema", label: "Crema",   bg: "#f3ede2", surface: "#fdfaf3", accent: "#bc5f2e" },
+  { id: "azul",  label: "Azulado", bg: "#0d1830", surface: "#15233f", accent: "#4d8dff" },
+  { id: "negro", label: "Negro",   bg: "#0e0e12", surface: "#17171d", accent: "#7b6cff" },
+];
+const temasBox = $("temas");
+for (const t of TEMAS) {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = "tema" + (OSTheme.get() === t.id ? " active" : "");
+  b.innerHTML = `<span class="prev" style="background:${t.bg}"><span class="pcard" style="background:${t.surface}"></span><span class="pdot" style="background:${t.accent}"></span></span>${t.label}`;
+  b.onclick = () => {
+    OSTheme.set(t.id);
+    temasBox.querySelectorAll(".tema").forEach((x) => x.classList.remove("active"));
+    b.classList.add("active");
+  };
+  temasBox.appendChild(b);
+}
+</script>
+<div id="ready"></div>
+</body>
+</html>

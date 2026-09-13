@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#f3f3f5">
+<title>Entrar · OS · Alex</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #f3f3f5;
+    --surface: #ffffff;
+    --border: #e9e9ee;
+    --ink: #17171c;
+    --ink-2: #4c4c56;
+    --ink-3: #8b8b94;
+    --accent: #5546e8;
+    --bad: #d03b3b;
+  }
+  html, body {
+    background: var(--bg); color: var(--ink); height: 100%;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased; font-size: 15px;
+  }
+  body { display: flex; align-items: center; justify-content: center; padding: 20px; }
+  .box { width: 100%; max-width: 360px; }
+  .brand { text-align: center; margin-bottom: 26px; }
+  .brand .chip {
+    width: 52px; height: 52px; border-radius: 16px; margin: 0 auto 12px;
+    background: linear-gradient(135deg, var(--accent-2), var(--accent));
+    color: #fff; font-size: 24px; font-weight: 800;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .brand .logo { font-size: 24px; font-weight: 750; letter-spacing: -0.01em; }
+  .brand .logo small { color: var(--ink-3); font-weight: 500; }
+  .brand .tag { font-size: 12.5px; color: var(--ink-3); margin-top: 6px; }
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 18px; padding: 26px 24px;
+    box-shadow: 0 1px 2px rgba(23,23,40,0.04), 0 12px 32px rgba(23,23,40,0.07);
+  }
+  label { display: block; font-size: 11px; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.07em; margin: 0 0 6px 2px; }
+  input {
+    width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 11px;
+    color: var(--ink); font-family: inherit; font-size: 15px; padding: 12px 13px; margin-bottom: 16px;
+  }
+  input:focus { outline: none; border-color: var(--accent); }
+  button {
+    width: 100%; background: var(--accent); color: #fff; border: none; border-radius: 11px;
+    padding: 13px; font-size: 15px; font-weight: 600; cursor: pointer; font-family: inherit;
+  }
+  button:disabled { opacity: 0.5; }
+  .error { color: var(--bad); font-size: 13px; text-align: center; margin-top: 14px; min-height: 18px; }
+</style>
+</head>
+<body>
+<script src="/theme.js"></script>
+<div class="box">
+  <div class="brand">
+    <div class="chip">A</div>
+    <div class="logo">Alex<small> / OS</small></div>
+    <div class="tag">Tu día, tus señales, tu crecimiento.</div>
+  </div>
+  <form class="card" id="form">
+    <label for="user">Usuario</label>
+    <input id="user" name="username" autocomplete="username" autocapitalize="none" autofocus>
+    <label for="pass">Contraseña</label>
+    <input id="pass" name="password" type="password" autocomplete="current-password">
+    <button id="btn" type="submit">Entrar</button>
+    <div class="error" id="error"></div>
+  </form>
+</div>
+<script>
+const form = document.getElementById("form");
+const btn = document.getElementById("btn");
+const errEl = document.getElementById("error");
+form.onsubmit = async (e) => {
+  e.preventDefault();
+  btn.disabled = true;
+  errEl.textContent = "";
+  try {
+    const res = await fetch("/api/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        user: document.getElementById("user").value.trim(),
+        pass: document.getElementById("pass").value,
+      }),
+    });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.error || "HTTP " + res.status);
+    location.href = "/";
+  } catch (e2) {
+    errEl.textContent = e2.message;
+    btn.disabled = false;
+  }
+};
+</script>
+</body>
+</html>
