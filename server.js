@@ -438,6 +438,9 @@ function buildDashboard(data) {
    APP
    ====================================================================== */
 const app = express();
+// detrás del proxy de EasyPanel/Traefik: sin esto req.protocol dice "http" y la URL
+// que damos para conectar por MCP saldría sin cifrar
+app.set("trust proxy", true);
 app.use(express.json({ limit: "25mb" }));
 
 app.get("/health", (req, res) => res.json({ ok: true }));
