@@ -100,6 +100,7 @@ Las credenciales bancarias (Airwallex, Mercury) **no** van en env: se pegan desd
 - **user**: solo su cuenta. Cambia su nombre, contexto y contraseña en Configuración → Cuenta.
 - Contraseñas con `scrypt`; sesión = cookie firmada `id.exp.hmac` que incluye `pw_version`, así cambiar la contraseña cierra las demás sesiones. Basic auth (`usuario:contraseña`) sigue valiendo para scripts.
 - No hay borrado de cuentas desde la UI, solo quitar acceso (los datos se conservan).
+- **MCP (conectar la cuenta a otras IAs)**: `POST /mcp` habla JSON-RPC 2.0 (Streamable HTTP, sin estado ni SSE) y se autentica con `Authorization: Bearer <token>`; el token decide de qué usuario son los datos, así que una IA externa nunca ve otra cuenta. Tokens en `mcp_tokens` guardados como SHA-256 (el claro se enseña una sola vez), máximo 10 por cuenta, revocables al instante; revocar o desactivar la cuenta corta el acceso en la siguiente petición. Expone las mismas herramientas que el chat interno (`TOOLS`, misma ejecución en `runTool`) más `get_dashboard`. Se gestiona en Configuración → Conectar con otras IAs. Clientes: Claude Code (`claude mcp add --transport http …  --header`), Claude Desktop vía `npx mcp-remote`. Para claude.ai haría falta OAuth, que no está implementado.
 - **Bienvenida (onboarding)**: `users.onboarded`. Una cuenta nueva (creada desde `/admin.html`) entra por `/bienvenida.html` la primera vez: nombre → contexto para el asistente → hábitos y puntos (activar, renombrar, añadir, «Repartir a 100», umbral de horas y objetivo kcal) → tema → resumen. Guarda con `/api/me/profile`, `/api/state` (`config.senales`, `config_nutricion`) y `/api/me/onboarded`. «Saltar por ahora» la marca hecha; se repite desde Configuración → Cuenta → Repetir bienvenida (o el admin con `onboarded:false` en `/api/admin/users/:id`). `ui.js` redirige si `onboarded === false`, nunca cuando un admin está viendo otra cuenta.
 - **Grupos (workspaces)**: etiqueta opcional por cuenta (Amigos, una empresa…) para agrupar en `/admin.html` y, en el futuro, clasificaciones o defaults por grupo. No aíslan datos (ya van por usuario). Tabla `workspaces (id, nombre, created)` + `users.workspace_id`. Borrar un grupo deja a sus cuentas sin grupo.
 
@@ -148,6 +149,7 @@ Tablas, todas creadas por `initSchema` (esquema aditivo, sin migraciones):
 
 - `users (id, username, password_hash, display_name, context, role, active, pw_version, created, last_login, workspace_id, onboarded)`.
 - `workspaces (id, nombre, created)`: grupos de cuentas.
+- `mcp_tokens (id, user_id, nombre, token_hash, prefijo, created, last_used)`: tokens de acceso MCP.
 - `user_state (user_id, data JSONB, updated_at)`: **todo el estado de un usuario** en una fila.
 - `chat_images (id, mime, data base64, created, user_id)`: imágenes adjuntas al chat, fuera del JSONB para no engordar cada escritura.
 - `app_files (id, nombre, mime, data base64, size, created, user_id)`: archivos de proyectos y subproyectos.
@@ -187,6 +189,8 @@ Autenticación: cookie `os_session` (login del navegador) o Basic auth (`-u user
 | POST | `/api/login`, `/api/logout` | sesión |
 | GET | `/api/me` | quién soy (`user`, `actor`, `viewing_as`, `is_admin`) |
 | POST | `/api/me/profile`, `/api/me/password`, `/api/me/onboarded` | mi nombre/contexto, mi contraseña, bienvenida hecha |
+| GET/POST/DELETE | `/api/me/mcp`, `/api/me/mcp/:id` | mis tokens MCP |
+| POST | `/mcp` | servidor MCP (auth propia por Bearer, fuera del middleware de sesión) |
 | GET/POST | `/api/admin/users`, `/api/admin/users/:id`, `/api/admin/users/:id/password`, `/api/admin/view-as` | solo admin |
 | GET/POST/DELETE | `/api/admin/workspaces`, `/api/admin/workspaces/:id` | grupos (solo admin) |
 | GET | `/api/state` | estado completo menos `integraciones` y `chats` |
@@ -221,6 +225,7 @@ Si se activa el sync de Airwallex, su whitelist de IPs debe incluir la IP del se
 - **Charts**: interpolación monótona Fritsch–Carlson (`pathSuave`), no catmull-rom. El acumulado se hundía bajo cero por overshoot.
 - **Grid de hábitos**: el modo normal y el modo "Orden" deben tener el mismo `column-gap` o las líneas se recolocan.
 - **Tests con Playwright**: `extraHTTPHeaders` manda `Authorization` a todos los dominios y rompe el CORS de los embeds de YouTube/Instagram. Para probar embeds, usar la cookie `os_session` vía `ctx.addCookies`.
+- **`read_state` filtra por lista blanca** (`KEYS_LEIBLES`): el `enum` del `input_schema` no lo aplica nadie, y quien llama (el chat, o cualquier cliente MCP) puede pedir claves arbitrarias. Nunca devuelve `integraciones` ni `chats`. Si añades una clave al estado y quieres que sea legible, métela ahí.
 - **Iconos nuevos**: bajar el SVG outline de Tabler y meterlo en `public/icons.js` con el mismo formato, clave = rol, no nombre del icono.
 - **Finanzas oculta**: comentada en `SECTIONS` de `ui.js` y `TABS` de `areas.html`. Reactivar es descomentar; código y datos intactos.
 - **Temas**: todo tokenizado vía `theme.js`. Un color nuevo se define ahí para las cuatro paletas, nunca hardcodeado en una página.

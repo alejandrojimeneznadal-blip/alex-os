@@ -112,6 +112,17 @@ async function initSchema() {
     );
   `);
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS mcp_tokens (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id),
+      nombre TEXT,
+      token_hash TEXT UNIQUE NOT NULL,
+      prefijo TEXT,
+      created BIGINT,
+      last_used BIGINT
+    );
+  `);
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS workspaces (
       id TEXT PRIMARY KEY,
       nombre TEXT UNIQUE NOT NULL,
@@ -494,6 +505,113 @@ app.post("/api/logout", (req, res) => {
   res.json({ ok: true });
 });
 
+/* ======================================================================
+   MCP (Model Context Protocol) — deja conectar esta cuenta a otras IAs
+   (Claude Code, Claude Desktop vía mcp-remote…). JSON-RPC 2.0 sobre HTTP,
+   sin estado: cada petición se autentica con su token Bearer y ese token
+   decide de QUIÉN son los datos. Un token nunca ve otra cuenta.
+   ====================================================================== */
+const MCP_VERSIONS = ["2025-06-18", "2025-03-26", "2024-11-05"];
+const MCP_MUTAN = new Set(["log_day", "append_journal", "add_item", "set_value"]);
+const hashToken = (t) => crypto.createHash("sha256").update(String(t)).digest("hex");
+
+async function userFromMcpToken(req) {
+  const h = req.headers.authorization || "";
+  if (!h.startsWith("Bearer ")) return null;
+  const r = await pool.query(
+    `SELECT t.id AS token_id, ${USER_COLS.split(", ").map((c) => "u." + c).join(", ")}
+     FROM mcp_tokens t JOIN users u ON u.id = t.user_id WHERE t.token_hash = $1`,
+    [hashToken(h.slice(7).trim())]
+  );
+  const u = r.rows[0];
+  if (!u || !u.active) return null;
+  pool.query("UPDATE mcp_tokens SET last_used = $2 WHERE id = $1", [u.token_id, Date.now()]).catch(() => {});
+  return u;
+}
+
+const jsonRpcError = (id, code, message) => ({ jsonrpc: "2.0", id: id ?? null, error: { code, message } });
+
+/* Herramientas que ve la IA externa: las mismas del chat interno (misma lógica, mismos límites)
+   más una lectura cómoda del panel. */
+function mcpTools() {
+  return [
+    ...TOOLS.map((t) => ({ name: t.name, description: t.description, inputSchema: t.input_schema })),
+    {
+      name: "get_dashboard",
+      description: "Resumen del panel: score de hoy, racha, media de 7 y 30 días, ritmo frente al mes anterior y la serie diaria con el acumulado. Empieza por aquí para saber cómo va la persona.",
+      inputSchema: { type: "object", properties: {} },
+    },
+  ];
+}
+
+async function mcpHandle(msg, user) {
+  const { id, method, params } = msg || {};
+  const esNotificacion = id === undefined || id === null;
+
+  if (method === "initialize") {
+    const pedida = params?.protocolVersion;
+    return {
+      jsonrpc: "2.0", id,
+      result: {
+        protocolVersion: MCP_VERSIONS.includes(pedida) ? pedida : MCP_VERSIONS[0],
+        capabilities: { tools: { listChanged: false } },
+        serverInfo: { name: "os-panel-personal", version: "1.0.0" },
+        instructions: `Panel de vida de ${user.display_name || user.username}: hábitos con un score diario de 0 a 100, tareas, proyectos, contenido, sueño, gym y nutrición. Usa get_dashboard para ver cómo va, read_state para leer detalle y log_day/add_item/append_journal/set_value para registrar lo que te cuente. El score lo calcula el servidor: nunca lo inventes.`,
+      },
+    };
+  }
+  if (esNotificacion) return null; // notifications/initialized y compañía: sin respuesta
+  if (method === "ping") return { jsonrpc: "2.0", id, result: {} };
+  if (method === "tools/list") return { jsonrpc: "2.0", id, result: { tools: mcpTools() } };
+  if (method === "resources/list") return { jsonrpc: "2.0", id, result: { resources: [] } };
+  if (method === "prompts/list") return { jsonrpc: "2.0", id, result: { prompts: [] } };
+
+  if (method === "tools/call") {
+    const nombre = params?.name;
+    const args = params?.arguments || {};
+    if (!nombre) return jsonRpcError(id, -32602, "falta el nombre de la herramienta");
+    if (nombre !== "get_dashboard" && !TOOLS.some((t) => t.name === nombre)) {
+      return jsonRpcError(id, -32602, `herramienta desconocida: ${nombre}`);
+    }
+    const data = await readData(user.id);
+    if (nombre === "get_dashboard") {
+      return { jsonrpc: "2.0", id, result: { content: [{ type: "text", text: JSON.stringify(buildDashboard(data)) }] } };
+    }
+    try {
+      const acciones = [];
+      const texto = runTool(nombre, args, data, acciones);
+      if (MCP_MUTAN.has(nombre)) await writeData(user.id, data);
+      console.log(`MCP ${user.username} ${nombre}: ${acciones.join(" · ") || "ok"}`);
+      return { jsonrpc: "2.0", id, result: { content: [{ type: "text", text: texto }] } };
+    } catch (e) {
+      // error de la herramienta (no del protocolo): va como isError para que la IA lo lea y reintente
+      return { jsonrpc: "2.0", id, result: { content: [{ type: "text", text: e.message }], isError: true } };
+    }
+  }
+  return jsonRpcError(id, -32601, `método no soportado: ${method}`);
+}
+
+app.post("/mcp", async (req, res) => {
+  try {
+    const user = await userFromMcpToken(req);
+    if (!user) {
+      res.set("WWW-Authenticate", 'Bearer realm="os"');
+      return res.status(401).json(jsonRpcError(null, -32001, "token MCP inválido o revocado"));
+    }
+    const lote = Array.isArray(req.body) ? req.body : [req.body];
+    if (!lote.length) return res.status(400).json(jsonRpcError(null, -32600, "petición vacía"));
+    const salidas = (await Promise.all(lote.map((m) => mcpHandle(m, user)))).filter(Boolean);
+    if (!salidas.length) return res.status(202).end(); // solo notificaciones
+    res.json(Array.isArray(req.body) ? salidas : salidas[0]);
+  } catch (e) {
+    console.error("MCP error:", e.message);
+    res.status(500).json(jsonRpcError(null, -32603, e.message));
+  }
+});
+// sin canal servidor→cliente: no abrimos SSE ni guardamos sesiones
+app.get("/mcp", (req, res) => res.set("Allow", "POST, DELETE").status(405).json(jsonRpcError(null, -32000, "este servidor no abre stream SSE; usa POST")));
+app.delete("/mcp", (req, res) => res.status(200).end());
+
 /* req.actor = quien ha iniciado sesión · req.user = cuenta cuyos datos se sirven
    (la misma, salvo que un admin esté viendo otra cuenta con la cookie os_as). */
 app.use(async (req, res, next) => {
@@ -549,6 +667,42 @@ app.post("/api/me/onboarded", async (req, res) => {
     const done = req.body?.done !== false;
     await pool.query("UPDATE users SET onboarded = $2 WHERE id = $1", [req.user.id, done]);
     res.json({ ok: true, onboarded: done });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/* ---------- tokens MCP de la cuenta ---------- */
+app.get("/api/me/mcp", async (req, res) => {
+  try {
+    const r = await pool.query(
+      "SELECT id, nombre, prefijo, created, last_used FROM mcp_tokens WHERE user_id = $1 ORDER BY created DESC",
+      [req.user.id]
+    );
+    res.json({ tokens: r.rows, url: `${req.protocol}://${req.get("host")}/mcp` });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post("/api/me/mcp", async (req, res) => {
+  try {
+    if (req.viewingAs) return res.status(400).json({ error: "estás viendo otra cuenta: los tokens se crean desde la suya" });
+    const nombre = String(req.body?.nombre || "").trim().slice(0, 40) || "Sin nombre";
+    const n = await pool.query("SELECT COUNT(*)::int AS n FROM mcp_tokens WHERE user_id = $1", [req.user.id]);
+    if (n.rows[0].n >= 10) return res.status(400).json({ error: "máximo 10 tokens por cuenta: revoca alguno" });
+    const token = "osmcp_" + crypto.randomBytes(32).toString("base64url");
+    const id = uid("t");
+    await pool.query(
+      "INSERT INTO mcp_tokens (id, user_id, nombre, token_hash, prefijo, created) VALUES ($1, $2, $3, $4, $5, $6)",
+      [id, req.user.id, nombre, hashToken(token), token.slice(0, 12), Date.now()]
+    );
+    // el token en claro se enseña una sola vez: en la BD solo queda su hash
+    res.json({ ok: true, id, nombre, token, url: `${req.protocol}://${req.get("host")}/mcp` });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.delete("/api/me/mcp/:id", async (req, res) => {
+  try {
+    const r = await pool.query("DELETE FROM mcp_tokens WHERE id = $1 AND user_id = $2", [req.params.id, req.user.id]);
+    if (!r.rowCount) return res.status(404).json({ error: "token no encontrado" });
+    res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -1059,11 +1213,21 @@ function getPath(obj, dottedPath) {
   return dottedPath.split(".").reduce((acc, k) => (acc == null ? acc : acc[k]), obj);
 }
 
+/* claves que read_state puede devolver: nunca integraciones (credenciales bancarias) ni chats */
+const KEYS_LEIBLES = new Set([
+  "config", "days", "journal", "memoria", "tareas", "recordatorios", "proyectos", "contenido",
+  "finanzas", "cuentas", "suscripciones", "config_finanzas", "config_contenido", "config_nutricion",
+  "peso", "rutina_gym", "entrenos",
+]);
+
 function runTool(name, input, data, actions) {
   const config = data.config || DEFAULT_CONFIG;
 
   if (name === "read_state") {
-    const keys = input?.keys?.length ? input.keys : ["config", "days"];
+    const pedidas = input?.keys?.length ? input.keys : ["config", "days"];
+    // el enum del input_schema es orientativo: quien llama puede mandar cualquier cosa
+    // (el chat, pero también un cliente MCP), así que la lista blanca se aplica aquí.
+    const keys = pedidas.filter((k) => KEYS_LEIBLES.has(k));
     const out = {};
     for (const k of keys) {
       if (k === "days") {

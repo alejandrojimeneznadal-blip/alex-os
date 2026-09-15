@@ -71,6 +71,21 @@
   .mem-row .f { color: var(--ink-3); font-size: 11.5px; flex-shrink: 0; font-variant-numeric: tabular-nums; }
   .mem-row .t { color: var(--ink-2); }
 
+  .tok { display: flex; gap: 10px; align-items: baseline; padding: 10px 2px; border-bottom: 1px solid var(--border); font-size: 13.5px; }
+  .tok:last-child { border-bottom: none; }
+  .tok .n { font-weight: 600; color: var(--ink); }
+  .tok .m { color: var(--ink-3); font-size: 12px; margin-left: auto; text-align: right; white-space: nowrap; }
+  .tok button { padding: 4px 9px; font-size: 12px; border-color: transparent; color: var(--ink-3); }
+  .tok button:hover { color: var(--bad); border-color: var(--bad); }
+  .cmd {
+    background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px;
+    padding: 12px 13px; margin-top: 12px; font-size: 12px; line-height: 1.6;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--ink-2);
+    word-break: break-all; user-select: all;
+  }
+  .cmd + .btns { margin-top: 10px; }
+  .aviso { font-size: 12.5px; color: var(--ink-2); background: var(--good-bg); border-radius: 10px; padding: 10px 12px; margin-top: 12px; line-height: 1.5; }
+
   .temas { display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); gap: 10px; }
   .tema {
     background: var(--surface); border: 1.5px solid var(--border); border-radius: 12px;
@@ -110,6 +125,15 @@
     <h2>Tema</h2>
     <div class="desc">Se aplica al instante y se recuerda en este dispositivo.</div>
     <div class="temas" id="temas"></div>
+  </div>
+
+  <div class="card">
+    <h2>Conectar con otras IAs</h2>
+    <div class="desc">Genera un token para usar este panel desde Claude Code, Claude Desktop u otra IA compatible con MCP: podrá consultar tu score, tus tareas y tus proyectos, y registrar lo que le cuentes. Cada token da acceso <b>solo a tu cuenta</b>, y puedes revocarlo cuando quieras.</div>
+    <div id="mcpLista"></div>
+    <div id="mcpRevelado"></div>
+    <div class="btns"><button class="primary" id="mcpNuevo">Crear token</button></div>
+    <div class="msg" id="mcpMsg"></div>
   </div>
 
   <div class="card">
@@ -308,6 +332,65 @@ $("accPass").onclick = async () => {
     setAccMsg("Contraseña cambiada. Las demás sesiones abiertas se han cerrado.", "ok");
   } catch (e) { setAccMsg("Error: " + e.message, "err"); }
 };
+
+/* ---------- tokens MCP ---------- */
+let MCP = { tokens: [], url: "" };
+const esc = (t) => String(t ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+function setMcpMsg(text, cls) { const m = $("mcpMsg"); m.textContent = text; m.className = "msg" + (cls ? " " + cls : ""); }
+const fmtDia = (ms) => (ms ? new Date(Number(ms)).toLocaleDateString("es", { day: "numeric", month: "short" }) : null);
+
+function paintMcp() {
+  const box = $("mcpLista");
+  if (!MCP.tokens.length) {
+    box.innerHTML = `<div class="note">Ningún token todavía. Crea uno y te doy el comando para pegarlo en Claude Code.</div>`;
+    return;
+  }
+  box.innerHTML = MCP.tokens.map((t) => `<div class="tok" data-id="${t.id}">
+      <span class="n">${esc(t.nombre)}</span>
+      <code>${esc(t.prefijo || "osmcp_")}…</code>
+      <span class="m">${t.last_used ? "usado " + fmtDia(t.last_used) : "sin usar"} · creado ${fmtDia(t.created) || "—"}</span>
+      <button type="button">Revocar</button>
+    </div>`).join("");
+  box.querySelectorAll(".tok button").forEach((b) => {
+    const t = MCP.tokens.find((x) => x.id === b.closest(".tok").dataset.id);
+    b.onclick = async () => {
+      if (!(await OSUI.confirm(`Revocar «${t.nombre}»`, "La IA que lo use dejará de tener acceso al instante.", { ok: "Revocar" }))) return;
+      try { await api(`/api/me/mcp/${t.id}`, { method: "DELETE" }); setMcpMsg("Token revocado.", "ok"); cargarMcp(); }
+      catch (e) { setMcpMsg("Error: " + e.message, "err"); }
+    };
+  });
+}
+
+async function cargarMcp() {
+  try { MCP = await api("/api/me/mcp"); paintMcp(); }
+  catch (e) { $("mcpLista").innerHTML = `<div class="note">Error cargando: ${esc(e.message)}</div>`; }
+}
+
+$("mcpNuevo").onclick = async () => {
+  const nombre = await OSUI.prompt("Nuevo token", "", { label: "¿Dónde lo vas a usar?", placeholder: "p. ej. Claude en el portátil", ok: "Crear" });
+  if (nombre === null) return;
+  try {
+    const r = await api("/api/me/mcp", { method: "POST", body: JSON.stringify({ nombre }) });
+    const cmd = `claude mcp add --transport http mi-panel ${r.url} --header "Authorization: Bearer ${r.token}"`;
+    $("mcpRevelado").innerHTML = `<div class="aviso">Este token se enseña <b>una sola vez</b>. Cópialo ahora: en la base de datos solo queda su huella.</div>
+      <div class="cmd" id="mcpCmd">${esc(cmd)}</div>
+      <div class="btns"><button class="primary" id="mcpCopiar">Copiar comando</button><button id="mcpSoloToken">Copiar solo el token</button><button id="mcpCerrar">Hecho</button></div>
+      <div class="note" style="margin-top:10px">Ese comando es para <b>Claude Code</b>. En <b>Claude Desktop</b>, añade un servidor con <code>npx mcp-remote ${r.url} --header "Authorization: Bearer &lt;tu token&gt;"</code>.</div>`;
+    const copiar = async (txt, btn) => {
+      try { await navigator.clipboard.writeText(txt); btn.textContent = "Copiado ✓"; setTimeout(() => { btn.textContent = btn.dataset.t; }, 1600); }
+      catch (e) { setMcpMsg("No se pudo copiar: selecciona el texto a mano.", "err"); }
+    };
+    const b1 = $("mcpCopiar"), b2 = $("mcpSoloToken");
+    b1.dataset.t = b1.textContent; b2.dataset.t = b2.textContent;
+    b1.onclick = () => copiar(cmd, b1);
+    b2.onclick = () => copiar(r.token, b2);
+    $("mcpCerrar").onclick = () => { $("mcpRevelado").innerHTML = ""; };
+    setMcpMsg("");
+    cargarMcp();
+  } catch (e) { setMcpMsg("Error: " + e.message, "err"); }
+};
+
+cargarMcp();
 
 /* ---------- memoria del chat ---------- */
 let MEMORIA = [];
