@@ -371,7 +371,7 @@ $("mcpNuevo").onclick = async () => {
   if (nombre === null) return;
   try {
     const r = await api("/api/me/mcp", { method: "POST", body: JSON.stringify({ nombre }) });
-    const cmd = `claude mcp add --transport http mi-panel ${r.url} --header "Authorization: Bearer ${r.token}"`;
+    const cmd = `claude mcp add --scope user --transport http mi-panel ${r.url} --header "Authorization: Bearer ${r.token}"`;
     $("mcpRevelado").innerHTML = `<div class="aviso">Este token se enseña <b>una sola vez</b>. Cópialo ahora: en la base de datos solo queda su huella.</div>
       <div class="cmd" id="mcpCmd">${esc(cmd)}</div>
       <div class="btns"><button class="primary" id="mcpCopiar">Copiar comando</button><button id="mcpSoloToken">Copiar solo el token</button><button id="mcpCerrar">Hecho</button></div>
