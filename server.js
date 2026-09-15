@@ -559,7 +559,9 @@ async function mcpHandle(msg, user) {
         protocolVersion: MCP_VERSIONS.includes(pedida) ? pedida : MCP_VERSIONS[0],
         capabilities: { tools: { listChanged: false } },
         serverInfo: { name: "os-panel-personal", version: "1.0.0" },
-        instructions: `Panel de vida de ${user.display_name || user.username}: hábitos con un score diario de 0 a 100, tareas, proyectos, contenido, sueño, gym y nutrición. Usa get_dashboard para ver cómo va, read_state para leer detalle y log_day/add_item/append_journal/set_value para registrar lo que te cuente. El score lo calcula el servidor: nunca lo inventes.`,
+        instructions: `Panel de vida de ${user.display_name || user.username}: hábitos con un score diario de 0 a 100, tareas, proyectos, contenido, sueño, gym y nutrición. Usa get_dashboard para ver cómo va, read_state para leer detalle y log_day/add_item/append_journal/set_value para registrar lo que te cuente. El score lo calcula el servidor: nunca lo inventes.
+
+Al escribir entrenos de gimnasio (set_value sobre entrenos.<fecha>): el historial se indexa por nombre de ejercicio y se fragmenta si te desvías. El campo "dia" debe ser el id del día de la semana de esa fecha (lunes|martes|miercoles|jueves|viernes|sabado|domingo), nunca el título ("Push", "Pierna 1"). Los nombres de ejercicio deben coincidir letra por letra con los de rutina_gym[dia].ejercicios[].nombre: léela antes con read_state. Si el ejercicio no está en la rutina de ese día, usa el nombre tal cual aparece en otro día; si no existe en ninguno, pregunta antes de inventar uno nuevo.`,
       },
     };
   }
@@ -1083,7 +1085,7 @@ Estructura del estado:
 - tareas: [{ id, titulo, estado, prioridad: urgente|alta|normal|baja, inicio?, fecha?, proyecto?, sub?, notas? (pizarra: texto plano o HTML sencillo h2/h3/b/u/div/br, como contenido.notas), hecha (derivada: true solo si estado=completado — cambia SIEMPRE estado, nunca hecha), creada, hecha_el? }] — la lista de tareas (área Tareas). Estados (mismo sistema que growing-projects): pendiente (sin iniciar) | por_definir (activa pero falta concretar) | en_ejecucion | en_espera (bloqueada por alguien/algo) | falta_revision (hecha pero pendiente de revisar) | completado (cerrada). fecha = fecha límite/fin; inicio = arranque de su ventana (time frame: con inicio y fecha la tarea está "activa" ese rango). Solo pon fechas si ${N} las dice. «Apunta que tengo que llamar a María el jueves» → add_item con fecha del jueves. «Estoy con X» → en_ejecucion; «X espera a Y» → en_espera; «X hecho, falta repasarlo» → falta_revision; «esto es urgente/importante» → prioridad urgente/alta. Cuando diga que algo está terminado del todo, pon estado completado + hecha_el — NO la borres. Solo borra si lo pide explícitamente (set_value con delete).
 - recordatorios: [{ id, titulo, desde, hasta?, frecuencia: diario|laborables|cada_2|cada_3|cada_7|dias, dias? (si frecuencia=dias: ["lun","mar","mie","jue","vie","sab","dom"]), proyecto?, notas?, hechos: { "<fecha>": true } }] — recordatorios PERIÓDICOS dentro de una ventana (área Tareas). Cada día que toca aparece en "Para hoy"; marcarlo escribe hechos.<fecha>=true y reaparece el siguiente día que toque; al pasar hasta caduca solo. «Recuérdame hacer follow-up a María cada 2 días durante 2 semanas» → add_item en recordatorios con desde=hoy, hasta=+14 días, frecuencia=cada_2. cada_2/cada_3/cada_7 cuentan a partir del campo desde. No toques hechos salvo que ${N} diga que ya lo hizo hoy.
 - rutina_gym: { lunes..domingo: { titulo, ejercicios: [{ nombre, series, reps, nota? }] } } — la rutina semanal de gym (editable en el panel, pestaña Gym → Rutina). Si ${N} pide cambios de rutina, edítala con set_value respetando la estructura.
-- entrenos: { "<fecha>": { dia, sets: { "<nombre ejercicio>": [{ kg, reps }, ...una entrada por serie] } } } — lo que ${N} levanta cada día (Gym → Tracker). Si dice «hoy press inclinado 3×10 con 40kg», regístralo aquí con set_value y marca la señal entreno.
+- entrenos: { "<fecha>": { dia, sets: { "<nombre ejercicio>": [{ kg, reps }, ...una entrada por serie] } } } — lo que ${N} levanta cada día (Gym → Tracker). Si dice «hoy press inclinado 3×10 con 40kg», regístralo aquí con set_value y marca la señal entreno. REGLAS AL ESCRIBIR AQUÍ, el historial se indexa por nombre y se rompe si te desvías: (1) el campo "dia" = el id del día de la semana de ESA fecha (lunes|martes|miercoles|jueves|viernes|sabado|domingo), nunca el título del día ("Push", "Pierna 1"…). (2) El nombre del ejercicio debe coincidir LETRA POR LETRA con el de rutina_gym[dia].ejercicios[].nombre; léelo antes con read_state si no lo tienes delante. (3) Si el ejercicio no está en la rutina de ese día, usa el nombre tal cual aparece en otro día de la rutina. (4) Si no existe en ningún día, pregunta antes de inventarte un nombre nuevo: cada variante crea un historial separado.
 - days.<fecha>.sueno_horario: { acostar: "23:00", levantar: "06:00" } — opcional. Si ${N} dice a qué hora se acostó y se levantó, calcula las horas dormidas (si se acostó antes de medianoche, suma las 24h), regístralas como señal sueno con log_day y guarda el horario con set_value en days.<fecha>.sueno_horario.
 - proyectos: [{ id, nombre, icono (rocket|briefcase|code|video|mic|school|presentation|tienda|coin|chart|users|robot|server|camera|pencil|book|world|tool|flask|gamepad|palette|home|bolt|bulb), tipo: normal|periodico, estado: activo|en_cola|pausado|entregado|cerrado, desc?, siguiente?, subs, notas? (pizarra HTML sencillo, como contenido.notas), archivos? (NO tocar: se gestionan desde la página), updated }]. Un proyecto es una CARPETA: dentro viven sus tareas (campo proyecto en tareas), subproyectos, archivos y pizarra. Cada sub de subs es un SUBPROYECTO con vida propia: { id, nombre, estado: en_curso|en_cola|pausado|hecho, done (derivado: true solo si estado=hecho — para cambiarlo cambia SIEMPRE estado, nunca done), fecha? (día en que se completó, ponla al pasar a hecho), notas? (pizarra HTML sencillo, como la de contenido), archivos?: [{id, nombre, mime, size}] — NO toques archivos, se gestionan desde el panel }. Las tareas pueden colgar de un subproyecto vía su campo sub (id del sub). Si añades un sub nuevo no le pongas id (se genera solo) y usa estado en_curso o en_cola.
 - contenido: [{ fecha, tipo: reel|youtube, titulo, estado: idea|grabado|editando|publicado, fecha_pub?, fecha_plan?, url?, views?, likes?, comments?, notas? }] — las métricas de piezas con link (YouTube e Instagram) se actualizan solas desde sus APIs; no hace falta que ${N} las dicte salvo que quiera corregirlas. video_url es interno (mp4 del reel para el player del panel, lo rellena la API — no lo toques). notas es la "pizarra" de la pieza y puede llevar HTML sencillo (h2/h3, b, u, div, br); si escribes tú, texto plano o ese HTML simple. — al marcar publicado, pon fecha_pub con el día real de publicación (cuenta para el reto). fecha_plan = día en que ${N} planea publicarla (calendario de publicación; «el reel del Excel sale el jueves» → fecha_plan). Si ${N} pasa el link («publiqué un reel: <link>»), guárdalo en url (sirve para la miniatura y el player del panel). Si menciona métricas («el reel lleva 4k views»), actualiza views/likes de esa pieza.
@@ -1192,6 +1194,46 @@ const TOOLS = [
     },
   },
 ];
+
+const DIAS_ID = ["domingo", "lunes", "martes", "miercoles", "jueves", "viernes", "sabado"];
+const diaDeFecha = (f) => DIAS_ID[new Date(f + "T12:00").getDay()];
+const normEj = (t) => String(t || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+
+/* El tracker de gym casa `entrenos` con `rutina_gym` por NOMBRE exacto: un nombre inventado o un
+   `dia` con el título en vez del id crea un historial paralelo invisible en la web. Se valida aquí
+   (no solo en el prompt) porque escriben tanto el chat como cualquier cliente MCP.
+   Devuelve un mensaje de error, o null si el path no es de gym o está bien. */
+function validaEntrenos(input, data) {
+  const m = /^entrenos\.(\d{4}-\d{2}-\d{2})(?:\.(.+))?$/.exec(input.path || "");
+  if (!m || input.delete === true) return null;
+  const [, fecha, resto] = m;
+  const rutina = data.rutina_gym || {};
+  const diaOk = diaDeFecha(fecha);
+  const nombresRutina = Object.values(rutina).flatMap((d) => (d?.ejercicios || []).map((e) => e.nombre));
+  const conocido = (n) => nombresRutina.includes(n); // exacto: `sets` se indexa por la cadena literal
+  const sugerir = (n) => {
+    const hit = nombresRutina.find((x) => normEj(x) === normEj(n));
+    return hit && hit !== n ? ` En la rutina se llama exactamente «${hit}»: usa ese nombre.` : "";
+  };
+  // escritura de la sesión entera
+  if (!resto) {
+    const v = input.value;
+    if (!v || typeof v !== "object") return null;
+    if (v.dia && v.dia !== diaOk) return `entrenos.${fecha}.dia debe ser "${diaOk}" (el id del día de esa fecha), no "${v.dia}".`;
+    for (const n of Object.keys(v.sets || {})) {
+      if (!conocido(n)) return `«${n}» no está en rutina_gym.${sugerir(n)} Si es un ejercicio nuevo, añádelo antes a la rutina o pregúntale cómo quiere llamarlo: cada variante del nombre crea un historial separado.`;
+    }
+    return null;
+  }
+  if (resto === "dia" && input.value !== diaOk) return `entrenos.${fecha}.dia debe ser "${diaOk}" (el id del día de esa fecha), no "${input.value}".`;
+  const ms = /^sets(?:\.([^.]+))?/.exec(resto);
+  if (!ms) return null;
+  const nombres = ms[1] !== undefined ? [ms[1]] : Object.keys(input.value || {});
+  for (const n of nombres) {
+    if (!conocido(n)) return `«${n}» no está en rutina_gym.${sugerir(n)} Si es un ejercicio nuevo, añádelo antes a la rutina o pregúntale cómo quiere llamarlo: cada variante del nombre crea un historial separado.`;
+  }
+  return null;
+}
 
 function setPath(obj, dottedPath, value, del) {
   const parts = dottedPath.split(".");
@@ -1323,6 +1365,8 @@ function runTool(name, input, data, actions) {
 
   if (name === "set_value") {
     if (!input?.path || typeof input.path !== "string") throw new Error("path requerido");
+    const avisoGym = validaEntrenos(input, data);
+    if (avisoGym) throw new Error(avisoGym);
     if (/^(chats?|integraciones)(\.|$)/.test(input.path)) throw new Error("esa clave no es modificable desde el chat");
     const before = getPath(data, input.path);
     setPath(data, input.path, input.value, input.delete === true);

@@ -483,6 +483,10 @@
   .ej-nombre { font-size: 13.5px; font-weight: 600; }
   .ej-obj { margin-left: auto; font-size: 11.5px; color: var(--ink-3); font-variant-numeric: tabular-nums; flex-shrink: 0; }
   .ej-nota { font-size: 11px; color: var(--warn); margin-top: 2px; }
+  .ej-ref { font-size: 10.5px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+  .fuera-head { display: flex; align-items: baseline; gap: 8px; margin: 18px 0 2px; }
+  .fuera-head .t { font-size: 11px; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.08em; font-weight: 650; }
+  .fuera-head .d { font-size: 11.5px; color: var(--ink-3); }
   .series { display: flex; flex-direction: column; gap: 7px; margin-top: 9px; }
   .serie-row { display: flex; align-items: center; gap: 5px; }
   .serie-row .sn { font-size: 10px; color: var(--ink-3); font-weight: 650; width: 18px; text-align: right; }
@@ -2654,13 +2658,26 @@ function fechaDeDia(diaId) {
   return isoLocal(d);
 }
 
+/* referencia en gris: la última sesión ANTERIOR que tenga ese ejercicio (hasta 28 días atrás).
+   Antes miraba solo f-7, así que mover un entreno de día hacía desaparecer la referencia. */
+function ultimaSesionCon(nombre, antesDe, dias = 28) {
+  const lim = isoLocal(new Date(new Date(antesDe + "T12:00").getTime() - dias * 86400000));
+  let mejor = null;
+  for (const fe of Object.keys(STATE.entrenos || {})) {
+    if (fe >= antesDe || fe < lim) continue;
+    const sets = STATE.entrenos[fe]?.sets?.[nombre];
+    if (!Array.isArray(sets) || !sets.some((x) => x && (x.kg != null || x.reps != null))) continue;
+    if (!mejor || fe > mejor.fecha) mejor = { fecha: fe, sets };
+  }
+  return mejor;
+}
+const conDatos = (sets) => Array.isArray(sets) && sets.some((x) => x && (x.kg != null || x.reps != null));
+
 function gymTracker() {
   const f = fechaDeDia(trackDia);
-  const fPrev = isoLocal(new Date(new Date(f + "T12:00").getTime() - 7 * 86400000));
   const hoy = isoLocal(new Date());
   const dia = rutinaGym()[trackDia] || { titulo: "", ejercicios: [] };
   const ent = STATE.entrenos?.[f]?.sets || {};
-  const prev = STATE.entrenos?.[fPrev]?.sets || {};
 
   const chips = `<div class="filtros" style="margin-bottom:14px">` + DIAS_SEM.map((d) => {
     const df = fechaDeDia(d.id);
@@ -2671,38 +2688,59 @@ function gymTracker() {
     return chips + `<div class="card"><h2>${esc(dia.titulo || "Descanso")}</h2><div class="empty-note">Día de descanso. Si entrenas igual, añade ejercicios a este día en la pestaña Rutina.</div></div>`;
   }
 
-  const bloques = dia.ejercicios.map((e) => {
-    const hechas = ent[e.nombre] || [];
-    const previas = prev[e.nombre] || [];
-    const nSets = Math.max(Number(e.series) || 1, hechas.length);
+  const filasDe = (nombre, hechas, previas, nSets) => {
     let filas = "";
+    const arg = JSON.stringify(nombre).replace(/"/g, "&quot;");
     for (let i = 0; i < nSets; i++) {
       const h = hechas[i] || {};
       const p = previas[i] || {};
       filas += `<div class="serie-row">
         <span class="sn">S${i + 1}</span>
         <input type="number" inputmode="decimal" step="any" placeholder="${p.kg ?? "kg"}" value="${h.kg ?? ""}"
-          oninput="trackInput('${f}',${JSON.stringify(e.nombre).replace(/"/g, "&quot;")},${i},'kg',this.value)">
+          oninput="trackInput('${f}',${arg},${i},'kg',this.value)">
         <span class="x">×</span>
         <input type="number" inputmode="numeric" placeholder="${p.reps ?? "reps"}" value="${h.reps ?? ""}"
-          oninput="trackInput('${f}',${JSON.stringify(e.nombre).replace(/"/g, "&quot;")},${i},'reps',this.value)">
+          oninput="trackInput('${f}',${arg},${i},'reps',this.value)">
       </div>`;
     }
+    return filas;
+  };
+
+  const bloques = dia.ejercicios.map((e) => {
+    const hechas = ent[e.nombre] || [];
+    const ref = ultimaSesionCon(e.nombre, f);
+    const previas = ref?.sets || [];
+    const nSets = Math.max(Number(e.series) || 1, hechas.length);
+    const refTxt = ref ? `<span class="ej-ref">· ${ref.fecha.slice(8)}/${ref.fecha.slice(5, 7)}</span>` : "";
     return `<div class="ejercicio">
       <div class="ej-head">
-        <span class="ej-nombre">${esc(e.nombre)}</span>
+        <span class="ej-nombre">${esc(e.nombre)}</span>${refTxt}
         <span class="ej-obj">${e.series}×${esc(String(e.reps || ""))}</span>
       </div>
       ${e.nota ? `<div class="ej-nota">${esc(e.nota)}</div>` : ""}
-      <div class="series">${filas}</div>
+      <div class="series">${filasDe(e.nombre, hechas, previas, nSets)}</div>
     </div>`;
   }).join("");
+
+  /* apuntado ese día pero fuera de la rutina: recuperaciones, cambios sobre la marcha
+     o nombres que escribió el chat. Sin esto existía en la BD y no se veía en ningún sitio. */
+  const enRutina = new Set(dia.ejercicios.map((e) => e.nombre));
+  const sueltos = Object.keys(ent).filter((n) => !enRutina.has(n) && conDatos(ent[n]));
+  const fuera = !sueltos.length ? "" : `<div class="fuera-head"><span class="t">Fuera de la rutina</span><span class="d">apuntado este día pero no está en ${esc(dia.titulo || "la rutina")}</span></div>` +
+    sueltos.map((n) => {
+      const ref = ultimaSesionCon(n, f);
+      const refTxt = ref ? `<span class="ej-ref">· ${ref.fecha.slice(8)}/${ref.fecha.slice(5, 7)}</span>` : "";
+      return `<div class="ejercicio">
+        <div class="ej-head"><span class="ej-nombre">${esc(n)}</span>${refTxt}</div>
+        <div class="series">${filasDe(n, ent[n] || [], ref?.sets || [], (ent[n] || []).length)}</div>
+      </div>`;
+    }).join("");
 
   const titulo = `${esc(dia.titulo)} · ${f === hoy ? "hoy" : f.slice(8) + "/" + f.slice(5, 7)}`;
   return chips + `<div class="card">
     <h2>${titulo}</h2>
-    <div class="sub">Apunta kg × reps por serie — se guarda solo. En gris, lo de la semana pasada.</div>
-    ${bloques}</div>`;
+    <div class="sub">Apunta kg × reps por serie — se guarda solo. En gris, tu última sesión de cada ejercicio, con su fecha.</div>
+    ${bloques}${fuera}</div>`;
 }
 
 /* guardado silencioso del tracker (sin re-render: no roba el foco al escribir) */
@@ -2817,6 +2855,38 @@ async function nuevoEjercicio(diaId) {
   saveClave("rutina_gym");
 }
 
+/* El historial de `entrenos` se indexa por NOMBRE de ejercicio: si se renombra en la rutina
+   y no se migra, las series antiguas quedan huérfanas y el ejercicio parece nuevo.
+   Refresca antes de escribir para no pisar lo que se haya apuntado desde otro sitio. */
+async function migrarNombreEntrenos(viejo, nuevo) {
+  try {
+    const fresh = await (await fetch("/api/state", { credentials: "include" })).json();
+    if (fresh?.entrenos) STATE.entrenos = fresh.entrenos;
+  } catch (e) {}
+  const ent = STATE.entrenos || {};
+  const movidas = [], chocadas = [];
+  for (const fe of Object.keys(ent)) {
+    const sets = ent[fe]?.sets;
+    if (!sets || !sets[viejo]) continue;
+    if (sets[nuevo]) { chocadas.push(fe); continue; } // ya hay series con el nombre nuevo: no las piso
+    sets[nuevo] = sets[viejo];
+    delete sets[viejo];
+    movidas.push(fe);
+  }
+  if (movidas.length) {
+    const res = await fetch("/api/state", {
+      method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include",
+      body: JSON.stringify({ entrenos: ent }),
+    });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+  }
+  return { movidas, chocadas };
+}
+
+function fechasConEjercicio(nombre) {
+  return Object.keys(STATE.entrenos || {}).filter((fe) => STATE.entrenos[fe]?.sets?.[nombre]);
+}
+
 async function editarEjercicio(diaId, i) {
   const r = rutinaEditable();
   const e = r[diaId]?.ejercicios?.[i];
@@ -2824,11 +2894,33 @@ async function editarEjercicio(diaId, i) {
   const f = await OSUI.form({ titulo: "Editar ejercicio", campos: EJ_CAMPOS(e), ok: "Guardar", borrar: true });
   if (!f) return;
   if (f === "borrar") {
-    if (!(await OSUI.confirm("Quitar ejercicio", `«${esc(e.nombre)}» sale de la rutina (los entrenos apuntados se quedan).`, { ok: "Sí, quitar" }))) return;
+    const n = fechasConEjercicio(e.nombre).length;
+    if (!(await OSUI.confirm("Quitar ejercicio", `«${esc(e.nombre)}» sale de la rutina.${n ? ` Sus ${n} ${n === 1 ? "entreno apuntado se queda" : "entrenos apuntados se quedan"} en el historial.` : ""}`, { ok: "Sí, quitar" }))) return;
     r[diaId].ejercicios.splice(i, 1);
   } else {
-    if (!f.nombre.trim()) return;
+    const nuevo = f.nombre.trim();
+    if (!nuevo) return;
+    const viejo = e.nombre;
+    let migrar = false;
+    if (nuevo !== viejo) {
+      const n = fechasConEjercicio(viejo).length;
+      if (n) {
+        migrar = await OSUI.confirm(
+          "Renombrar también el historial",
+          `«${esc(viejo)}» tiene series apuntadas en ${n} ${n === 1 ? "entreno" : "entrenos"}. Si no las renombras, se quedan con el nombre viejo y el ejercicio empezará de cero.`,
+          { ok: `Sí, renombrar ${n === 1 ? "el entreno" : "los " + n + " entrenos"}`, danger: false }
+        );
+      }
+    }
     aplicaEjercicio(e, f);
+    if (migrar) {
+      try {
+        const { movidas, chocadas } = await migrarNombreEntrenos(viejo, nuevo);
+        if (chocadas.length) alert(`Renombrados ${movidas.length} entrenos. En ${chocadas.length} ya había series con el nombre nuevo, así que esos los dejé como estaban para no pisarlos.`);
+      } catch (err) {
+        alert("El ejercicio se renombró, pero el historial no: " + err.message);
+      }
+    }
   }
   saveClave("rutina_gym");
 }
