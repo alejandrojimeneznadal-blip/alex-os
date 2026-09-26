@@ -130,6 +130,8 @@ async function initSchema() {
     );
   `);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS workspace_id TEXT;`);
+  /* alcance del token: 'mcp' = IA con lectura y escritura · 'widget' = solo lee /api/widget */
+  await pool.query(`ALTER TABLE mcp_tokens ADD COLUMN IF NOT EXISTS scope TEXT NOT NULL DEFAULT 'mcp';`);
   /* onboarding: las cuentas nuevas pasan por /bienvenida.html la primera vez. Al añadir la columna,
      los admins ya existentes se dan por configurados; el resto (cuentas creadas antes de esta versión) lo verá una vez. */
   const colOnb = await pool.query("SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'onboarded'");
@@ -259,6 +261,7 @@ function normalizarTareas(data) {
 }
 
 function normalizar(data) {
+  if (data.widget !== undefined) data.widget = normalizarWidget(data.widget);
   return normalizarTareas(normalizarSubs(derivarNutricion(data)));
 }
 
@@ -435,6 +438,134 @@ function buildDashboard(data) {
 }
 
 /* ======================================================================
+   WIDGETS DEL MÓVIL — lo que pinta el script de Scriptable en la pantalla de
+   inicio y de bloqueo: hábitos de hoy, bloque del horario, fecha clave y una
+   frase que rota cada 2 horas. El contenido editable vive en data.widget.
+   ====================================================================== */
+const DIAS_CORTOS = ["dom", "lun", "mar", "mie", "jue", "vie", "sab"];
+const diaCorto = (d) => String(d || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").slice(0, 3);
+const HORA_RE = /^([01]?\d|2[0-3]):[0-5]\d$/;
+const hora2 = (h) => (HORA_RE.test(String(h || "").trim()) ? String(h).trim().padStart(5, "0") : null);
+const txt = (v, max) => String(v ?? "").replace(/\s+/g, " ").trim().slice(0, max);
+
+function normalizarWidget(w) {
+  if (!w || typeof w !== "object" || Array.isArray(w)) return {};
+  const out = {};
+  if (typeof w.ancla === "string") out.ancla = txt(w.ancla, 40);
+  out.frases = (Array.isArray(w.frases) ? w.frases : [])
+    .map((f) => (typeof f === "string" ? { texto: f } : f))
+    .filter((f) => f && txt(f.texto, 280))
+    .slice(0, 60)
+    .map((f) => ({ texto: txt(f.texto, 280), ...(txt(f.tag, 40) ? { tag: txt(f.tag, 40) } : {}) }));
+  out.horario = (Array.isArray(w.horario) ? w.horario : [])
+    .filter((b) => b && txt(b.titulo, 60))
+    .slice(0, 60)
+    .map((b) => {
+      const dias = [...new Set((Array.isArray(b.dias) ? b.dias : [b.dias]).map(diaCorto).filter((d) => DIAS_CORTOS.includes(d)))];
+      const o = { dias: dias.length ? dias : [...DIAS_CORTOS], titulo: txt(b.titulo, 60) };
+      if (hora2(b.desde)) o.desde = hora2(b.desde);
+      if (o.desde && hora2(b.hasta)) o.hasta = hora2(b.hasta);
+      if (txt(b.texto, 160)) o.texto = txt(b.texto, 160);
+      return o;
+    })
+    .sort((a, b) => ((a.desde || "99") < (b.desde || "99") ? -1 : 1)); // las notas sin hora, al final
+  out.fechas = (Array.isArray(w.fechas) ? w.fechas : [])
+    .filter((f) => f && /^\d{4}-\d{2}-\d{2}$/.test(f.fecha) && txt(f.texto, 120))
+    .slice(0, 40)
+    .map((f) => ({ fecha: f.fecha, texto: txt(f.texto, 120) }))
+    .sort((a, b) => (a.fecha < b.fecha ? -1 : 1));
+  return out;
+}
+
+/* "Despertar 6:20 + página leída" → "Despertar 6:20" · "Protocolo postural 10 min" → "Protocolo postural" */
+const etiquetaCorta = (label) =>
+  String(label || "").split(/\s+\+\s+|\s+≥|\s+\(/)[0].replace(/\s+\d+([.,]\d+)?\s*(min|h)$/i, "").trim();
+const fmtDec = (n) => String(Math.round(n * 10) / 10).replace(".", ",");
+
+function tocaRecordatorioSrv(r, f) {
+  if (!r?.desde || f < r.desde) return false;
+  if (r.hasta && f > r.hasta) return false;
+  const dow = new Date(f + "T12:00").getDay();
+  if (r.frecuencia === "laborables") return dow >= 1 && dow <= 5;
+  if (/^cada_\d+$/.test(r.frecuencia || "")) {
+    const n = Number(r.frecuencia.slice(5)) || 1;
+    return Math.round((new Date(f + "T12:00") - new Date(r.desde + "T12:00")) / 86400000) % n === 0;
+  }
+  if (r.frecuencia === "dias") return Array.isArray(r.dias) && r.dias.some((d) => diaCorto(d) === DIAS_CORTOS[dow]);
+  return true;
+}
+
+/* rota por franjas de 2 h con un salto coprimo con el total: todos los widgets ven la misma frase
+   en la misma franja y las frases vecinas en la lista no salen seguidas */
+function fraseDeFranja(frases, fecha, hora) {
+  if (!frases.length) return null;
+  const n = frases.length;
+  const franja = Math.floor(Number(hora.slice(0, 2)) / 2);
+  const k = Math.round(Date.parse(fecha + "T12:00:00Z") / 86400000) * 12 + franja;
+  const gcd = (a, b) => (b ? gcd(b, a % b) : a);
+  const salto = [7, 5, 11, 13, 3, 1].find((p) => gcd(p, n) === 1);
+  return frases[(k * salto) % n];
+}
+
+function buildWidget(data, user, q = {}) {
+  const fecha = /^\d{4}-\d{2}-\d{2}$/.test(q.fecha || "") ? q.fecha : todayISO();
+  const hora = hora2(q.hora) || new Date().toTimeString().slice(0, 5);
+  const config = data.config || DEFAULT_CONFIG;
+  const kcalObj = Number(data.config_nutricion?.kcal_obj) || 3500;
+  const dia = data.days?.[fecha] || null;
+  const vals = dia?.senales || {};
+
+  const habitos = (config.senales || []).map((s) => {
+    const v = vals[s.id];
+    let parcial = v === true ? 1 : 0;
+    let detalle = null;
+    if (s.tipo === "horas") {
+      const n = Number(v) || 0, u = Number(s.umbral) || 1;
+      parcial = Math.min(n / u, 1);
+      detalle = `${fmtDec(n)}/${fmtDec(u)} h`;
+    } else if (s.tipo === "kcal" && Number(dia?.kcal) > 0) {
+      detalle = `${Math.round(dia.kcal)}/${kcalObj}`;
+    }
+    return { id: s.id, label: s.label, corto: etiquetaCorta(s.label), hecho: parcial >= 1, parcial: Math.round(parcial * 100) / 100, detalle };
+  });
+
+  const PRIO = { urgente: 0, alta: 1, normal: 2, baja: 3 };
+  const activa = (t) => (t.fecha && t.fecha <= fecha) || (t.inicio && t.inicio <= fecha && (!t.fecha || t.fecha >= fecha));
+  const tareas = (Array.isArray(data.tareas) ? data.tareas : [])
+    .filter((t) => t.estado === "en_ejecucion" || (["pendiente", "por_definir"].includes(t.estado) && activa(t)))
+    .sort((a, b) => (PRIO[a.prioridad] ?? 2) - (PRIO[b.prioridad] ?? 2));
+  const recs = (Array.isArray(data.recordatorios) ? data.recordatorios : [])
+    .filter((r) => tocaRecordatorioSrv(r, fecha) && !r.hechos?.[fecha]);
+
+  const w = normalizarWidget(data.widget);
+  const dow = DIAS_CORTOS[new Date(fecha + "T12:00").getDay()];
+  const proximas = w.fechas
+    .filter((f) => f.fecha >= fecha)
+    .slice(0, 3)
+    .map((f) => ({ ...f, dias: Math.round((Date.parse(f.fecha + "T12:00:00Z") - Date.parse(fecha + "T12:00:00Z")) / 86400000) }));
+  const dash = buildDashboard(data);
+
+  return {
+    v: 1,
+    fecha,
+    hora,
+    nombre: user.display_name || capital(user.username),
+    registrado: !!dia,
+    score: dia ? computeScore(vals, config) : 0,
+    racha: dash.racha,
+    media7: dash.media7,
+    habitos,
+    hechos: habitos.filter((h) => h.hecho).length,
+    faltan: habitos.filter((h) => !h.hecho).map((h) => h.corto),
+    tareas: { n: tareas.length + recs.length, top: [...tareas.map((t) => t.titulo), ...recs.map((r) => r.titulo)].slice(0, 4) },
+    horario: w.horario.filter((b) => b.dias.includes(dow)).map(({ dias, ...b }) => b),
+    fechas: proximas,
+    frase: fraseDeFranja(w.frases, fecha, hora),
+    ancla: w.ancla || null,
+  };
+}
+
+/* ======================================================================
    APP
    ====================================================================== */
 const app = express();
@@ -522,7 +653,7 @@ async function userFromMcpToken(req) {
   const h = req.headers.authorization || "";
   if (!h.startsWith("Bearer ")) return null;
   const r = await pool.query(
-    `SELECT t.id AS token_id, ${USER_COLS.split(", ").map((c) => "u." + c).join(", ")}
+    `SELECT t.id AS token_id, t.scope AS token_scope, ${USER_COLS.split(", ").map((c) => "u." + c).join(", ")}
      FROM mcp_tokens t JOIN users u ON u.id = t.user_id WHERE t.token_hash = $1`,
     [hashToken(h.slice(7).trim())]
   );
@@ -599,7 +730,7 @@ Al escribir entrenos de gimnasio (set_value sobre entrenos.<fecha>): el historia
 app.post("/mcp", async (req, res) => {
   try {
     const user = await userFromMcpToken(req);
-    if (!user) {
+    if (!user || user.token_scope === "widget") { // un token de widget solo lee /api/widget
       res.set("WWW-Authenticate", 'Bearer realm="os"');
       return res.status(401).json(jsonRpcError(null, -32001, "token MCP inválido o revocado"));
     }
@@ -616,6 +747,20 @@ app.post("/mcp", async (req, res) => {
 // sin canal servidor→cliente: no abrimos SSE ni guardamos sesiones
 app.get("/mcp", (req, res) => res.set("Allow", "POST, DELETE").status(405).json(jsonRpcError(null, -32000, "este servidor no abre stream SSE; usa POST")));
 app.delete("/mcp", (req, res) => res.status(200).end());
+
+/* Solo lectura para el widget del móvil. Va antes del middleware de sesión porque el script de
+   Scriptable se autentica con su token Bearer; desde el navegador vale la sesión normal. */
+app.get("/api/widget", async (req, res) => {
+  try {
+    const user = (await userFromMcpToken(req))
+      || (await userFromSession(getCookie(req, SESSION_COOKIE)))
+      || (await userFromBasic(req));
+    if (!user) return res.status(401).json({ error: "token revocado o no válido: genera otro en Configuración → Widgets del móvil" });
+    const data = await readData(user.id);
+    res.set("Cache-Control", "no-store");
+    res.json(buildWidget(data, user, req.query));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
 
 /* req.actor = quien ha iniciado sesión · req.user = cuenta cuyos datos se sirven
    (la misma, salvo que un admin esté viendo otra cuenta con la cookie os_as). */
@@ -679,7 +824,7 @@ app.post("/api/me/onboarded", async (req, res) => {
 app.get("/api/me/mcp", async (req, res) => {
   try {
     const r = await pool.query(
-      "SELECT id, nombre, prefijo, created, last_used FROM mcp_tokens WHERE user_id = $1 ORDER BY created DESC",
+      "SELECT id, nombre, prefijo, scope, created, last_used FROM mcp_tokens WHERE user_id = $1 ORDER BY created DESC",
       [req.user.id]
     );
     res.json({ tokens: r.rows, url: `${req.protocol}://${req.get("host")}/mcp` });
@@ -692,14 +837,16 @@ app.post("/api/me/mcp", async (req, res) => {
     const nombre = String(req.body?.nombre || "").trim().slice(0, 40) || "Sin nombre";
     const n = await pool.query("SELECT COUNT(*)::int AS n FROM mcp_tokens WHERE user_id = $1", [req.user.id]);
     if (n.rows[0].n >= 10) return res.status(400).json({ error: "máximo 10 tokens por cuenta: revoca alguno" });
-    const token = "osmcp_" + crypto.randomBytes(32).toString("base64url");
+    const scope = req.body?.scope === "widget" ? "widget" : "mcp";
+    const token = (scope === "widget" ? "oswgt_" : "osmcp_") + crypto.randomBytes(32).toString("base64url");
     const id = uid("t");
     await pool.query(
-      "INSERT INTO mcp_tokens (id, user_id, nombre, token_hash, prefijo, created) VALUES ($1, $2, $3, $4, $5, $6)",
-      [id, req.user.id, nombre, hashToken(token), token.slice(0, 12), Date.now()]
+      "INSERT INTO mcp_tokens (id, user_id, nombre, token_hash, prefijo, scope, created) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+      [id, req.user.id, nombre, hashToken(token), token.slice(0, 12), scope, Date.now()]
     );
     // el token en claro se enseña una sola vez: en la BD solo queda su hash
-    res.json({ ok: true, id, nombre, token, url: `${req.protocol}://${req.get("host")}/mcp` });
+    const base = `${req.protocol}://${req.get("host")}`;
+    res.json({ ok: true, id, nombre, scope, token, url: `${base}/mcp`, base });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -1099,6 +1246,7 @@ Estructura del estado:
 - days.<fecha>.kcal: calorías comidas ese día, a grosso modo (número, total del día). «Hoy he comido unas 2800 kcal» → set_value en days.<fecha>.kcal = 2800. Si va sumando comidas («añade 600 kcal de la cena»), lee el día con read_state y suma al total. Objetivo diario en config_nutricion.kcal_obj.
 - El hábito nutricion es DERIVADO y NO se marca a mano: el servidor lo calcula como kcal >= config_nutricion.kcal_obj cada vez que se guarda. NUNCA escribas senales.nutricion (se ignora y se recalcula). Si ${N} dice «hoy he comido bien» sin número, pídele el total aproximado de kcal o estímalo con él a partir de lo que comió — sin kcal ese día queda sin registrar en nutrición.
 - config_nutricion: { kcal_obj } — objetivo de calorías diarias.
+- widget: { ancla, frases: [{ texto, tag? }], horario: [{ dias: ["lun".."dom"], desde?: "HH:MM", hasta?: "HH:MM", titulo, texto? }], fechas: [{ fecha, texto }] } — lo que enseñan los widgets del móvil: frases y estándares que rotan cada 2 h (tag = etiqueta corta opcional, p. ej. «Estándar 1» o «Principio»), el bloque del horario que toca ahora y la próxima fecha clave. «Añade al widget la frase X» → léelo con read_state y añádela con set_value en widget.frases.<n> (n = longitud actual). También se edita a mano en Configuración → Widgets del móvil.
 
 Reglas de comportamiento:
 - Responde SIEMPRE en español, conciso y directo, sin hype. Una recomendación clara, nunca un menú de opciones.
@@ -1137,7 +1285,7 @@ const TOOLS = [
       properties: {
         keys: {
           type: "array",
-          items: { type: "string", enum: ["config", "days", "journal", "memoria", "tareas", "recordatorios", "proyectos", "contenido", "finanzas", "cuentas", "suscripciones", "config_finanzas", "config_contenido", "config_nutricion", "peso", "rutina_gym", "entrenos"] },
+          items: { type: "string", enum: ["config", "days", "journal", "memoria", "tareas", "recordatorios", "proyectos", "contenido", "finanzas", "cuentas", "suscripciones", "config_finanzas", "config_contenido", "config_nutricion", "peso", "rutina_gym", "entrenos", "widget"] },
         },
       },
     },
@@ -1262,7 +1410,7 @@ function getPath(obj, dottedPath) {
 const KEYS_LEIBLES = new Set([
   "config", "days", "journal", "memoria", "tareas", "recordatorios", "proyectos", "contenido",
   "finanzas", "cuentas", "suscripciones", "config_finanzas", "config_contenido", "config_nutricion",
-  "peso", "rutina_gym", "entrenos",
+  "peso", "rutina_gym", "entrenos", "widget",
 ]);
 
 function runTool(name, input, data, actions) {

@@ -86,6 +86,10 @@
   .cmd + .btns { margin-top: 10px; }
   .aviso { font-size: 12.5px; color: var(--ink-2); background: var(--good-bg); border-radius: 10px; padding: 10px 12px; margin-top: 12px; line-height: 1.5; }
 
+  .card h3 { font-size: 13px; font-weight: 650; color: var(--ink); margin: 22px 0 2px; padding-top: 18px; border-top: 1px solid var(--border); }
+  .script-box { max-height: 150px; overflow: auto; white-space: pre; word-break: normal; }
+  .wgt-ahora { font-size: 12.5px; color: var(--ink-2); background: var(--surface-2); border-radius: 10px; padding: 10px 12px; margin-top: 12px; line-height: 1.55; }
+  .wgt-ahora b { color: var(--ink); }
   .temas { display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); gap: 10px; }
   .tema {
     background: var(--surface); border: 1.5px solid var(--border); border-radius: 12px;
@@ -134,6 +138,30 @@
     <div id="mcpRevelado"></div>
     <div class="btns"><button class="primary" id="mcpNuevo">Crear token</button></div>
     <div class="msg" id="mcpMsg"></div>
+  </div>
+
+  <div class="card">
+    <h2>Widgets del móvil</h2>
+    <div class="desc">Tu panel en la pantalla de inicio y de bloqueo del iPhone: el bloque del horario que toca ahora con su cuenta atrás, los hábitos que te faltan hoy, el score y una frase o estándar que rota cada 2 horas. Funcionan con <b>Scriptable</b>, una app gratuita. El token del widget solo puede <b>leer</b> este resumen.</div>
+    <div id="wgtLista"></div>
+    <div id="wgtRevelado"></div>
+    <div class="btns"><button class="primary" id="wgtNuevo">Generar script</button></div>
+    <div class="msg" id="wgtMsg"></div>
+    <div class="note">1. Instala <b>Scriptable</b> desde la App Store.<br>2. Abre esta página en el iPhone, pulsa «Generar script» y cópialo.<br>3. En Scriptable: <b>+</b>, pega, y ponle nombre arriba (p. ej. «Panel»). Dale al ▶ para ver la vista previa.<br>4. Mantén pulsada la pantalla de inicio o de bloqueo → <b>+</b> → Scriptable → elige el tamaño. Luego mantén pulsado el widget → Editar widget → Script: «Panel» y, si quieres, Parameter: <code>ahora</code>, <code>frase</code> o <code>hoy</code>.</div>
+
+    <h3>Qué enseñan</h3>
+    <div class="wgt-ahora" id="wgtAhora">Cargando…</div>
+    <label for="wgtAncla">Ancla</label>
+    <input id="wgtAncla" autocomplete="off" placeholder="una palabra que lo resuma todo">
+    <label for="wgtFrases">Frases y estándares · una por línea</label>
+    <textarea id="wgtFrases" rows="9" placeholder="[Estándar 1] Si fallo un día, no fallo dos.&#10;La etiqueta entre corchetes es opcional."></textarea>
+    <label for="wgtHorario">Horario · un bloque por línea</label>
+    <textarea id="wgtHorario" rows="9" placeholder="L-V 09:00-13:00 Trabajo profundo · Móvil en otra habitación&#10;S 10:00-12:00 Proyecto personal&#10;D Revisión semanal · 20 min"></textarea>
+    <div class="note">Días: <code>L M X J V S D</code>, rangos (<code>L-V</code>) o listas (<code>S,D</code>); sin días = todos. Sin hora = nota del día. Lo que va tras « · » es el detalle.</div>
+    <label for="wgtFechas">Fechas clave · la próxima sale con su cuenta atrás</label>
+    <textarea id="wgtFechas" rows="4" placeholder="15/11/2026 Entregar el proyecto"></textarea>
+    <div class="btns"><button class="primary" id="wgtGuardar">Guardar contenido</button></div>
+    <div class="msg" id="wgtMsg2"></div>
   </div>
 
   <div class="card">
@@ -341,11 +369,12 @@ const fmtDia = (ms) => (ms ? new Date(Number(ms)).toLocaleDateString("es", { day
 
 function paintMcp() {
   const box = $("mcpLista");
-  if (!MCP.tokens.length) {
+  const tokens = MCP.tokens.filter((t) => t.scope !== "widget");
+  if (!tokens.length) {
     box.innerHTML = `<div class="note">Ningún token todavía. Crea uno y te doy el comando para pegarlo en Claude Code.</div>`;
     return;
   }
-  box.innerHTML = MCP.tokens.map((t) => `<div class="tok" data-id="${t.id}">
+  box.innerHTML = tokens.map((t) => `<div class="tok" data-id="${t.id}">
       <span class="n">${esc(t.nombre)}</span>
       <code>${esc(t.prefijo || "osmcp_")}…</code>
       <span class="m">${t.last_used ? "usado " + fmtDia(t.last_used) : "sin usar"} · creado ${fmtDia(t.created) || "—"}</span>
@@ -362,7 +391,7 @@ function paintMcp() {
 }
 
 async function cargarMcp() {
-  try { MCP = await api("/api/me/mcp"); paintMcp(); }
+  try { MCP = await api("/api/me/mcp"); paintMcp(); paintWgtTokens(); }
   catch (e) { $("mcpLista").innerHTML = `<div class="note">Error cargando: ${esc(e.message)}</div>`; }
 }
 
@@ -391,6 +420,194 @@ $("mcpNuevo").onclick = async () => {
 };
 
 cargarMcp();
+
+/* ---------- widgets del móvil ---------- */
+function setWgtMsg(id, text, cls) { const m = $(id); m.textContent = text; m.className = "msg" + (cls ? " " + cls : ""); }
+
+function paintWgtTokens() {
+  const box = $("wgtLista");
+  const tokens = (MCP?.tokens || []).filter((t) => t.scope === "widget");
+  box.innerHTML = tokens.map((t) => `<div class="tok" data-id="${t.id}">
+      <span class="n">${esc(t.nombre)}</span>
+      <code>${esc(t.prefijo || "oswgt_")}…</code>
+      <span class="m">${t.last_used ? "leído " + fmtDia(t.last_used) : "sin usar"} · creado ${fmtDia(t.created) || "—"}</span>
+      <button type="button">Revocar</button>
+    </div>`).join("");
+  box.querySelectorAll(".tok button").forEach((b) => {
+    const t = tokens.find((x) => x.id === b.closest(".tok").dataset.id);
+    b.onclick = async () => {
+      if (!(await OSUI.confirm(`Revocar «${t.nombre}»`, "Los widgets que usen este script dejarán de actualizarse. Tendrás que generar uno nuevo.", { ok: "Revocar" }))) return;
+      try { await api(`/api/me/mcp/${t.id}`, { method: "DELETE" }); setWgtMsg("wgtMsg", "Token revocado.", "ok"); cargarMcp(); }
+      catch (e) { setWgtMsg("wgtMsg", "Error: " + e.message, "err"); }
+    };
+  });
+}
+
+$("wgtNuevo").onclick = async () => {
+  const nombre = await OSUI.prompt("Script del widget", "Widget iPhone", { label: "¿En qué móvil lo vas a poner?", placeholder: "p. ej. iPhone", ok: "Generar" });
+  if (nombre === null) return;
+  try {
+    const plantilla = await (await fetch("/widget-ios.js", { credentials: "include", cache: "no-store" })).text();
+    const r = await api("/api/me/mcp", { method: "POST", body: JSON.stringify({ nombre: nombre || "Widget iPhone", scope: "widget" }) });
+    const script = plantilla.replace("__OS_URL__", r.base).replace("__OS_TOKEN__", r.token);
+    $("wgtRevelado").innerHTML = `<div class="aviso">El script lleva tu token dentro y se enseña <b>una sola vez</b>. Cópialo y pégalo en Scriptable ahora.</div>
+      <div class="cmd script-box" id="wgtScript"></div>
+      <div class="btns"><button class="primary" id="wgtCopiar">Copiar script</button><button id="wgtCerrar">Hecho</button></div>`;
+    $("wgtScript").textContent = script;
+    const b = $("wgtCopiar");
+    b.onclick = async () => {
+      try { await navigator.clipboard.writeText(script); b.textContent = "Copiado ✓"; setTimeout(() => { b.textContent = "Copiar script"; }, 1600); }
+      catch (e) { setWgtMsg("wgtMsg", "No se pudo copiar: mantén pulsado el recuadro y copia a mano.", "err"); }
+    };
+    $("wgtCerrar").onclick = () => { $("wgtRevelado").innerHTML = ""; };
+    setWgtMsg("wgtMsg", "");
+    cargarMcp();
+  } catch (e) { setWgtMsg("wgtMsg", "Error: " + e.message, "err"); }
+};
+
+/* formato de texto de los tres campos ⇄ estructura de data.widget */
+const LETRA_DIA = { l: "lun", m: "mar", x: "mie", j: "jue", v: "vie", s: "sab", d: "dom" };
+const ORDEN_DIAS = ["lun", "mar", "mie", "jue", "vie", "sab", "dom"];
+const DIA_LETRA = Object.fromEntries(Object.entries(LETRA_DIA).map(([k, v]) => [v, k.toUpperCase()]));
+
+function diasATexto(dias) {
+  const idx = ORDEN_DIAS.map((d) => dias.includes(d));
+  if (idx.every(Boolean)) return "";
+  const tramos = [];
+  for (let i = 0; i < 7; i++) {
+    if (!idx[i]) continue;
+    let j = i;
+    while (j + 1 < 7 && idx[j + 1]) j++;
+    tramos.push(j - i >= 2 ? `${DIA_LETRA[ORDEN_DIAS[i]]}-${DIA_LETRA[ORDEN_DIAS[j]]}` : ORDEN_DIAS.slice(i, j + 1).map((d) => DIA_LETRA[d]).join(","));
+    i = j;
+  }
+  return tramos.join(",");
+}
+
+function textoADias(spec) {
+  const out = new Set();
+  for (const parte of spec.toLowerCase().split(",")) {
+    const [a, b] = parte.split("-");
+    const i = ORDEN_DIAS.indexOf(LETRA_DIA[a]), j = b ? ORDEN_DIAS.indexOf(LETRA_DIA[b]) : i;
+    if (i < 0 || j < 0) return null;
+    for (let k = i; ; k = (k + 1) % 7) { out.add(ORDEN_DIAS[k]); if (k === j) break; }
+  }
+  return ORDEN_DIAS.filter((d) => out.has(d));
+}
+
+const lineas = (t) => t.split("\n").map((l) => l.trim()).filter(Boolean);
+const HORA = "([01]?\\d|2[0-3]):[0-5]\\d";
+
+function parseHorario(t) {
+  const out = [], errores = [];
+  lineas(t).forEach((l, n) => {
+    let resto = l, dias = ORDEN_DIAS.slice();
+    const md = /^([lmxjvsd](?:-[lmxjvsd])?(?:,[lmxjvsd](?:-[lmxjvsd])?)*)\s+(.+)$/i.exec(resto);
+    if (md) { const d = textoADias(md[1]); if (d) { dias = d; resto = md[2]; } }
+    const b = { dias };
+    const mh = new RegExp(`^(${HORA})(?:\\s*[-–]\\s*(${HORA}))?\\s+(.+)$`).exec(resto);
+    if (mh) { b.desde = mh[1].padStart(5, "0"); if (mh[3]) b.hasta = mh[3].padStart(5, "0"); resto = mh[5]; }
+    else if (/^\d{1,2}[:.]\d{2}/.test(resto)) { errores.push(`Horario, línea ${n + 1}: hora no válida («${l}»)`); return; }
+    if (b.desde && !b.hasta) { errores.push(`Horario, línea ${n + 1}: falta la hora de fin («${l}»)`); return; }
+    const [titulo, ...det] = resto.split(" · ");
+    b.titulo = titulo.trim();
+    if (det.length) b.texto = det.join(" · ").trim();
+    out.push(b);
+  });
+  return { out, errores };
+}
+
+function horarioATexto(h) {
+  return (h || []).map((b) => [diasATexto(b.dias || ORDEN_DIAS), b.desde ? `${b.desde}${b.hasta ? "-" + b.hasta : ""}` : "", b.titulo + (b.texto ? " · " + b.texto : "")]
+    .filter(Boolean).join(" ")).join("\n");
+}
+
+function parseFrases(t) {
+  return lineas(t).map((l) => {
+    const m = /^\[([^\]]{1,40})\]\s*(.+)$/.exec(l);
+    return m ? { tag: m[1].trim(), texto: m[2].trim() } : { texto: l };
+  });
+}
+const frasesATexto = (fs) => (fs || []).map((f) => (f.tag ? `[${f.tag}] ${f.texto}` : f.texto)).join("\n");
+
+function parseFechas(t) {
+  const out = [], errores = [];
+  const anio = new Date().getFullYear();
+  lineas(t).forEach((l, n) => {
+    let m = /^(\d{4})-(\d{2})-(\d{2})\s+(.+)$/.exec(l);
+    let iso = m ? `${m[1]}-${m[2]}-${m[3]}` : null, texto = m ? m[4] : null;
+    if (!m) {
+      m = /^(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\s+(.+)$/.exec(l);
+      if (m) {
+        const y = m[3] ? (m[3].length === 2 ? "20" + m[3] : m[3]) : anio;
+        iso = `${y}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}`;
+        texto = m[4];
+      }
+    }
+    if (!iso || isNaN(Date.parse(iso + "T12:00:00"))) { errores.push(`Fechas, línea ${n + 1}: empieza por la fecha, p. ej. 02/10/2026 («${l}»)`); return; }
+    out.push({ fecha: iso, texto: texto.trim() });
+  });
+  return { out, errores };
+}
+const fechasATexto = (fs) => (fs || []).map((f) => `${f.fecha.slice(8, 10)}/${f.fecha.slice(5, 7)}/${f.fecha.slice(0, 4)} ${f.texto}`).join("\n");
+
+async function pintarWgtAhora() {
+  try {
+    const now = new Date();
+    const p = (n) => String(n).padStart(2, "0");
+    const q = `fecha=${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())}&hora=${p(now.getHours())}:${p(now.getMinutes())}`;
+    const d = await api(`/api/widget?${q}`);
+    const m = now.getHours() * 60 + now.getMinutes();
+    const aMin = (s) => Number(s.slice(0, 2)) * 60 + Number(s.slice(3, 5));
+    // misma prioridad que el widget: bloque en curso → el siguiente si empieza en ≤ 90 min → nota del día → el siguiente
+    const conHora = (d.horario || []).filter((b) => b.desde && b.hasta);
+    const actual = conHora.find((b) => {
+      const a = aMin(b.desde), z = aMin(b.hasta);
+      return z <= a ? m >= a || m < z : m >= a && m < z;
+    });
+    const falta = (b) => (aMin(b.desde) - m + 1440) % 1440;
+    const sig = conHora.filter((b) => b !== actual && falta(b) > 0).sort((a, b) => falta(a) - falta(b))[0];
+    const nota = (d.horario || []).find((b) => !b.desde);
+    const foco = actual ? `Ahora: <b>${esc(actual.titulo)}</b> hasta ${actual.hasta}`
+      : sig && falta(sig) <= 90 ? `A las ${sig.desde}: <b>${esc(sig.titulo)}</b>`
+      : nota ? `Hoy: <b>${esc(nota.titulo)}</b>`
+      : sig ? `A las ${sig.desde}: <b>${esc(sig.titulo)}</b>` : "Sin bloques hoy en el horario";
+    const partes = [
+      foco,
+      `Score <b>${d.score}</b> · ${d.faltan.length ? `faltan ${d.faltan.length} de ${d.habitos.length}` : "día completo"}`,
+      d.fechas?.[0] ? `Próxima fecha: <b>${esc(d.fechas[0].texto)}</b> (${d.fechas[0].dias === 0 ? "hoy" : d.fechas[0].dias === 1 ? "mañana" : "en " + d.fechas[0].dias + " días"})` : null,
+      d.frase ? `Frase de esta franja: «${esc(d.frase.texto)}»` : "Sin frases todavía",
+    ].filter(Boolean);
+    $("wgtAhora").innerHTML = partes.join("<br>");
+  } catch (e) { $("wgtAhora").textContent = "No se pudo cargar: " + e.message; }
+}
+
+async function cargarWidget() {
+  try {
+    const s = await api("/api/state");
+    const w = s.widget || {};
+    $("wgtAncla").value = w.ancla || "";
+    $("wgtFrases").value = frasesATexto(w.frases);
+    $("wgtHorario").value = horarioATexto(w.horario);
+    $("wgtFechas").value = fechasATexto(w.fechas);
+    pintarWgtAhora();
+  } catch (e) { setWgtMsg("wgtMsg2", "Error cargando: " + e.message, "err"); }
+}
+
+$("wgtGuardar").onclick = async () => {
+  const h = parseHorario($("wgtHorario").value);
+  const f = parseFechas($("wgtFechas").value);
+  const errores = [...h.errores, ...f.errores];
+  if (errores.length) return setWgtMsg("wgtMsg2", errores.join("\n"), "err");
+  const widget = { ancla: $("wgtAncla").value.trim(), frases: parseFrases($("wgtFrases").value), horario: h.out, fechas: f.out };
+  try {
+    await api("/api/state", { method: "POST", body: JSON.stringify({ widget }) });
+    setWgtMsg("wgtMsg2", "Guardado. Los widgets lo cogen en su siguiente refresco (como mucho 30 min).", "ok");
+    cargarWidget();
+  } catch (e) { setWgtMsg("wgtMsg2", "Error: " + e.message, "err"); }
+};
+
+cargarWidget();
 
 /* ---------- memoria del chat ---------- */
 let MEMORIA = [];
