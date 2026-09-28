@@ -53,7 +53,6 @@
     { href: "/areas.html#nutricion", label: "Nutrición", icon: ic("nutricion", "◇") },
     { href: "/areas.html#proyectos", label: "Proyectos", icon: ic("proyectos", "▣") },
     { href: "/areas.html#contenido", label: "Contenido", icon: ic("contenido", "▶") },
-    { href: "/areas.html#claude", label: "Claude", icon: ic("robot", "✳") },
     // Finanzas oculta por ahora (28 ago 2026, decisión de Alex) — para reactivarla, descomenta:
     // { href: "/areas.html#finanzas", label: "Finanzas", icon: ic("finanzas", "€") },
     { group: "Sistema" },
