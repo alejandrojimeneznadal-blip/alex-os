@@ -24,6 +24,7 @@ Sin framework, sin build step. Node 20+.
 ```
 server.js        Express + pg + Anthropic SDK. Esquema, score, dashboard, chat con tools, API.
 sync.js          Sync bancario (Airwallex / Mercury) portado de otra app. Opcional, Finanzas está oculta.
+tools/claude-usage-sync.mjs   Script para el ORDENADOR del usuario: agrega los tokens de Claude Code y los sube al área Claude.
 public/
   index.html     Panel: saludo, KPIs, checklist de hábitos, charts score/acumulado.
   chat.html      Chat con Claude (historial, imágenes adjuntas).
@@ -102,6 +103,7 @@ Las credenciales bancarias (Airwallex, Mercury) **no** van en env: se pegan desd
 - No hay borrado de cuentas desde la UI, solo quitar acceso (los datos se conservan).
 - **MCP (conectar la cuenta a otras IAs)**: `POST /mcp` habla JSON-RPC 2.0 (Streamable HTTP, sin estado ni SSE) y se autentica con `Authorization: Bearer <token>`; el token decide de qué usuario son los datos, así que una IA externa nunca ve otra cuenta. Tokens en `mcp_tokens` guardados como SHA-256 (el claro se enseña una sola vez), máximo 10 por cuenta, revocables al instante; revocar o desactivar la cuenta corta el acceso en la siguiente petición. Expone las mismas herramientas que el chat interno (`TOOLS`, misma ejecución en `runTool`) más `get_dashboard`. Se gestiona en Configuración → Conectar con otras IAs. Clientes: Claude Code (`claude mcp add --transport http …  --header`), Claude Desktop vía `npx mcp-remote`. Para claude.ai haría falta OAuth, que no está implementado.
 - **Widgets del iPhone**: `public/widget-ios.js` es una plantilla para la app Scriptable. Configuración → Widgets del móvil crea un token con `scope = 'widget'` (prefijo `oswgt_`, misma tabla `mcp_tokens`) y rellena la plantilla con la URL y el token. Ese token solo abre `GET /api/widget` (el servidor MCP lo rechaza). El contenido editable vive en `data.widget` (`ancla`, `frases`, `horario`, `fechas`), normalizado en `normalizarWidget`; la frase rota cada 2 h con `fraseDeFranja` y el bloque "ahora" lo calcula el móvil con su hora local.
+- **Uso de Claude Code (área Claude)**: Claude Code guarda cada sesión en `~/.claude/projects/**/*.jsonl` con el `usage` de cada respuesta. `tools/claude-usage-sync.mjs` se ejecuta en el ordenador del usuario (no en el servidor), lee esos ficheros, deduplica por id de mensaje, agrega por día (zona horaria `ALEX_OS_TZ`, default Europe/Madrid) y modelo, estima el coste a tarifa pública de la API (tabla `PRECIOS` dentro del script) y lo sube a `POST /api/claude-usage`. Config por env (`ALEX_OS_URL`, `ALEX_OS_TOKEN` = token MCP) o en `~/.config/alex-os/claude-usage.json`. Cachea el agregado por fichero en `~/.cache/alex-os/` para releer solo lo que cambió; `--full` lo ignora, `--dry` no sube. Para que sea automático en un Mac, un LaunchAgent cada 10 min (ver `tools/README-claude-usage.md`).
 - **Bienvenida (onboarding)**: `users.onboarded`. Una cuenta nueva (creada desde `/admin.html`) entra por `/bienvenida.html` la primera vez: nombre → contexto para el asistente → hábitos y puntos (activar, renombrar, añadir, «Repartir a 100», umbral de horas y objetivo kcal) → tema → resumen. Guarda con `/api/me/profile`, `/api/state` (`config.senales`, `config_nutricion`) y `/api/me/onboarded`. «Saltar por ahora» la marca hecha; se repite desde Configuración → Cuenta → Repetir bienvenida (o el admin con `onboarded:false` en `/api/admin/users/:id`). `ui.js` redirige si `onboarded === false`, nunca cuando un admin está viendo otra cuenta.
 - **Grupos (workspaces)**: etiqueta opcional por cuenta (Amigos, una empresa…) para agrupar en `/admin.html` y, en el futuro, clasificaciones o defaults por grupo. No aíslan datos (ya van por usuario). Tabla `workspaces (id, nombre, created)` + `users.workspace_id`. Borrar un grupo deja a sus cuentas sin grupo.
 
@@ -175,6 +177,7 @@ Claves top-level de `data` (las describe en detalle el `SYSTEM_PROMPT`):
 | `finanzas`, `cuentas`, `suscripciones`, `config_finanzas` | área Finanzas (oculta) |
 | `integraciones` | secretos bancarios, nunca salen por la API de estado |
 | `chats` | historial de conversaciones, no sale por `/api/state` |
+| `claude_usage` | tokens de Claude Code por día y modelo (`dias.<fecha>.modelos.<modelo>.{in,out,cw,cr,th,n,usd}`, `sesiones`, `generado`, `origen`). Lo escribe `tools/claude-usage-sync.mjs`; la app y el chat solo lo leen |
 
 `readData()` pasa siempre por `normalizar()` (deriva nutrición, `done` de subs, `hecha` de tareas, dedup de ids). Los campos derivados (`hecha`, `done`, `senales.nutricion`) **no se escriben a mano**: se cambia el estado que los origina.
 
@@ -193,6 +196,7 @@ Autenticación: cookie `os_session` (login del navegador) o Basic auth (`-u user
 | GET/POST/DELETE | `/api/me/mcp`, `/api/me/mcp/:id` | mis tokens MCP |
 | POST | `/mcp` | servidor MCP (auth propia por Bearer, fuera del middleware de sesión) |
 | GET | `/api/widget?fecha=&hora=` | resumen de solo lectura para los widgets del iPhone (Bearer de widget o sesión) |
+| POST | `/api/claude-usage` | sube el agregado de tokens de Claude Code (`{ dias, origen }`; Bearer de un token MCP, sesión o Basic). Reemplaza `claude_usage` entero |
 | GET/POST | `/api/admin/users`, `/api/admin/users/:id`, `/api/admin/users/:id/password`, `/api/admin/view-as` | solo admin |
 | GET/POST/DELETE | `/api/admin/workspaces`, `/api/admin/workspaces/:id` | grupos (solo admin) |
 | GET | `/api/state` | estado completo menos `integraciones` y `chats` |

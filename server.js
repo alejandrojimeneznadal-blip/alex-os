@@ -762,6 +762,35 @@ app.get("/api/widget", async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+/* Uso de tokens de Claude Code. Lo envía tools/claude-usage-sync.mjs desde el ordenador del usuario,
+   autenticado con un token MCP (Bearer); desde el navegador o un script vale la sesión o Basic. Reemplaza
+   claude_usage entero: el script recalcula el agregado desde todos los historiales en cada ejecución. */
+app.post("/api/claude-usage", async (req, res) => {
+  try {
+    const user = (await userFromMcpToken(req))
+      || (await userFromSession(getCookie(req, SESSION_COOKIE)))
+      || (await userFromBasic(req));
+    if (!user) return res.status(401).json({ error: "token no válido: genera uno en Configuración → Conectar con otras IAs" });
+    if (user.token_scope === "widget") return res.status(403).json({ error: "un token de widget solo lee /api/widget" });
+    const b = req.body;
+    if (!b || !b.dias || typeof b.dias !== "object" || Array.isArray(b.dias)) return res.status(400).json({ error: "body: { dias: { fecha: { modelos, sesiones } } }" });
+    const ent = (v) => Math.max(0, Math.round(Number(v) || 0));
+    const dias = {};
+    for (const [f, d] of Object.entries(b.dias)) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(f) || !d || typeof d.modelos !== "object") continue;
+      const modelos = {};
+      for (const [m, u] of Object.entries(d.modelos)) {
+        modelos[txt(m, 60)] = { in: ent(u?.in), out: ent(u?.out), cw: ent(u?.cw), cr: ent(u?.cr), th: ent(u?.th), n: ent(u?.n), usd: Math.round((Number(u?.usd) || 0) * 10000) / 10000 };
+      }
+      dias[f] = { modelos, sesiones: ent(d.sesiones) };
+    }
+    const data = await readData(user.id);
+    data.claude_usage = { generado: new Date().toISOString(), origen: txt(b.origen, 60), version: txt(b.version, 20), dias };
+    await writeData(user.id, data);
+    res.json({ ok: true, dias: Object.keys(dias).length });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 /* req.actor = quien ha iniciado sesión · req.user = cuenta cuyos datos se sirven
    (la misma, salvo que un admin esté viendo otra cuenta con la cookie os_as). */
 app.use(async (req, res, next) => {
@@ -1247,6 +1276,7 @@ Estructura del estado:
 - El hábito nutricion es DERIVADO y NO se marca a mano: el servidor lo calcula como kcal >= config_nutricion.kcal_obj cada vez que se guarda. NUNCA escribas senales.nutricion (se ignora y se recalcula). Si ${N} dice «hoy he comido bien» sin número, pídele el total aproximado de kcal o estímalo con él a partir de lo que comió — sin kcal ese día queda sin registrar en nutrición.
 - config_nutricion: { kcal_obj } — objetivo de calorías diarias.
 - widget: { ancla, frases: [{ texto, tag? }], horario: [{ dias: ["lun".."dom"], desde?: "HH:MM", hasta?: "HH:MM", titulo, texto? }], fechas: [{ fecha, texto }] } — lo que enseñan los widgets del móvil: frases y estándares que rotan cada 2 h (tag = etiqueta corta opcional, p. ej. «Estándar 1» o «Principio»), el bloque del horario que toca ahora y la próxima fecha clave. «Añade al widget la frase X» → léelo con read_state y añádela con set_value en widget.frases.<n> (n = longitud actual). También se edita a mano en Configuración → Widgets del móvil.
+- claude_usage: { generado, origen, dias: { "<fecha>": { modelos: { "<modelo>": { in, out, cw, cr, th, n, usd } }, sesiones } } } — tokens de Claude Code que ${N} gasta en su ordenador, por día y modelo (in = entrada, out = salida, cw = caché escrita, cr = caché leída, th = pensamiento dentro de out, n = respuestas, usd = coste estimado a tarifa pública de la API). SOLO LECTURA: lo sube un script desde su Mac; si pregunta cuánto lleva gastado, léelo con read_state y suma; nunca lo modifiques.
 
 Reglas de comportamiento:
 - Responde SIEMPRE en español, conciso y directo, sin hype. Una recomendación clara, nunca un menú de opciones.
@@ -1411,6 +1441,7 @@ const KEYS_LEIBLES = new Set([
   "config", "days", "journal", "memoria", "tareas", "recordatorios", "proyectos", "contenido",
   "finanzas", "cuentas", "suscripciones", "config_finanzas", "config_contenido", "config_nutricion",
   "peso", "rutina_gym", "entrenos", "widget",
+  "claude_usage",
 ]);
 
 function runTool(name, input, data, actions) {

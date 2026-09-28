@@ -517,6 +517,26 @@
   .mkpi .n small { font-size: 12px; color: var(--ink-3); font-weight: 500; }
   .mkpi .l { font-size: 11.5px; color: var(--ink-3); margin-top: 2px; }
   .chart-bars svg { display: block; width: 100%; height: auto; }
+  /* área Claude (uso de tokens) */
+  .cu-chart { position: relative; }
+  .cu-hit { fill: var(--ink); fill-opacity: 0; }
+  .cu-hit:hover { fill-opacity: 0.06; }
+  .cu-tip { display: none; position: absolute; top: 4px; left: 0; pointer-events: none; z-index: 3; background: var(--ink); color: var(--bg); font-size: 12px; line-height: 1.45; padding: 7px 10px; border-radius: 9px; box-shadow: var(--shadow); max-width: 280px; }
+  .cu-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 10px; font-size: 12px; color: var(--ink-2); }
+  .cu-legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; background: var(--tok-1); }
+  .cu-legend .t2::before { background: var(--tok-2); }
+  .cu-legend .t3::before { background: var(--tok-3); }
+  .cu-legend .t4::before { background: var(--tok-4); }
+  .cu-seg { display: inline-flex; gap: 2px; background: var(--surface-2); border-radius: 999px; padding: 3px; flex: none; }
+  .cu-seg button { border: 0; background: transparent; color: var(--ink-2); font: inherit; font-size: 12px; padding: 4px 11px; border-radius: 999px; cursor: pointer; }
+  .cu-seg button.active { background: var(--surface); color: var(--ink); box-shadow: var(--shadow); font-weight: 600; }
+  .cu-wrap { overflow-x: auto; margin-top: 6px; }
+  .cu-tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .cu-tbl th { text-align: right; font-weight: 500; color: var(--ink-3); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; padding: 6px 8px; border-bottom: 1px solid var(--hairline); white-space: nowrap; }
+  .cu-tbl td { text-align: right; padding: 9px 8px; border-bottom: 1px solid var(--hairline); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .cu-tbl th:first-child, .cu-tbl td:first-child { text-align: left; }
+  .cu-tbl tbody tr:last-child td { border-bottom: none; }
+  .cu-tbl tfoot td { font-weight: 600; border-top: 1px solid var(--border); border-bottom: none; }
   .rut-row { display: flex; align-items: center; gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--hairline); font-size: 13px; color: var(--ink-2); flex-wrap: wrap; }
   .rut-row:last-child { border-bottom: none; }
   .rut-row .rlab { font-weight: 550; min-width: 130px; }
@@ -625,6 +645,7 @@ const TABS = [
   { id: "nutricion", label: "Nutrición" },
   { id: "proyectos", label: "Proyectos" },
   { id: "contenido", label: "Contenido" },
+  { id: "claude", label: "Claude" },
   // Finanzas oculta por ahora (28 ago 2026) — el área sigue funcionando en #finanzas si se reactiva aquí y en ui.js
 ];
 const FIN_SUBS = [
@@ -2935,6 +2956,95 @@ function moverEjercicio(diaId, i, dir) {
   saveClave("rutina_gym");
 }
 
+/* ---------- área Claude: uso de tokens de Claude Code (lo sube tools/claude-usage-sync.mjs) ---------- */
+let claudeModo = "tokens"; // gráfico: tokens apilados | coste
+const CU_TIPOS = [["in", "Entrada"], ["out", "Salida"], ["cw", "Caché escrita"], ["cr", "Caché leída"]];
+const cuTot = (t) => (Number(t.in) || 0) + (Number(t.out) || 0) + (Number(t.cw) || 0) + (Number(t.cr) || 0);
+function cuFmt(n) {
+  n = Number(n) || 0;
+  if (n >= 1e9) return (n / 1e9).toLocaleString("es", { maximumFractionDigits: 2 }) + "B";
+  if (n >= 1e6) return (n / 1e6).toLocaleString("es", { maximumFractionDigits: 1 }) + "M";
+  if (n >= 1e3) return (n / 1e3).toLocaleString("es", { maximumFractionDigits: 1 }) + "k";
+  return String(Math.round(n));
+}
+const cuUsd = (v) => (Number(v) || 0).toLocaleString("es", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " $";
+const cuFecha = (f) => new Date(f + "T12:00").toLocaleDateString("es", { day: "numeric", month: "short" });
+function cuMes(m) {
+  const s = new Date(m + "-01T12:00").toLocaleDateString("es", { month: "long", year: "numeric" });
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+function cuNombre(m) {
+  const s = String(m || "").replace(/^claude-/, "").replace(/\[1m\]$/, "").replace(/-\d{8}$/, "");
+  return s.replace(/-(\d)/, " $1").replace(/(\d)-(\d)/g, "$1.$2").replace(/^./, (c) => c.toUpperCase());
+}
+function cuHace(iso) {
+  const min = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+  if (!Number.isFinite(min)) return "";
+  if (min < 1) return "ahora mismo";
+  if (min < 60) return `hace ${min} min`;
+  const h = Math.round(min / 60);
+  if (h < 24) return `hace ${h} h`;
+  return "el " + new Date(iso).toLocaleDateString("es", { day: "numeric", month: "short" });
+}
+function cuSuma(dias, fechas) {
+  const t = { in: 0, out: 0, cw: 0, cr: 0, th: 0, n: 0, usd: 0 };
+  for (const f of fechas) for (const u of Object.values(dias[f]?.modelos || {})) for (const k in t) t[k] += Number(u[k]) || 0;
+  return t;
+}
+let CU_TIPS = [];
+function cuTipShow(el) {
+  const tip = $("cuTip");
+  if (!tip) return;
+  tip.innerHTML = CU_TIPS[Number(el.dataset.i)] || "";
+  tip.style.display = "block";
+  const wrap = tip.parentElement.getBoundingClientRect(), r = el.getBoundingClientRect();
+  const cx = r.left + r.width / 2 - wrap.left, w = tip.offsetWidth;
+  tip.style.left = Math.max(0, Math.min(cx - w / 2, wrap.width - w)) + "px";
+}
+function cuTipHide() { const tip = $("cuTip"); if (tip) tip.style.display = "none"; }
+function barsClaude(d30, modo) {
+  const W = 760, H = 200, PL = 54, PR = 12, PT = 10, PB = 24;
+  const iw = W - PL - PR, ih = H - PT - PB;
+  const valor = (d) => (modo === "coste" ? d.t.usd : cuTot(d.t));
+  const maxV = Math.max(...d30.map(valor), modo === "coste" ? 1 : 1000);
+  const y = (v) => PT + ih * (1 - v / maxV);
+  const step = iw / d30.length, bw = Math.min(18, step * 0.66);
+  const fmtY = (v) => (modo === "coste" ? Math.round(v).toLocaleString("es") + " $" : cuFmt(v));
+  let svg = `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">`;
+  for (const t of [0, maxV / 2, maxV]) {
+    svg += `<line x1="${PL}" y1="${y(t).toFixed(1)}" x2="${W - PR}" y2="${y(t).toFixed(1)}" stroke="var(--grid)" stroke-dasharray="3 4" stroke-width="1"/>`;
+    svg += `<text x="${PL - 8}" y="${(y(t) + 4).toFixed(1)}" text-anchor="end" font-size="10" fill="var(--ink-3)">${fmtY(t)}</text>`;
+  }
+  CU_TIPS = [];
+  d30.forEach((d, i) => {
+    const x = PL + step * i + (step - bw) / 2;
+    const v = valor(d);
+    const total = cuTot(d.t);
+    CU_TIPS.push(`<b>${cuFecha(d.fecha)}</b> · ${cuFmt(total)} tokens · ≈ ${cuUsd(d.t.usd)}${d.sesiones ? ` · ${d.sesiones} ${d.sesiones === 1 ? "sesión" : "sesiones"}` : ""}`
+      + (total ? `<br>${CU_TIPOS.map(([k, l]) => `${l} ${cuFmt(d.t[k])}`).join(" · ")}` : "<br>Sin uso"));
+    if (v > 0 && modo === "coste") {
+      const hh = Math.max(2, ih * (v / maxV));
+      svg += `<rect x="${x.toFixed(1)}" y="${(y(0) - hh).toFixed(1)}" width="${bw.toFixed(1)}" height="${hh.toFixed(1)}" rx="3.5" fill="var(--accent)"/>`;
+    } else if (v > 0) {
+      // apilado de abajo arriba: entrada, salida, caché escrita, caché leída; 2px de superficie entre segmentos
+      let base = y(0);
+      const partes = CU_TIPOS.map(([k], j) => [Number(d.t[k]) || 0, j]).filter(([n]) => n > 0);
+      partes.forEach(([n, j], idx) => {
+        const hh = ih * (n / maxV), top = base - hh, ultimo = idx === partes.length - 1;
+        const alto = Math.max(ultimo ? hh : hh - 2, 0.6);
+        svg += `<rect x="${x.toFixed(1)}" y="${top.toFixed(1)}" width="${bw.toFixed(1)}" height="${alto.toFixed(1)}" rx="${ultimo ? 3 : 0}" fill="var(--tok-${j + 1})"/>`;
+        base = top;
+      });
+    }
+    svg += `<rect class="cu-hit" x="${(PL + step * i).toFixed(1)}" y="${PT}" width="${step.toFixed(1)}" height="${ih}" data-i="${i}" onmouseenter="cuTipShow(this)" onmouseleave="cuTipHide()" ontouchstart="cuTipShow(this)"/>`;
+  });
+  for (const i of [0, Math.floor((d30.length - 1) / 2), d30.length - 1]) {
+    const x = PL + step * i + step / 2;
+    svg += `<text x="${x.toFixed(1)}" y="${H - 6}" text-anchor="middle" font-size="10" fill="var(--ink-3)">${d30[i].fecha.slice(5).replace("-", "/")}</text>`;
+  }
+  return svg + `</svg>`;
+}
+
 const VIEWS = {
   tareas() {
     const ts = Array.isArray(STATE.tareas) ? STATE.tareas : [];
@@ -3056,6 +3166,60 @@ const VIEWS = {
     </div>`;
 
     return kpis + chart + rutinas + journalCard("sueno");
+  },
+  claude() {
+    const cu = STATE.claude_usage;
+    const dias = cu?.dias || {};
+    const fechas = Object.keys(dias).sort();
+    if (!fechas.length) {
+      return `<div class="card"><h2>Uso de Claude Code</h2><div class="empty-note">Todavía no ha llegado ningún dato. En el ordenador donde usas Claude Code, ejecuta <code>node tools/claude-usage-sync.mjs</code> con un token de Configuración → Conectar con otras IAs (detalle en HANDOFF.md). Lee los historiales de Claude Code, los agrega por día y modelo y los sube aquí.</div></div>`;
+    }
+    const hoy = new Date(), hoyISO = isoLocal(hoy);
+    const lunes = new Date(hoy); lunes.setDate(hoy.getDate() - ((hoy.getDay() + 6) % 7));
+    const lunesISO = isoLocal(lunes), mesISO = hoyISO.slice(0, 7);
+    const enMes = fechas.filter((f) => f.startsWith(mesISO));
+    const kpi = (t, label) => `<div class="mkpi"><div class="n">${cuFmt(cuTot(t))}<small> tokens</small></div><div class="l">${label} · ≈ ${cuUsd(t.usd)}</div></div>`;
+    const kpis = `<div class="mini-kpis">
+      ${kpi(cuSuma(dias, [hoyISO]), "Hoy")}
+      ${kpi(cuSuma(dias, fechas.filter((f) => f >= lunesISO)), "Esta semana")}
+      ${kpi(cuSuma(dias, enMes), "Este mes")}
+      ${kpi(cuSuma(dias, fechas), "Total desde el " + cuFecha(fechas[0]))}
+    </div>`;
+
+    const d30 = [];
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date(hoy); d.setDate(hoy.getDate() - i);
+      const f = isoLocal(d);
+      d30.push({ fecha: f, t: cuSuma(dias, [f]), sesiones: Number(dias[f]?.sesiones) || 0 });
+    }
+    const seg = `<div class="cu-seg">${[["tokens", "Tokens"], ["coste", "Coste"]].map(([id, l]) =>
+      `<button class="${claudeModo === id ? "active" : ""}" onclick="claudeModo='${id}';renderContent()">${l}</button>`).join("")}</div>`;
+    const sync = cu.generado ? `Sincronizado ${cuHace(cu.generado)}${cu.origen ? " desde " + esc(cu.origen) : ""} · ` : "";
+    const legend = claudeModo === "tokens" ? `<div class="cu-legend">${CU_TIPOS.map(([k, l], i) => `<span class="t${i + 1}">${l}</span>`).join("")}</div>` : "";
+    const chart = `<div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:2px"><h2>Últimos 30 días</h2>${seg}</div>
+      <div class="sub">${sync}${claudeModo === "tokens" ? "Tokens por día, apilados por tipo" : "Coste estimado a tarifa pública de la API, no lo que pagas con suscripción"}</div>
+      <div class="chart-bars cu-chart">${barsClaude(d30, claudeModo)}<div class="cu-tip" id="cuTip"></div></div>${legend}
+    </div>`;
+
+    const pm = {};
+    for (const f of enMes) for (const [m, u] of Object.entries(dias[f].modelos || {})) {
+      const t = pm[m] || (pm[m] = { in: 0, out: 0, cw: 0, cr: 0, th: 0, n: 0, usd: 0 });
+      for (const k in t) t[k] += Number(u[k]) || 0;
+    }
+    const filas = Object.entries(pm).sort((a, b) => b[1].usd - a[1].usd);
+    const tot = cuSuma(dias, enMes);
+    const num = (n) => Number(n || 0).toLocaleString("es");
+    const fila = (nombre, t, tag = "td") => `<tr><${tag}>${nombre}</${tag}><${tag}>${num(t.n)}</${tag}><${tag}>${cuFmt(t.in)}</${tag}><${tag}>${cuFmt(t.out)}</${tag}><${tag}>${cuFmt(t.cw)}</${tag}><${tag}>${cuFmt(t.cr)}</${tag}><${tag}>${cuFmt(cuTot(t))}</${tag}><${tag}>${cuUsd(t.usd)}</${tag}></tr>`;
+    const tabla = `<div class="card"><h2>Por modelo · ${cuMes(mesISO)}</h2>
+      <div class="sub">${num(tot.n)} respuestas · ${cuFmt(tot.th)} de los ${cuFmt(tot.out)} tokens de salida son pensamiento</div>
+      <div class="cu-wrap"><table class="cu-tbl">
+        <thead><tr><th>Modelo</th><th>Resp.</th><th>Entrada</th><th>Salida</th><th>Caché escr.</th><th>Caché leída</th><th>Total</th><th>Coste ≈</th></tr></thead>
+        <tbody>${filas.map(([m, t]) => fila(esc(cuNombre(m)), t)).join("") || `<tr><td colspan="8" class="empty-note">Sin uso este mes</td></tr>`}</tbody>
+        ${filas.length > 1 ? `<tfoot>${fila("Total", tot)}</tfoot>` : ""}
+      </table></div>
+    </div>`;
+    return kpis + chart + tabla;
   },
   gym() {
     const nav = `<div class="subnav">` + [["resumen", "Resumen"], ["tracker", "Tracker"], ["rutina", "Rutina"]].map(([id, l]) =>
