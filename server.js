@@ -3,7 +3,6 @@ import pg from "pg";
 import path from "path";
 import crypto from "crypto";
 import { fileURLToPath } from "url";
-import Anthropic from "@anthropic-ai/sdk";
 import { providerStatus, testProviders, runSync } from "./sync.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -12,10 +11,8 @@ const {
   DATABASE_URL,
   AUTH_USER = "alex",
   AUTH_PASS,
-  ANTHROPIC_API_KEY,
   YOUTUBE_API_KEY,
   APIFY_TOKEN,
-  MODEL = "claude-opus-5",
   PORT = 3200,
   OWNER_NAME,
   OWNER_CONTEXT = "",
@@ -29,8 +26,6 @@ const capital = (t) => (t ? t.charAt(0).toUpperCase() + t.slice(1) : t);
 
 if (!DATABASE_URL) { console.error("ERROR: DATABASE_URL no está definido"); process.exit(1); }
 if (!AUTH_PASS) { console.error("ERROR: AUTH_PASS no está definido"); process.exit(1); }
-
-const anthropic = ANTHROPIC_API_KEY ? new Anthropic({ apiKey: ANTHROPIC_API_KEY }) : null;
 
 const { Pool } = pg;
 const pool = new Pool({ connectionString: DATABASE_URL });
@@ -449,7 +444,7 @@ const hora2 = (h) => (HORA_RE.test(String(h || "").trim()) ? String(h).trim().pa
 const txt = (v, max) => String(v ?? "").replace(/\s+/g, " ").trim().slice(0, max);
 
 function normalizarWidget(w) {
-  if (!w || typeof w !== "object" || Array.isArray(w)) return {};
+  if (!w || typeof w !== "object" || Array.isArray(w)) w = {}; // sigue, para que salgan las listas vacías
   const out = {};
   if (typeof w.ancla === "string") out.ancla = txt(w.ancla, 40);
   out.frases = (Array.isArray(w.frases) ? w.frases : [])
@@ -580,7 +575,7 @@ app.get("/diag", async (req, res) => {
     const { rows } = await pool.query(
       "SELECT updated_at, octet_length(data::text) AS bytes FROM user_state WHERE user_id = $1", [req.user?.id]
     );
-    res.json({ db: "ok", ia: anthropic ? "ok" : "sin ANTHROPIC_API_KEY", row: rows[0] || null });
+    res.json({ db: "ok", row: rows[0] || null });
   } catch (e) {
     res.status(500).json({ db: "fail", error: e.message });
   }
@@ -675,7 +670,61 @@ function mcpTools() {
       description: "Resumen del panel: score de hoy, racha, media de 7 y 30 días, ritmo frente al mes anterior y la serie diaria con el acumulado. Empieza por aquí para saber cómo va la persona.",
       inputSchema: { type: "object", properties: {} },
     },
+    {
+      name: "get_gym",
+      description: "La sesión de gimnasio de un día en una sola llamada: qué toca según la rutina, lo que ya lleva apuntado y, por cada ejercicio, la ÚLTIMA vez que lo hizo con sus kg×reps y la fecha. Úsalo SIEMPRE antes de apuntar series: así puedes decirle con qué tiene que comparar sin rebuscar en el historial.",
+      inputSchema: {
+        type: "object",
+        properties: { fecha: { type: "string", description: "YYYY-MM-DD; por defecto hoy" } },
+      },
+    },
+    {
+      name: "log_gym",
+      description: "Apunta las series de UN ejercicio en un día. Preferible a set_value para el gimnasio: pone solo el día de la semana correcto, comprueba que el nombre existe en la rutina (el historial se indexa por nombre) y marca el hábito de entreno. Pásale las series en orden.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          ejercicio: { type: "string", description: "Nombre EXACTO como está en la rutina" },
+          series: { type: "array", items: { type: "object", properties: { kg: { type: "number" }, reps: { type: "number" } } }, description: "Una entrada por serie, en orden" },
+          fecha: { type: "string", description: "YYYY-MM-DD; por defecto hoy" },
+        },
+        required: ["ejercicio", "series"],
+      },
+    },
   ];
+}
+
+/* La última sesión ANTERIOR a `antesDe` que tenga ese ejercicio (mismo criterio que el tracker web). */
+function ultimaSesionCon(entrenos, nombre, antesDe, dias = 28) {
+  const lim = new Date(new Date(antesDe + "T12:00").getTime() - dias * 86400000).toISOString().slice(0, 10);
+  let mejor = null;
+  for (const f of Object.keys(entrenos || {})) {
+    if (f >= antesDe || f < lim) continue;
+    const sets = entrenos[f]?.sets?.[nombre];
+    if (!Array.isArray(sets) || !sets.some((x) => x && (x.kg != null || x.reps != null))) continue;
+    if (!mejor || f > mejor.fecha) mejor = { fecha: f, series: sets };
+  }
+  return mejor;
+}
+
+function sesionGym(data, fecha) {
+  const dia = diaDeFecha(fecha);
+  const rutina = (data.rutina_gym || {})[dia] || { titulo: "", ejercicios: [] };
+  const sets = data.entrenos?.[fecha]?.sets || {};
+  const ejercicios = (rutina.ejercicios || []).map((e) => ({
+    nombre: e.nombre,
+    objetivo: `${e.series}×${e.reps || ""}`,
+    ...(e.nota ? { nota: e.nota } : {}),
+    hechas: sets[e.nombre] || [],
+    anterior: ultimaSesionCon(data.entrenos, e.nombre, fecha),
+  }));
+  const enRutina = new Set((rutina.ejercicios || []).map((e) => e.nombre));
+  const fuera = Object.keys(sets).filter((n) => !enRutina.has(n)).map((n) => ({ nombre: n, hechas: sets[n] }));
+  return {
+    fecha, dia, titulo: rutina.titulo || "Descanso",
+    ejercicios,
+    ...(fuera.length ? { fuera_de_rutina: fuera } : {}),
+  };
 }
 
 async function mcpHandle(msg, user) {
@@ -684,15 +733,19 @@ async function mcpHandle(msg, user) {
 
   if (method === "initialize") {
     const pedida = params?.protocolVersion;
+    let instructions;
+    try {
+      instructions = instruccionesMcp(await readData(user.id), user);
+    } catch (e) {
+      instructions = `Panel de vida de ${user.display_name || user.username}. Usa get_dashboard para ver cómo va y read_state para el detalle.`;
+    }
     return {
       jsonrpc: "2.0", id,
       result: {
         protocolVersion: MCP_VERSIONS.includes(pedida) ? pedida : MCP_VERSIONS[0],
         capabilities: { tools: { listChanged: false } },
         serverInfo: { name: "os-panel-personal", version: "1.0.0" },
-        instructions: `Panel de vida de ${user.display_name || user.username}: hábitos con un score diario de 0 a 100, tareas, proyectos, contenido, sueño, gym y nutrición. Usa get_dashboard para ver cómo va, read_state para leer detalle y log_day/add_item/append_journal/set_value para registrar lo que te cuente. El score lo calcula el servidor: nunca lo inventes.
-
-Al escribir entrenos de gimnasio (set_value sobre entrenos.<fecha>): el historial se indexa por nombre de ejercicio y se fragmenta si te desvías. El campo "dia" debe ser el id del día de la semana de esa fecha (lunes|martes|miercoles|jueves|viernes|sabado|domingo), nunca el título ("Push", "Pierna 1"). Los nombres de ejercicio deben coincidir letra por letra con los de rutina_gym[dia].ejercicios[].nombre: léela antes con read_state. Si el ejercicio no está en la rutina de ese día, usa el nombre tal cual aparece en otro día; si no existe en ninguno, pregunta antes de inventar uno nuevo.`,
+        instructions,
       },
     };
   }
@@ -706,12 +759,59 @@ Al escribir entrenos de gimnasio (set_value sobre entrenos.<fecha>): el historia
     const nombre = params?.name;
     const args = params?.arguments || {};
     if (!nombre) return jsonRpcError(id, -32602, "falta el nombre de la herramienta");
-    if (nombre !== "get_dashboard" && !TOOLS.some((t) => t.name === nombre)) {
+    if (!mcpTools().some((t) => t.name === nombre)) {
       return jsonRpcError(id, -32602, `herramienta desconocida: ${nombre}`);
     }
     const data = await readData(user.id);
     if (nombre === "get_dashboard") {
       return { jsonrpc: "2.0", id, result: { content: [{ type: "text", text: JSON.stringify(buildDashboard(data)) }] } };
+    }
+    if (nombre === "get_gym") {
+      const f = /^\d{4}-\d{2}-\d{2}$/.test(args.fecha || "") ? args.fecha : todayISO();
+      return { jsonrpc: "2.0", id, result: { content: [{ type: "text", text: JSON.stringify(sesionGym(data, f)) }] } };
+    }
+    if (nombre === "log_gym") {
+      const f = /^\d{4}-\d{2}-\d{2}$/.test(args.fecha || "") ? args.fecha : todayISO();
+      const ej = String(args.ejercicio || "").trim();
+      const series = Array.isArray(args.series) ? args.series : [];
+      const nombres = Object.values(data.rutina_gym || {}).flatMap((d) => (d?.ejercicios || []).map((e) => e.nombre));
+      const err = (t) => ({ jsonrpc: "2.0", id, result: { content: [{ type: "text", text: t }], isError: true } });
+      if (!ej) return err("falta el nombre del ejercicio");
+      if (!series.length) return err("falta al menos una serie");
+      if (!nombres.includes(ej)) {
+        const parecido = nombres.find((x) => normEj(x) === normEj(ej));
+        return err(parecido
+          ? `En la rutina se llama exactamente «${parecido}»: usa ese nombre o el historial se parte en dos.`
+          : `«${ej}» no está en la rutina. Mírala con get_gym o read_state(rutina_gym); si es nuevo, añádelo antes a la rutina o pregúntale cómo quiere llamarlo.`);
+      }
+      const limpias = series.map((x) => {
+        const o = {};
+        if (Number.isFinite(Number(x?.kg))) o.kg = Number(x.kg);
+        if (Number.isFinite(Number(x?.reps))) o.reps = Number(x.reps);
+        return o;
+      });
+      if (!data.entrenos || typeof data.entrenos !== "object") data.entrenos = {};
+      const sesion = (data.entrenos[f] = data.entrenos[f] || { dia: diaDeFecha(f), sets: {} });
+      sesion.dia = diaDeFecha(f); // siempre el id del día de esa fecha
+      if (!sesion.sets) sesion.sets = {};
+      const antes = sesion.sets[ej];
+      sesion.sets[ej] = limpias;
+      // apuntar series es entrenar: el hábito se marca solo, igual que hace el tracker de la web
+      const idEntreno = (data.config?.senales || []).find((x) => /entren/i.test(x.id) || /entren/i.test(x.label || ""))?.id;
+      if (idEntreno) {
+        data.days = data.days || {};
+        data.days[f] = data.days[f] || { senales: {} };
+        data.days[f].senales = { ...(data.days[f].senales || {}), [idEntreno]: true };
+      }
+      await writeData(user.id, data);
+      const prev = ultimaSesionCon(data.entrenos, ej, f);
+      console.log(`MCP ${user.username} log_gym ${f} ${ej}: ${limpias.length} series`);
+      return { jsonrpc: "2.0", id, result: { content: [{ type: "text", text: JSON.stringify({
+        ok: true, fecha: f, dia: sesion.dia, ejercicio: ej, series: limpias,
+        ...(antes ? { sustituye_a: antes } : {}),
+        anterior: prev,
+        habito_entreno: idEntreno ? "marcado" : "no hay hábito de entreno configurado",
+      }) }] } };
     }
     try {
       const acciones = [];
@@ -1222,13 +1322,13 @@ app.post("/api/sync", async (req, res) => {
    ====================================================================== */
 const systemPromptFor = (N, CTX, HAB) => `Eres el asistente personal de ${N}.${CTX ? " Contexto sobre esta persona: " + CTX : ""}
 
-Esta app es su panel de vida: él te cuenta su día (al final o durante) y TÚ estructuras y guardas los datos. El dashboard calcula un score diario 0-100 con matemática fija a partir de las señales — tú NUNCA calculas ni inventas el score, solo registras señales.
+Esta app es su panel de vida y tú estás conectado a ella por MCP: él te cuenta su día (al final o durante) y TÚ estructuras y guardas los datos con estas herramientas. El dashboard calcula un score diario 0-100 con matemática fija a partir de las señales — tú NUNCA calculas ni inventas el score, solo registras señales.
 
 Estructura del estado:
-- config.senales: [{ id, label, tipo: "bool"|"horas"|"kcal", peso, umbral? }] — los HÁBITOS que puntúan (${N} los llama "hábitos"; en conversación di siempre hábito, nunca señal — la clave interna sigue siendo senales). Actuales: ${HAB}
+- config.senales: [{ id, label, tipo: "bool"|"horas"|"kcal", peso, umbral? }] — los HÁBITOS que puntúan (${N} los llama "hábitos": dile siempre hábito, nunca señal — la clave interna sigue siendo senales). Actuales: ${HAB}
 - days: por fecha { senales: {id: valor}, resumen } — el registro diario.
 - journal: [{ fecha, area, texto }] — apuntes de contexto por área: general|sueno|gym|nutricion|proyectos|contenido|finanzas.
-- memoria: [{ id, texto, fecha }] — TU memoria durable entre conversaciones. Se te inyecta entera al final de este prompt en cada mensaje: lo que guardes ahí lo "recuerdas" siempre, sin tener que leerlo.
+- memoria: [{ id, texto, fecha }] — TU memoria durable entre conversaciones. Va entera al final de estas instrucciones, así que la tienes delante desde el primer mensaje sin leerla: guarda ahí con add_item lo que deba sobrevivir a esta conversación.
 - tareas: [{ id, titulo, estado, prioridad: urgente|alta|normal|baja, inicio?, fecha?, proyecto?, sub?, notas? (pizarra: texto plano o HTML sencillo h2/h3/b/u/div/br, como contenido.notas), hecha (derivada: true solo si estado=completado — cambia SIEMPRE estado, nunca hecha), creada, hecha_el? }] — la lista de tareas (área Tareas). Estados (mismo sistema que growing-projects): pendiente (sin iniciar) | por_definir (activa pero falta concretar) | en_ejecucion | en_espera (bloqueada por alguien/algo) | falta_revision (hecha pero pendiente de revisar) | completado (cerrada). fecha = fecha límite/fin; inicio = arranque de su ventana (time frame: con inicio y fecha la tarea está "activa" ese rango). Solo pon fechas si ${N} las dice. «Apunta que tengo que llamar a María el jueves» → add_item con fecha del jueves. «Estoy con X» → en_ejecucion; «X espera a Y» → en_espera; «X hecho, falta repasarlo» → falta_revision; «esto es urgente/importante» → prioridad urgente/alta. Cuando diga que algo está terminado del todo, pon estado completado + hecha_el — NO la borres. Solo borra si lo pide explícitamente (set_value con delete).
 - recordatorios: [{ id, titulo, desde, hasta?, frecuencia: diario|laborables|cada_2|cada_3|cada_7|dias, dias? (si frecuencia=dias: ["lun","mar","mie","jue","vie","sab","dom"]), proyecto?, notas?, hechos: { "<fecha>": true } }] — recordatorios PERIÓDICOS dentro de una ventana (área Tareas). Cada día que toca aparece en "Para hoy"; marcarlo escribe hechos.<fecha>=true y reaparece el siguiente día que toque; al pasar hasta caduca solo. «Recuérdame hacer follow-up a María cada 2 días durante 2 semanas» → add_item en recordatorios con desde=hoy, hasta=+14 días, frecuencia=cada_2. cada_2/cada_3/cada_7 cuentan a partir del campo desde. No toques hechos salvo que ${N} diga que ya lo hizo hoy.
 - rutina_gym: { lunes..domingo: { titulo, ejercicios: [{ nombre, series, reps, nota? }] } } — la rutina semanal de gym (editable en el panel, pestaña Gym → Rutina). Si ${N} pide cambios de rutina, edítala con set_value respetando la estructura.
@@ -1252,7 +1352,6 @@ Reglas de comportamiento:
 - Responde SIEMPRE en español, conciso y directo, sin hype. Una recomendación clara, nunca un menú de opciones.
 - Cuando ${N} cuente su día, extrae TODAS las señales que mencione y regístralas con log_day en una sola llamada, con un resumen fiel de 1-2 frases. Si menciona datos de áreas (una pieza de contenido, un cobro, su peso, avance de un proyecto), regístralos también con add_item o set_value. Los detalles con contexto van a append_journal con su área.
 - Si cuenta el día a medias (por la mañana/tarde), registra lo que haya; se completa luego.
-- ${N} puede adjuntarte imágenes (capturas, fotos de comida, pizarras, tickets). Léelas y úsalas como cualquier otro dato: una foto de comida → estima kcal a grosso modo si viene al caso; un ticket/captura de un pago → regístralo en finanzas; una captura de métricas → actualiza la pieza.
 - No preguntes por cada señal que falte: registra lo dicho y como mucho pregunta UNA cosa importante que falte.
 - Antes de modificar proyectos/contenido/finanzas/cuentas/suscripciones/tareas lee esa clave con read_state para respetar estructura e ids.
 - Proyectos: cada proyecto tiene su página en la app. Mantén al día su «siguiente» (la próxima acción concreta), sus subs (subproyectos: marca done:true con fecha cuando ${N} diga que algo está hecho, añade nuevos si los menciona) y notas (contexto/decisiones, texto breve). Usa set_value con el índice del proyecto (p.ej. 'proyectos.2.siguiente'). Al crearlo elige el icono de la lista que más le pegue. Los avances con contexto van también a append_journal (area proyectos) EMPEZANDO el texto con el nombre del proyecto, p.ej. «Taller Claude Code: grabada la VSL».
@@ -1262,8 +1361,10 @@ Reglas de comportamiento:
 - No inventes datos que no estén en el estado. Si no hay registro, dilo.
 - Cuando des lectura de su evolución, básate en los days/journal reales. Sé crítico pero sin machacar: señala el patrón, no la culpa, y termina con la siguiente acción concreta.`;
 
-/* la memoria durable del chat va entera en el system prompt: no depende de que el modelo la lea */
-function systemConMemoria(data, user) {
+/* Instrucciones que recibe la IA externa en el initialize del MCP. Heredan el manual que antes
+   tenía el chat de la app (estructura del estado y reglas), más sus hábitos reales y su memoria
+   durable: así un Claude de fuera sabe tanto como sabía el chat de dentro. */
+function instruccionesMcp(data, user) {
   const hab = (data?.config?.senales || []).map((s) =>
     `${s.id} "${s.label}" (${s.tipo === "horas" ? `horas, umbral ${s.umbral}` : s.tipo === "kcal" ? "tipo kcal: DERIVADO, ver abajo" : "bool"}, ${s.peso} pts)`
   ).join(", ") || "ninguno configurado todavía";
@@ -1515,7 +1616,7 @@ function runTool(name, input, data, actions) {
     if (!input?.path || typeof input.path !== "string") throw new Error("path requerido");
     const avisoGym = validaEntrenos(input, data);
     if (avisoGym) throw new Error(avisoGym);
-    if (/^(chats?|integraciones)(\.|$)/.test(input.path)) throw new Error("esa clave no es modificable desde el chat");
+    if (/^(chats?|integraciones)(\.|$)/.test(input.path)) throw new Error("esa clave no es modificable desde aquí");
     const before = getPath(data, input.path);
     setPath(data, input.path, input.value, input.delete === true);
     actions.push(input.delete === true
@@ -1527,254 +1628,11 @@ function runTool(name, input, data, actions) {
   throw new Error(`herramienta desconocida: ${name}`);
 }
 
-// Opus 5 con fallbacks server-side por defecto; effort low para respuestas rápidas.
-const EFFORT = process.env.EFFORT || "low";
-
-async function callClaude(params) {
-  const body = { ...params, output_config: { effort: EFFORT } };
-  try {
-    return await anthropic.beta.messages.create({
-      ...body,
-      betas: ["server-side-fallback-2026-07-01"],
-      fallbacks: "default",
-    });
-  } catch (e) {
-    if (e?.status === 400) return await anthropic.messages.create(body);
-    throw e;
-  }
-}
-
-const CHAT_HISTORY_MAX = 80;
-const CHAT_CONTEXT_MAX = 24;
-const MAX_TOOL_ITERATIONS = 8;
-
-app.get("/api/chats", async (req, res) => {
-  try {
-    const data = await readData(req.user.id);
-    const list = Object.entries(data.chats || {})
-      .map(([id, c]) => ({ id, title: c.title, updated: c.updated, count: c.messages.length }))
-      .sort((a, b) => (b.updated || 0) - (a.updated || 0));
-    res.json(list);
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-app.get("/api/chats/:id", async (req, res) => {
-  try {
-    const data = await readData(req.user.id);
-    const chat = data.chats?.[req.params.id];
-    if (!chat) return res.status(404).json({ error: "chat no encontrado" });
-    res.json({ id: req.params.id, title: chat.title, messages: chat.messages });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-app.patch("/api/chats/:id", async (req, res) => {
-  try {
-    const title = String(req.body?.title || "").trim().slice(0, 80);
-    if (!title) return res.status(400).json({ error: "title requerido" });
-    const data = await readData(req.user.id);
-    const chat = data.chats?.[req.params.id];
-    if (!chat) return res.status(404).json({ error: "chat no encontrado" });
-    chat.title = title;
-    await writeData(req.user.id, data);
-    res.json({ ok: true, title });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-app.delete("/api/chats/:id", async (req, res) => {
-  try {
-    const data = await readData(req.user.id);
-    if (data.chats?.[req.params.id]) {
-      const ids = (data.chats[req.params.id].messages || []).flatMap((m) => m.images || []);
-      if (ids.length) await pool.query("DELETE FROM chat_images WHERE id = ANY($1) AND user_id = $2", [ids, req.user.id]).catch(() => {});
-      delete data.chats[req.params.id];
-      await writeData(req.user.id, data);
-    }
-    res.json({ ok: true });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-// archivos de subproyectos: subir (base64), servir y borrar
-const MIMES_INLINE = /^(image\/|video\/|audio\/|application\/pdf$|text\/plain$)/; // el resto se descarga, nunca se renderiza (evita HTML servido same-origin)
-app.post("/api/archivos", async (req, res) => {
-  try {
-    const { nombre, mime, data } = req.body || {};
-    if (typeof data !== "string" || !data || typeof mime !== "string" || !mime || typeof nombre !== "string" || !nombre.trim()) {
-      return res.status(400).json({ error: "nombre, mime y data (base64) requeridos" });
-    }
-    if (data.length > 20 * 1024 * 1024) return res.status(413).json({ error: "archivo demasiado grande (máx ~15MB)" });
-    const id = "f" + Date.now() + Math.random().toString(36).slice(2, 7);
-    const size = Math.round(data.length * 0.75);
-    await pool.query(
-      "INSERT INTO app_files (id, nombre, mime, data, size, created, user_id) VALUES ($1, $2, $3, $4, $5, $6, $7)",
-      [id, nombre.trim().slice(0, 160), mime, data, size, Date.now(), req.user.id]
-    );
-    res.json({ ok: true, id, size });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-app.get("/api/archivos/:id", async (req, res) => {
-  try {
-    const r = await pool.query("SELECT nombre, mime, data FROM app_files WHERE id = $1 AND user_id = $2", [req.params.id, req.user.id]);
-    if (!r.rows.length) return res.status(404).end();
-    const { nombre, mime, data } = r.rows[0];
-    const inline = MIMES_INLINE.test(mime);
-    res.set("Content-Type", inline ? mime : "application/octet-stream");
-    res.set("Content-Disposition", `${inline ? "inline" : "attachment"}; filename*=UTF-8''${encodeURIComponent(nombre)}`);
-    res.set("Cache-Control", "private, max-age=31536000, immutable");
-    res.send(Buffer.from(data, "base64"));
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-app.delete("/api/archivos/:id", async (req, res) => {
-  try {
-    await pool.query("DELETE FROM app_files WHERE id = $1 AND user_id = $2", [req.params.id, req.user.id]);
-    res.json({ ok: true });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-const IMG_MIMES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
-
-// sube una imagen del chat (base64 ya reducida en el cliente) y devuelve su id
-app.post("/api/imagenes", async (req, res) => {
-  try {
-    const { data, mime } = req.body || {};
-    if (typeof data !== "string" || !data || !IMG_MIMES.includes(mime)) {
-      return res.status(400).json({ error: "data (base64) y mime de imagen requeridos" });
-    }
-    if (data.length > 8 * 1024 * 1024) return res.status(413).json({ error: "imagen demasiado grande" });
-    const id = "img" + Date.now() + Math.random().toString(36).slice(2, 7);
-    await pool.query("INSERT INTO chat_images (id, mime, data, created, user_id) VALUES ($1, $2, $3, $4, $5)", [id, mime, data, Date.now(), req.user.id]);
-    res.json({ ok: true, id });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-app.get("/api/imagenes/:id", async (req, res) => {
-  try {
-    const r = await pool.query("SELECT mime, data FROM chat_images WHERE id = $1 AND user_id = $2", [req.params.id, req.user.id]);
-    if (!r.rows.length) return res.status(404).end();
-    res.set("Content-Type", r.rows[0].mime);
-    res.set("Cache-Control", "private, max-age=31536000, immutable");
-    res.send(Buffer.from(r.rows[0].data, "base64"));
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-app.post("/api/chat", async (req, res) => {
-  if (!anthropic) return res.status(503).json({ error: "ANTHROPIC_API_KEY no configurada" });
-  const userMessage = (req.body?.message || "").trim();
-  const imageIds = Array.isArray(req.body?.images)
-    ? req.body.images.filter((x) => typeof x === "string" && /^img[\w]+$/.test(x)).slice(0, 6)
-    : [];
-  if (!userMessage && !imageIds.length) return res.status(400).json({ error: "message requerido" });
-
-  const t0 = Date.now();
-  try {
-    const data = await readData(req.user.id);
-    if (!data.chats || typeof data.chats !== "object") data.chats = {};
-
-    let chatId = req.body?.chat_id;
-    if (!chatId || !data.chats[chatId]) {
-      chatId = "c" + Date.now();
-      data.chats[chatId] = { title: (userMessage || "Imagen").slice(0, 48), created: Date.now(), updated: Date.now(), messages: [] };
-    }
-    const chat = data.chats[chatId];
-    chat.messages.push({ role: "user", content: userMessage, ts: Date.now(), ...(imageIds.length ? { images: imageIds } : {}) });
-
-    const history = chat.messages.slice(-CHAT_CONTEXT_MAX);
-    // imágenes de los mensajes en contexto → bloques de visión
-    const idsCtx = history.flatMap((m) => m.images || []);
-    const imgMap = {};
-    if (idsCtx.length) {
-      const r = await pool.query("SELECT id, mime, data FROM chat_images WHERE id = ANY($1) AND user_id = $2", [idsCtx, req.user.id]);
-      for (const row of r.rows) imgMap[row.id] = row;
-    }
-    const messages = history.map((m) => {
-      const blocks = [];
-      for (const iid of m.images || []) {
-        const im = imgMap[iid];
-        if (im) blocks.push({ type: "image", source: { type: "base64", media_type: im.mime, data: im.data } });
-      }
-      if (m.content) blocks.push({ type: "text", text: m.content });
-      if (!blocks.length) blocks.push({ type: "text", text: "(imagen adjunta no disponible)" });
-      return { role: m.role, content: blocks };
-    });
-    const ultimo = messages[messages.length - 1].content;
-    ultimo[ultimo.length - 1].cache_control = { type: "ephemeral" };
-    messages.push({ role: "system", content: `Hoy es ${todayISO()}.` });
-
-    const actions = [];
-    let response = null;
-
-    for (let i = 0; i < MAX_TOOL_ITERATIONS; i++) {
-      response = await callClaude({
-        model: MODEL,
-        max_tokens: 8000,
-        system: [{ type: "text", text: systemConMemoria(data, req.user), cache_control: { type: "ephemeral" } }],
-        tools: TOOLS,
-        messages,
-      });
-
-      if (response.stop_reason !== "tool_use") break;
-
-      const toolUses = response.content.filter((b) => b.type === "tool_use");
-      messages.push({ role: "assistant", content: response.content });
-      const results = toolUses.map((tu) => {
-        try {
-          return { type: "tool_result", tool_use_id: tu.id, content: runTool(tu.name, tu.input, data, actions) };
-        } catch (e) {
-          return { type: "tool_result", tool_use_id: tu.id, content: e.message, is_error: true };
-        }
-      });
-      messages.push({ role: "user", content: results });
-    }
-
-    let reply;
-    if (response.stop_reason === "refusal") {
-      reply = "No puedo ayudarte con eso.";
-    } else {
-      reply = response.content.filter((b) => b.type === "text").map((b) => b.text).join("\n").trim();
-      if (!reply) reply = "(sin respuesta — inténtalo de nuevo)";
-    }
-
-    chat.messages.push({ role: "assistant", content: reply, ts: Date.now(), ...(actions.length ? { actions } : {}) });
-    if (chat.messages.length > CHAT_HISTORY_MAX) {
-      const fuera = chat.messages.slice(0, -CHAT_HISTORY_MAX).flatMap((m) => m.images || []);
-      if (fuera.length) await pool.query("DELETE FROM chat_images WHERE id = ANY($1) AND user_id = $2", [fuera, req.user.id]).catch(() => {});
-      chat.messages = chat.messages.slice(-CHAT_HISTORY_MAX);
-    }
-    chat.updated = Date.now();
-    await writeData(req.user.id, data);
-
-    console.log(`POST /api/chat OK en ${((Date.now() - t0) / 1000).toFixed(1)}s (${actions.length} acciones)`);
-    res.json({ reply, actions, chat_id: chatId });
-  } catch (e) {
-    console.error(`POST /api/chat ERROR tras ${((Date.now() - t0) / 1000).toFixed(1)}s:`, e.status || "", e.message);
-    res.status(500).json({ error: e.message });
-  }
-});
-
 app.use(express.static(path.join(__dirname, "public")));
 
 initSchema()
   .then(() => {
-    app.listen(PORT, () => console.log(`OS up on :${PORT} (IA: ${anthropic ? MODEL : "off"})`));
+    app.listen(PORT, () => console.log(`OS up on :${PORT}`));
   })
   .catch((e) => {
     console.error("Schema init failed:", e.message);

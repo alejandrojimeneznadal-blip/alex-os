@@ -203,15 +203,15 @@
   </div>
 
   <div class="card">
-    <h2>Memoria del chat</h2>
-    <div class="desc">Hechos durables que el chat tiene delante en cada conversación (decisiones, preferencias, contexto). Él la mantiene solo — «recuerda que…» — y aquí puedes corregir, añadir o borrar. Toca una entrada para editarla.</div>
+    <h2>Memoria del asistente</h2>
+    <div class="desc">Hechos durables que Claude tiene delante nada más conectarse por MCP (decisiones, preferencias, contexto). Los mantiene él solo — «recuerda que…» — y aquí puedes corregir, añadir o borrar. Toca una entrada para editarla.</div>
     <div id="memLista"></div>
     <div class="btns"><button id="memAdd">Añadir recuerdo</button></div>
   </div>
 
   <div class="card">
     <h2>Hábitos y score</h2>
-    <div class="note">Los hábitos se editan en el <a href="/" style="color:var(--ink-2)">panel</a> (⋯ en «Hábitos de hoy»: añadir, quitar, reordenar y cambiar puntos) o por el <a href="/chat.html" style="color:var(--ink-2)">chat</a>: «añade un hábito de lectura con 5 puntos»…</div>
+    <div class="note">Los hábitos se editan en el <a href="/" style="color:var(--ink-2)">panel</a> (⋯ en «Hábitos de hoy»: añadir, quitar, reordenar y cambiar puntos) o pidiéndoselo a Claude: «añade un hábito de lectura con 5 puntos»…</div>
   </div>
 </div>
 
@@ -609,13 +609,13 @@ $("wgtGuardar").onclick = async () => {
 
 cargarWidget();
 
-/* ---------- memoria del chat ---------- */
+/* ---------- memoria del asistente ---------- */
 let MEMORIA = [];
 
 function paintMemoria() {
   const box = $("memLista");
   if (!MEMORIA.length) {
-    box.innerHTML = `<div class="note">Vacía todavía. El chat irá guardando decisiones y datos durables; también puedes añadir tú aquí.</div>`;
+    box.innerHTML = `<div class="note">Vacía todavía. Claude irá guardando decisiones y datos durables; también puedes añadir tú aquí.</div>`;
     return;
   }
   box.innerHTML = MEMORIA.map((m, i) => `<div class="mem-row" data-i="${i}"><span class="f">${(m.fecha || "").slice(5)}</span><span class="t"></span></div>`).join("");
@@ -637,7 +637,7 @@ async function cargarMemoria() {
 }
 
 /* memoria es una clave top-level y el POST la sustituye entera:
-   se refresca justo antes de escribir para no pisar lo que el chat haya guardado mientras */
+   se refresca justo antes de escribir para no pisar lo que Claude haya guardado mientras */
 async function mutarMemoria(fn) {
   const s = await api("/api/state");
   const arr = Array.isArray(s.memoria) ? s.memoria : [];

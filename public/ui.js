@@ -45,7 +45,6 @@
 
   const SECTIONS = [
     { href: "/", label: "Panel", icon: ic("panel", "◱") },
-    { href: "/chat.html", label: "Chat", icon: ic("chat", "✳") },
     { group: "Áreas" },
     { href: "/areas.html#tareas", label: "Tareas", icon: ic("tareas", "☑") },
     { href: "/areas.html#sueno", label: "Sueño", icon: ic("sueno", "☾") },
@@ -209,7 +208,7 @@
   function closeSb() { nav.classList.remove("open"); overlay.classList.remove("show"); }
   overlay.onclick = closeSb;
 
-  // burger: dentro de .top-bar si la página tiene una (chat); si no, barra superior propia.
+  // burger: dentro de .top-bar si la página tiene una; si no, barra superior propia.
   // Se monta en DOMContentLoaded porque ui.js se carga al PRINCIPIO del body
   // (así el sidebar existe antes de que se pinte el contenido y no hay salto).
   function initBurger() {

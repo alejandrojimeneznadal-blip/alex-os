@@ -6,11 +6,11 @@ Este documento está pensado para pasárselo a una sesión de Claude Code que te
 
 ## 1. Qué es
 
-Panel personal de vida en una sola app, **multiusuario**: cada cuenta tiene sus propios datos, chat y memoria, y un administrador gestiona las cuentas desde `/admin.html`. Registras tu día hablando con un chat (Claude) y el chat estructura y guarda los datos. El panel calcula un **score diario 0-100 con matemática fija** a partir de "hábitos" (internamente `senales`) y dibuja una **equity curve acumulada**. Tiene áreas de Sueño, Gym, Nutrición, Proyectos, Contenido, Tareas y Finanzas (esta última oculta en el sidebar).
+Panel personal de vida en una sola app, **multiusuario**: cada cuenta tiene sus propios datos y memoria, y un administrador gestiona las cuentas desde `/admin.html`. Registras tu día hablando con Claude, que se conecta por MCP y estructura y guarda los datos; el panel también deja marcarlo a mano. El panel calcula un **score diario 0-100 con matemática fija** a partir de "hábitos" (internamente `senales`) y dibuja una **equity curve acumulada**. Tiene áreas de Sueño, Gym, Nutrición, Proyectos, Contenido, Tareas y Finanzas (esta última oculta en el sidebar).
 
 Principios de diseño acordados, no negociables sin hablarlo:
 
-- **El chat es la entrada única.** Los módulos son vistas de lo que el chat guarda. Los formularios manuales son la excepción (chips clicables, checklist de hábitos).
+- **La entrada es conversacional, por MCP.** La app NO tiene chat propio desde el 9 oct 2026: se habla con ella desde Claude Code o cualquier cliente MCP. Los módulos son vistas de lo que se guarda; los formularios manuales (chips, checklist de hábitos, tracker de gym) son el camino alternativo, sobre todo en el móvil.
 - **El score lo calcula el servidor**, nunca la IA. Pesos por hábito, crédito parcial en los de horas (`min(valor/umbral, 1)`). Ver `computeScore` en `server.js`.
 - **Un JSONB por usuario** (`user_state.data`) con merge superficial por claves top-level. Nunca se machaca lo que no envías.
 - **Nunca testear escribiendo en el estado real del usuario.** Solo simulación en cliente o una BD de pruebas. Hubo una pérdida de datos por esto.
@@ -22,11 +22,10 @@ Principios de diseño acordados, no negociables sin hablarlo:
 Sin framework, sin build step. Node 20+.
 
 ```
-server.js        Express + pg + Anthropic SDK. Esquema, score, dashboard, chat con tools, API.
+server.js        Express + pg, sin dependencias de IA. Esquema, score, dashboard, servidor MCP, API.
 sync.js          Sync bancario (Airwallex / Mercury) portado de otra app. Opcional, Finanzas está oculta.
 public/
   index.html     Panel: saludo, KPIs, checklist de hábitos, charts score/acumulado.
-  chat.html      Chat con Claude (historial, imágenes adjuntas).
   areas.html     Todas las áreas (sueño, gym, nutrición, proyectos, contenido, tareas, finanzas). Navega por hash.
   config.html    Cuenta (nombre, contexto del asistente, contraseña), tema, integraciones bancarias, memoria.
   bienvenida.html Onboarding de cuentas nuevas (sin sidebar).
@@ -83,16 +82,13 @@ Abre `http://localhost:3200`, entra con `AUTH_USER` / `AUTH_PASS`. El esquema se
 | `AUTH_PASS` | Sí | Contraseña del primer admin (solo se usa en el bootstrap). También firma las sesiones si no hay `SESSION_SECRET`. |
 | `AUTH_USER` | No (default `alex`) | Usuario del primer admin (solo bootstrap). |
 | `SESSION_SECRET` | Recomendada | Firma de las cookies de sesión. Si falta se usa `AUTH_PASS`. |
-| `ANTHROPIC_API_KEY` | No | Sin ella la app funciona pero el chat está apagado. |
-| `MODEL` | No (default `claude-opus-5`) | Modelo del chat. |
-| `EFFORT` | No (default `low`) | `output_config.effort` del chat. `low` para respuestas rápidas. |
 | `PORT` | No (default `3200`) | Puerto. |
 | `OWNER_NAME` | No (default: `AUTH_USER` capitalizado) | Nombre del primer admin (solo bootstrap; luego se edita en Configuración → Cuenta). |
 | `OWNER_CONTEXT` | No | Contexto del primer admin para el asistente (solo bootstrap; luego se edita en Configuración → Cuenta). |
 | `YOUTUBE_API_KEY` | No | Métricas automáticas de vídeos YT en Contenido. |
 | `APIFY_TOKEN` | No | Métricas automáticas de reels de Instagram (actor `apify~instagram-scraper`). |
 
-Las credenciales bancarias (Airwallex, Mercury) **no** van en env: se pegan desde `/config.html` y viven en `data.integraciones` (en claro, sin cifrar). Nunca salen por `/api/state` ni las ve el chat.
+Las credenciales bancarias (Airwallex, Mercury) **no** van en env: se pegan desde `/config.html` y viven en `data.integraciones` (en claro, sin cifrar). Nunca salen por `/api/state` ni las ve ninguna IA.
 
 ### Usuarios y roles
 
@@ -100,7 +96,7 @@ Las credenciales bancarias (Airwallex, Mercury) **no** van en env: se pegan desd
 - **user**: solo su cuenta. Cambia su nombre, contexto y contraseña en Configuración → Cuenta.
 - Contraseñas con `scrypt`; sesión = cookie firmada `id.exp.hmac` que incluye `pw_version`, así cambiar la contraseña cierra las demás sesiones. Basic auth (`usuario:contraseña`) sigue valiendo para scripts.
 - No hay borrado de cuentas desde la UI, solo quitar acceso (los datos se conservan).
-- **MCP (conectar la cuenta a otras IAs)**: `POST /mcp` habla JSON-RPC 2.0 (Streamable HTTP, sin estado ni SSE) y se autentica con `Authorization: Bearer <token>`; el token decide de qué usuario son los datos, así que una IA externa nunca ve otra cuenta. Tokens en `mcp_tokens` guardados como SHA-256 (el claro se enseña una sola vez), máximo 10 por cuenta, revocables al instante; revocar o desactivar la cuenta corta el acceso en la siguiente petición. Expone las mismas herramientas que el chat interno (`TOOLS`, misma ejecución en `runTool`) más `get_dashboard`. Se gestiona en Configuración → Conectar con otras IAs. Clientes: Claude Code (`claude mcp add --transport http …  --header`), Claude Desktop vía `npx mcp-remote`. Para claude.ai haría falta OAuth, que no está implementado.
+- **MCP (conectar la cuenta a otras IAs)**: `POST /mcp` habla JSON-RPC 2.0 (Streamable HTTP, sin estado ni SSE) y se autentica con `Authorization: Bearer <token>`; el token decide de qué usuario son los datos, así que una IA externa nunca ve otra cuenta. Tokens en `mcp_tokens` guardados como SHA-256 (el claro se enseña una sola vez), máximo 10 por cuenta, revocables al instante; revocar o desactivar la cuenta corta el acceso en la siguiente petición. Expone `TOOLS` (`read_state`, `log_day`, `append_journal`, `add_item`, `set_value`, ejecutadas en `runTool`) más `get_dashboard`, `get_gym` (rutina del día + lo apuntado + la última vez que hizo cada ejercicio, con fecha) y `log_gym` (apunta las series de un ejercicio poniendo solo el día correcto, validando el nombre contra la rutina y marcando el hábito de entreno). Las `instructions` del `initialize` son el manual completo del estado que antes vivía en el prompt del chat, más sus hábitos reales y su memoria durable: `instruccionesMcp()`. Se gestiona en Configuración → Conectar con otras IAs. Clientes: Claude Code (`claude mcp add --transport http …  --header`), Claude Desktop vía `npx mcp-remote`. Para claude.ai haría falta OAuth, que no está implementado.
 - **Widgets del iPhone**: `public/widget-ios.js` es una plantilla para la app Scriptable. Configuración → Widgets del móvil crea un token con `scope = 'widget'` (prefijo `oswgt_`, misma tabla `mcp_tokens`) y rellena la plantilla con la URL y el token. Ese token solo abre `GET /api/widget` (el servidor MCP lo rechaza). El contenido editable vive en `data.widget` (`ancla`, `frases`, `horario`, `fechas`), normalizado en `normalizarWidget`; la frase rota cada 2 h con `fraseDeFranja` y el bloque "ahora" lo calcula el móvil con su hora local.
 - **Bienvenida (onboarding)**: `users.onboarded`. Una cuenta nueva (creada desde `/admin.html`) entra por `/bienvenida.html` la primera vez: nombre → contexto para el asistente → hábitos y puntos (activar, renombrar, añadir, «Repartir a 100», umbral de horas y objetivo kcal) → tema → resumen. Guarda con `/api/me/profile`, `/api/state` (`config.senales`, `config_nutricion`) y `/api/me/onboarded`. «Saltar por ahora» la marca hecha; se repite desde Configuración → Cuenta → Repetir bienvenida (o el admin con `onboarded:false` en `/api/admin/users/:id`). `ui.js` redirige si `onboarded === false`, nunca cuando un admin está viendo otra cuenta.
 - **Grupos (workspaces)**: etiqueta opcional por cuenta (Amigos, una empresa…) para agrupar en `/admin.html` y, en el futuro, clasificaciones o defaults por grupo. No aíslan datos (ya van por usuario). Tabla `workspaces (id, nombre, created)` + `users.workspace_id`. Borrar un grupo deja a sus cuentas sin grupo.
@@ -125,7 +121,7 @@ Detalles del prompt que son opinables y puedes ajustar si no encajan:
 
 `server.js`, `DEFAULT_CONFIG` (~línea 34). Siete señales que suman 100: contenido 25, deep_work 20 (umbral 4h), entreno 15, sueno 15 (umbral 7h), despertar 10, nutricion 10 (derivada de kcal), no_movil 5. Tipos: `bool`, `horas`, `kcal`.
 
-Se siembran solo la primera vez que la BD está vacía. Después la BD manda y se editan desde el panel (menú ⋯ de hábitos) o por chat. Cambia los defaults antes del primer arranque o edítalos luego desde la UI.
+Se siembran solo la primera vez que la BD está vacía. Después la BD manda y se editan desde el panel (menú ⋯ de hábitos) o pidiéndoselo a Claude. Cambia los defaults antes del primer arranque o edítalos luego desde la UI.
 
 `nutricion` es **derivada**: el servidor la calcula como `days[fecha].kcal >= config_nutricion.kcal_obj`. Si la persona no quiere trackear calorías, quita esa señal y reparte su peso.
 
@@ -152,7 +148,7 @@ Tablas, todas creadas por `initSchema` (esquema aditivo, sin migraciones):
 - `workspaces (id, nombre, created)`: grupos de cuentas.
 - `mcp_tokens (id, user_id, nombre, token_hash, prefijo, created, last_used)`: tokens de acceso MCP.
 - `user_state (user_id, data JSONB, updated_at)`: **todo el estado de un usuario** en una fila.
-- `chat_images (id, mime, data base64, created, user_id)`: imágenes adjuntas al chat, fuera del JSONB para no engordar cada escritura.
+- `chat_images (id, mime, data base64, created, user_id)`: legado del chat retirado. La tabla y sus filas se conservan, pero ya no se escribe ni se lee.
 - `app_files (id, nombre, mime, data base64, size, created, user_id)`: archivos de proyectos y subproyectos.
 - `app_state (id=1, data)`: legado de la versión mono-usuario. En el primer arranque multiusuario su contenido se copia al admin y la tabla se conserva como copia.
 
@@ -174,7 +170,7 @@ Claves top-level de `data` (las describe en detalle el `SYSTEM_PROMPT`):
 | `config_nutricion` | `{ kcal_obj }` |
 | `finanzas`, `cuentas`, `suscripciones`, `config_finanzas` | área Finanzas (oculta) |
 | `integraciones` | secretos bancarios, nunca salen por la API de estado |
-| `chats` | historial de conversaciones, no sale por `/api/state` |
+| `chats` | legado del chat retirado; se conserva pero no se usa, y nunca sale por `/api/state` |
 
 `readData()` pasa siempre por `normalizar()` (deriva nutrición, `done` de subs, `hecha` de tareas, dedup de ids). Los campos derivados (`hecha`, `done`, `senales.nutricion`) **no se escriben a mano**: se cambia el estado que los origina.
 

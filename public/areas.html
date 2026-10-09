@@ -1170,7 +1170,7 @@ async function registrarKcal() {
   const hoy = isoLocal(new Date());
   const r = await OSUI.form({
     titulo: "Registrar calorías",
-    texto: "A grosso modo: el total del día. También vale decirle al chat «hoy he comido unas 2.800 kcal».",
+    texto: "A grosso modo: el total del día. También vale decirle a Claude «hoy he comido unas 2.800 kcal».",
     campos: [
       { id: "fecha", label: "Día", tipo: "date", valor: hoy },
       { id: "kcal", label: "Calorías del día", tipo: "number", valor: kcalDe(hoy) ?? "", placeholder: "2800" },
@@ -1435,7 +1435,7 @@ function galeriaProyectos() {
     <button class="btn-mini primary" onclick="abrirNuevoProyecto()">${OSIcons.nueva} Nuevo proyecto</button>
   </div>`;
   if (!ps.length) {
-    return barra + `<div class="card"><h2>Proyectos</h2><div class="empty-note">Sin proyectos. Créalo con el botón o dile al chat «nuevo proyecto: Taller Claude Code, periódico, con subproyectos landing y VSL».</div></div>`;
+    return barra + `<div class="card"><h2>Proyectos</h2><div class="empty-note">Sin proyectos. Créalo con el botón o dile a Claude «nuevo proyecto: Taller Claude Code, periódico, con subproyectos landing y VSL».</div></div>`;
   }
   const cards = ps.map((p) => {
     const subs = Array.isArray(p.subs) ? p.subs : [];
@@ -1472,7 +1472,7 @@ function paginaProyecto(p) {
   </div>`;
 
   const nextB = `<div class="next-banner" onclick="editarSiguiente(${idx})" title="Toca para editarlo">
-    ${p.siguiente ? `Siguiente: <b>${esc(p.siguiente)}</b>` : `<span style="color:var(--ink-3)">Sin siguiente paso definido — toca aquí o díselo al chat.</span>`}
+    ${p.siguiente ? `Siguiente: <b>${esc(p.siguiente)}</b>` : `<span style="color:var(--ink-3)">Sin siguiente paso definido — toca aquí o díselo a Claude.</span>`}
   </div>`;
 
   const subsHtml = subs.map((sub, i) => {
@@ -1859,7 +1859,7 @@ function renderSubPanel() {
   $("sbEstado").onchange = () => {
     const v = $("sbEstado").value;
     sub.estado = v;
-    sub.done = v === "hecho"; // compat: galería, contadores y chat siguen leyendo done
+    sub.done = v === "hecho"; // compat: galería y contadores siguen leyendo done
     if (v === "hecho") sub.fecha = sub.fecha || isoLocal(new Date());
     else delete sub.fecha;
     p.updated = isoLocal(new Date());
@@ -2189,7 +2189,7 @@ function vistaPiezas() {
       <span class="f">${fechaPub(c).slice(5).replace("-", "/")}</span>
     </div>`;
   }).join("")
-    : `<div class="empty-note">Nada aquí. «Publiqué un reel sobre X» o «idea: …» al chat y aparece.</div>`;
+    : `<div class="empty-note">Nada aquí. «Publiqué un reel sobre X» o «idea: …» a Claude y aparece.</div>`;
 
   return kpis + `<div class="card">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px">
@@ -2723,7 +2723,7 @@ function gymTracker() {
   }).join("");
 
   /* apuntado ese día pero fuera de la rutina: recuperaciones, cambios sobre la marcha
-     o nombres que escribió el chat. Sin esto existía en la BD y no se veía en ningún sitio. */
+     o nombres que escribió la IA. Sin esto existía en la BD y no se veía en ningún sitio. */
   const enRutina = new Set(dia.ejercicios.map((e) => e.nombre));
   const sueltos = Object.keys(ent).filter((n) => !enRutina.has(n) && conDatos(ent[n]));
   const fuera = !sueltos.length ? "" : `<div class="fuera-head"><span class="t">Fuera de la rutina</span><span class="d">apuntado este día pero no está en ${esc(dia.titulo || "la rutina")}</span></div>` +
@@ -2970,7 +2970,7 @@ const VIEWS = {
         + grupo("Sin fecha", sinFecha)
         + grupo("En espera", enEspera)
         + grupo("Falta revisión", faltaRev)
-      : `<div class="empty-note">Nada pendiente. Añade una tarea aquí o dile al chat «apunta que tengo que…».</div>`;
+      : `<div class="empty-note">Nada pendiente. Añade una tarea aquí o dile a Claude «apunta que tengo que…».</div>`;
 
     // reglas de recordatorio (activas primero; las caducadas se quedan abajo apagadas)
     const recAct = recs.filter((r) => !r.hasta || r.hasta >= hoy);
@@ -3048,7 +3048,7 @@ const VIEWS = {
     </div>`;
     const chart = con30.length
       ? `<div class="card">${chartHead}<div class="sub">${okN} de ${con30.length} registradas llegan a ${umbral}h</div><div class="chart-bars">${barsSueno(d30, umbral)}</div></div>`
-      : `<div class="card">${chartHead}<div class="empty-note">Sin noches registradas. Registra aquí a qué hora te acuestas y te levantas, o dile al chat «dormí 7 horas».</div></div>`;
+      : `<div class="card">${chartHead}<div class="empty-note">Sin noches registradas. Registra aquí a qué hora te acuestas y te levantas, o dile a Claude «dormí 7 horas».</div></div>`;
 
     const rutinas = `<div class="card"><h2>Rutinas de la noche</h2>
       ${rutRow("Despertar 6:00", "despertar")}
@@ -3099,7 +3099,7 @@ const VIEWS = {
       <button class="btn-mini" onclick="registrarPeso()">${OSIcons.nueva} Pesaje</button>
     </div>`;
     const pesoCard = pesos.length
-      ? `<div class="card">${pesoHead}<div class="sub">${pesos.length} pesajes · aquí o al chat: «peso 68.2»</div><div class="chart-bars">${lineaPeso(pesos.slice(-40))}</div></div>`
+      ? `<div class="card">${pesoHead}<div class="sub">${pesos.length} pesajes · aquí o a Claude: «peso 68.2»</div><div class="chart-bars">${lineaPeso(pesos.slice(-40))}</div></div>`
       : `<div class="card">${pesoHead}<div class="empty-note">Sin pesajes. Registra el primero aquí o dile al chat «peso 68.2».</div></div>`;
 
     return kpis + cal + pesoCard + journalCard("gym");

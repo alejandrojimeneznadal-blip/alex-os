@@ -338,7 +338,7 @@
       </div>
     </div>
     <div class="senales" id="senales"></div>
-    <div class="senales-hint">Toca un hábito para marcarlo a mano · lo normal es contárselo al <a href="/chat.html">chat</a></div>
+    <div class="senales-hint">Toca un hábito para marcarlo · o cuéntale el día a Claude y lo registra por ti</div>
   </div>
 
   <div class="card">
@@ -1123,7 +1123,7 @@ function renderScoreChart() {
 
   $("subScore").textContent = logged
     ? `${logged} ${logged === 1 ? "día registrado" : "días registrados"} de ${serie.length}`
-    : "Sin días registrados todavía — cuéntale tu día al chat";
+    : "Sin días registrados todavía — márcalos aquí o cuéntale el día a Claude";
 
   makeChart($("chartScore"), serie.map((p) => ({ fecha: p.fecha, y: p.score, resumen: p.resumen })), {
     color: "var(--serie-1)",
@@ -1179,7 +1179,7 @@ function renderJournal(journal) {
   const box = $("journal");
   const last = journal.slice(-8).reverse();
   if (!last.length) {
-    box.innerHTML = `<div class="empty-note">Aquí saldrán los apuntes que el chat vaya guardando de lo que le cuentes.</div>`;
+    box.innerHTML = `<div class="empty-note">Aquí saldrán los apuntes que Claude vaya guardando de lo que le cuentes.</div>`;
     return;
   }
   box.innerHTML = "";
