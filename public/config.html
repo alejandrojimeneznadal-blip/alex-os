@@ -101,6 +101,9 @@
   .tema .prev { height: 46px; border-radius: 8px; position: relative; overflow: hidden; border: 1px solid rgba(128,128,128,0.18); }
   .tema .prev .pcard { position: absolute; left: 9px; top: 9px; right: 9px; bottom: -8px; border-radius: 6px; }
   .tema .prev .pdot { position: absolute; left: 16px; top: 16px; width: 18px; height: 5px; border-radius: 3px; }
+  .admin-link { margin-top: 14px; font-size: 12px; }
+  .admin-link a { color: var(--ink-3); text-decoration: none; }
+  .admin-link a:hover { color: var(--ink); text-decoration: underline; }
 </style>
 </head>
 <body>
@@ -123,6 +126,7 @@
       <button id="accOnb" title="Vuelve a pasar por la configuración inicial: nombre, contexto, hábitos y tema">Repetir bienvenida</button>
     </div>
     <div class="msg" id="accMsg"></div>
+    <div class="admin-link" id="accAdmin" hidden><a href="/admin.html">Usuarios y grupos (solo admin)</a></div>
   </div>
 
   <div class="card">
@@ -335,6 +339,7 @@ function paintCuenta(me) {
   $("accNombre").value = me.user.display_name || "";
   $("accCtx").value = me.user.context || "";
   $("accPass").disabled = !!me.viewing_as;
+  $("accAdmin").hidden = !me.is_admin;
   $("accPass").title = me.viewing_as ? "Estás viendo otra cuenta: su contraseña se cambia desde Usuarios" : "";
 }
 if (window.OSMe) OSMe.onChange(paintCuenta);

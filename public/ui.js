@@ -43,20 +43,12 @@
   const ic = (k, fb) => I[k] || `<span>${fb}</span>`;
   const esc = (t) => String(t ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
+  // 11 oct 2026: el panel es personal. Las áreas salen de la barra hasta decidir cuáles entran
+  // en la etapa Instagram → Skool (las páginas siguen vivas por URL: /areas.html#gym, #tareas…).
+  // Configuración es el engranaje del pie; Usuarios (/admin.html) ya no se enlaza desde aquí.
+  // Para añadir un área: { href: "/areas.html#gym", label: "Gym", icon: ic("gym", "⚓") }.
   const SECTIONS = [
     { href: "/", label: "Panel", icon: ic("panel", "◱") },
-    { group: "Áreas" },
-    { href: "/areas.html#tareas", label: "Tareas", icon: ic("tareas", "☑") },
-    { href: "/areas.html#sueno", label: "Sueño", icon: ic("sueno", "☾") },
-    { href: "/areas.html#gym", label: "Gym", icon: ic("gym", "⚓") },
-    { href: "/areas.html#nutricion", label: "Nutrición", icon: ic("nutricion", "◇") },
-    { href: "/areas.html#proyectos", label: "Proyectos", icon: ic("proyectos", "▣") },
-    { href: "/areas.html#contenido", label: "Contenido", icon: ic("contenido", "▶") },
-    // Finanzas oculta por ahora (28 ago 2026, decisión de Alex) — para reactivarla, descomenta:
-    // { href: "/areas.html#finanzas", label: "Finanzas", icon: ic("finanzas", "€") },
-    { group: "Sistema" },
-    { href: "/config.html", label: "Configuración", icon: ic("config", "⚙") },
-    { href: "/admin.html", label: "Usuarios", icon: ic("users", "👥"), admin: true },
   ];
 
   const css = `
@@ -90,8 +82,6 @@
       display: flex; align-items: center; justify-content: center;
     }
     #sidebar .sb-brand small { color: var(--ink-3); font-weight: 500; }
-    #sidebar a.sb-item.admin-only { display: none; }
-    #sidebar.is-admin a.sb-item.admin-only { display: flex; }
     /* banner: admin viendo otra cuenta */
     #os-viewas {
       display: none; position: fixed; left: 50%; bottom: calc(14px + env(safe-area-inset-bottom)); transform: translateX(-50%);
@@ -128,10 +118,20 @@
       background: var(--accent); border-radius: 0 4px 4px 0;
     }
     #sidebar a.sb-item.active .ic { color: var(--accent); }
-    #sidebar .sb-foot { margin-top: auto; padding-top: 14px; border-top: 1px solid var(--hairline); }
+    #sidebar .sb-foot {
+      margin-top: auto; padding-top: 12px; border-top: 1px solid var(--hairline);
+      display: flex; align-items: center; justify-content: space-between; gap: 6px;
+    }
+    #sidebar a.sb-gear {
+      display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+      width: 34px; height: 34px; border-radius: 10px; color: var(--ink-3); text-decoration: none;
+    }
+    #sidebar a.sb-gear .tic { width: 18px; height: 18px; }
+    #sidebar a.sb-gear:hover { color: var(--ink); background: var(--surface-2); }
+    #sidebar a.sb-gear.active { color: var(--accent); background: var(--sb-active); }
     #sidebar .sb-logout {
-      display: block; width: 100%; background: transparent; border: none; color: var(--ink-3);
-      font-family: inherit; font-size: 12.5px; text-align: left; padding: 8px 11px;
+      display: inline-flex; align-items: center; background: transparent; border: none; color: var(--ink-3);
+      font-family: inherit; font-size: 12.5px; text-align: left; padding: 8px 10px;
       border-radius: 10px; cursor: pointer; font-weight: 500;
     }
     #sidebar .sb-logout:hover { color: var(--bad); background: var(--bad-bg); }
@@ -173,7 +173,7 @@
       ? `<div class="sb-group">${s.group}</div>`
       : `<a class="sb-item${s.admin ? " admin-only" : ""}" href="${s.href}"><span class="ic">${s.icon}</span>${s.label}</a>`
     ).join("") +
-    `<div class="sb-foot"><button class="sb-logout" id="sbLogout">${ic("salir", "←")} Salir</button></div>`;
+    `<div class="sb-foot"><a class="sb-gear" href="/config.html" title="Configuración" aria-label="Configuración">${ic("config", "⚙")}</a><button class="sb-logout" id="sbLogout">${ic("salir", "←")} Salir</button></div>`;
   document.body.appendChild(nav);
 
   const viewas = document.createElement("div");
@@ -258,6 +258,7 @@
       if (!best && location.pathname === "/index.html") best = nav.querySelector('a[href="/"]');
     }
     if (best) best.classList.add("active");
+    nav.querySelector("a.sb-gear").classList.toggle("active", location.pathname === "/config.html");
   }
   window.addEventListener("hashchange", () => { setActive(); closeSb(); });
   setActive();
