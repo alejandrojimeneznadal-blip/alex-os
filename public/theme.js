@@ -4,7 +4,7 @@
    El tema por defecto (claro) vive en el :root de cada página; aquí van
    los tokens NUEVOS compartidos y las overrides de los otros 3 temas. */
 (function () {
-  const METAS = { claro: "#fcfcfd", crema: "#f3ede2", azul: "#0d1830", negro: "#0e0e12" };
+  const METAS = { claro: "#f6f7f9", crema: "#f3ede2", azul: "#0d1830", negro: "#0e0e12" };
 
   const css = `
   /* sin zoom por doble toque (el pellizco lo bloquea el meta viewport) */
@@ -14,7 +14,7 @@
     .wrap { padding-left: 12px; padding-right: 12px; padding-top: 14px; }
     .page-title { font-size: 21px; margin-bottom: 10px; }
     .greet h1 { font-size: 22px; }
-    .card { padding: 16px 0 6px; margin-bottom: 8px; }
+    .card { padding: 14px; margin-bottom: 12px; border-radius: 10px; }
     .kpis { gap: 8px; }
     .kpi { padding: 0; }
     .kpi .num { font-size: 20px; }
@@ -28,7 +28,7 @@
   input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   /* ---- Tinta (11 oct 2026): la esencia de Stripe en un solo color. Tema claro por defecto. ---- */
   :root {
-    --bg: #fcfcfd; --surface: #ffffff; --surface-2: #f3f4f6; --border: #e6e7ea; --grid: #eceef1;
+    --bg: #f6f7f9; --surface: #ffffff; --surface-2: #f3f4f6; --border: #e3e5e9; --grid: #eceef1;
     --ink: #111318; --ink-2: #2a2d34; --ink-3: #6b7080;
     --accent: #111318; --accent-2: #2a2d34; --accent-soft: #ececef;
     --serie-1: #111318; --serie-2: #0f6e3d;
@@ -43,12 +43,12 @@
   html, body { font-family: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 14px; }
   .page-title, .greet h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.01em; }
   .greet, .page-title { padding-bottom: 14px; border-bottom: 1px solid var(--border); margin-bottom: 20px; }
-  /* bloques: sin caja, un filete arriba y aire; login y bienvenida mantienen su caja centrada */
-  .card { background: transparent; border: 0; border-top: 1px solid var(--border); border-radius: 0; padding: 20px 0 8px; margin-bottom: 10px; box-shadow: none; }
+  /* bloques: cada apartado es una hoja con borde fino sobre el lienzo gris (distinción sin sombras) */
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 18px 20px; margin-bottom: 16px; box-shadow: none; }
   .card h2 { font-size: 15px; font-weight: 600; }
   .box .card { border: 1px solid var(--border); border-radius: 10px; padding: 26px 24px; }
   /* KPIs: etiqueta arriba, cifra fina debajo, sin cajas ni iconos de color */
-  .kpis { gap: 16px 28px; margin-bottom: 22px; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+  .kpis { gap: 16px 28px; margin-bottom: 26px; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
   .kpi { background: transparent; border: 0; box-shadow: none; padding: 0; gap: 3px; flex-direction: column-reverse; justify-content: flex-end; }
   .kpi .num { font-size: 22px; font-weight: 400; letter-spacing: -0.01em; }
   .kpi .num small { font-size: 13px; }
@@ -58,10 +58,11 @@
   .curva-datos .v { font-weight: 500; }
   .pill { border-radius: 4px; font-weight: 500; padding: 2px 6px; font-size: 12px; vertical-align: 2px; }
   .mini-btn, .btn-mini, .btn, .btns button, .modal-card .btns button, .toggles button { border-radius: 6px; border: 1px solid var(--border-strong); background: var(--surface); color: var(--ink-2); font-weight: 500; box-shadow: 0 1px 1px rgba(17,19,24,0.04); }
-  .mini-btn.primary, .btn-mini.primary, .btn.primary, button.primary, .btns button.primary, .modal-card .btns button.primary { background: var(--ink); color: #fff; border-color: var(--ink); font-weight: 500; }
-  .toggles button.active { background: var(--ink); color: #fff; border-color: var(--ink); }
-  .tooltip { background: var(--ink); color: #d9dbe0; border-radius: 6px; box-shadow: none; }
-  .tooltip b { color: #fff; }
+  /* primarios: tinta sobre la hoja → en los temas oscuros la tinta es clara y el texto oscuro */
+  .mini-btn.primary, .btn-mini.primary, .btn.primary, button.primary, .btns button.primary, .modal-card .btns button.primary { background: var(--ink); color: var(--surface); border-color: var(--ink); font-weight: 500; }
+  .toggles button.active { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+  .tooltip { background: var(--ink); color: var(--surface); opacity: 0.96; border-radius: 6px; box-shadow: none; }
+  .tooltip b { color: var(--surface); }
   .modal-card { border-radius: 12px; border: 1px solid var(--border); box-shadow: 0 12px 32px rgba(17,19,24,0.12); }
   .modal-card input, .modal-card select { border-radius: 6px; }
   .sec-menu { border-radius: 8px; box-shadow: 0 8px 24px rgba(17,19,24,0.10); }

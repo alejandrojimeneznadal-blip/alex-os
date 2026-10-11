@@ -327,7 +327,7 @@
       border-radius: 6px; padding: 8px 15px; font-size: 13.5px; font-weight: 500; cursor: pointer; font-family: inherit;
     }
     .osui-btns button:hover { color: var(--ink); border-color: var(--ink-3); }
-    .osui-btns button.primary { background: var(--ink); color: #fff; border-color: var(--ink); font-weight: 500; }
+    .osui-btns button.primary { background: var(--ink); color: var(--surface); border-color: var(--ink); font-weight: 500; }
     .osui-btns button.danger { background: var(--bad); color: #fff; border-color: var(--bad); font-weight: 600; }
     .osui-btns button.danger-ghost { color: var(--bad); border-color: transparent; background: transparent; padding-left: 4px; }
     .osui-btns button.danger-ghost:hover { color: var(--bad); border-color: var(--bad); }
