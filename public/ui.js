@@ -72,13 +72,13 @@
     }
     #sidebar .sb-brand {
       display: flex; align-items: center; gap: 10px;
-      font-size: 16px; font-weight: 750; letter-spacing: -0.01em; color: var(--ink);
-      padding: 2px 8px 20px;
+      font-size: 14px; font-weight: 600; letter-spacing: -0.01em; color: var(--ink);
+      padding: 2px 8px 18px;
     }
     #sidebar .sb-brand .logo {
-      width: 34px; height: 34px; border-radius: 11px; flex-shrink: 0;
-      background: linear-gradient(135deg, var(--accent-2), var(--accent));
-      color: #fff; font-size: 16px; font-weight: 800;
+      width: 28px; height: 28px; border-radius: 6px; flex-shrink: 0;
+      background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--border);
+      color: var(--ink); font-size: 12px; font-weight: 600;
       display: flex; align-items: center; justify-content: center;
     }
     #sidebar .sb-brand small { color: var(--ink-3); font-weight: 500; }
@@ -98,48 +98,44 @@
     }
     @media (min-width: 901px) { #os-viewas { left: calc(var(--sbw) + (100vw - var(--sbw)) / 2); } }
     #sidebar .sb-group {
-      font-size: 10.5px; color: var(--ink-3); text-transform: uppercase;
-      letter-spacing: 0.09em; padding: 16px 10px 7px; font-weight: 600;
+      font-size: 12px; color: var(--ink-3);
+      padding: 16px 8px 6px; font-weight: 500;
     }
     #sidebar a.sb-item {
       position: relative;
       display: flex; align-items: center; gap: 11px;
-      color: var(--ink-2); text-decoration: none; font-size: 13.5px; font-weight: 500;
-      padding: 9px 11px; border-radius: 10px; margin-bottom: 2px;
+      color: var(--ink-2); text-decoration: none; font-size: 14px; font-weight: 500;
+      padding: 7px 8px; border-radius: 6px; margin-bottom: 1px;
     }
     #sidebar a.sb-item .ic { width: 17px; height: 17px; display: inline-flex; align-items: center; justify-content: center; color: var(--ink-3); flex-shrink: 0; }
     .tic { width: 100%; height: 100%; }
     #sidebar a.sb-item .ic .tic, #sb-burger .tic { width: 17px; height: 17px; }
     .sb-logout .tic { width: 14px; height: 14px; vertical-align: -2px; margin-right: 7px; }
     #sidebar a.sb-item:hover { color: var(--ink); background: var(--surface-2); }
-    #sidebar a.sb-item.active { color: var(--ink); background: var(--sb-active); font-weight: 650; }
-    #sidebar a.sb-item.active::before {
-      content: ""; position: absolute; left: -14px; top: 8px; bottom: 8px; width: 3.5px;
-      background: var(--accent); border-radius: 0 4px 4px 0;
-    }
-    #sidebar a.sb-item.active .ic { color: var(--accent); }
+    #sidebar a.sb-item.active { color: var(--ink); background: transparent; font-weight: 600; }
+    #sidebar a.sb-item.active .ic { color: var(--ink); }
     #sidebar .sb-foot {
       margin-top: auto; padding-top: 12px; border-top: 1px solid var(--hairline);
       display: flex; align-items: center; justify-content: space-between; gap: 6px;
     }
     #sidebar a.sb-gear {
       display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
-      width: 34px; height: 34px; border-radius: 10px; color: var(--ink-3); text-decoration: none;
+      width: 32px; height: 32px; border-radius: 6px; color: var(--ink-3); text-decoration: none;
     }
     #sidebar a.sb-gear .tic { width: 18px; height: 18px; }
     #sidebar a.sb-gear:hover { color: var(--ink); background: var(--surface-2); }
     #sidebar a.sb-gear.active { color: var(--accent); background: var(--sb-active); }
     #sidebar .sb-logout {
       display: inline-flex; align-items: center; background: transparent; border: none; color: var(--ink-3);
-      font-family: inherit; font-size: 12.5px; text-align: left; padding: 8px 10px;
-      border-radius: 10px; cursor: pointer; font-weight: 500;
+      font-family: inherit; font-size: 12.5px; text-align: left; padding: 7px 9px;
+      border-radius: 6px; cursor: pointer; font-weight: 500;
     }
     #sidebar .sb-logout:hover { color: var(--bad); background: var(--bad-bg); }
     html { padding-left: var(--sbw); }
     #sb-overlay { display: none; }
     #sb-burger {
       display: none; background: var(--surface); border: 1px solid var(--border);
-      color: var(--ink-2); height: 34px; min-width: 34px; border-radius: 10px; cursor: pointer;
+      color: var(--ink-2); height: 34px; min-width: 34px; border-radius: 6px; cursor: pointer;
       font-size: 15px; align-items: center; justify-content: center; font-family: inherit; flex-shrink: 0;
     }
     #sb-burger:hover { color: var(--ink); }
@@ -148,7 +144,7 @@
       padding: 12px 16px; padding-top: max(12px, env(safe-area-inset-top));
       background: var(--surface); border-bottom: 1px solid var(--border);
     }
-    .sb-topbar .t { font-size: 14px; font-weight: 750; color: var(--ink); }
+    .sb-topbar .t { font-size: 14px; font-weight: 600; color: var(--ink); }
     .sb-topbar .t small { color: var(--ink-3); font-weight: 500; }
     @media (max-width: 900px) {
       html { padding-left: 0; }
@@ -282,7 +278,7 @@
     .osel > select { display: none !important; }
     .osel-btn {
       width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px;
-      background: var(--bg); border: 1px solid var(--border); border-radius: 10px;
+      background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
       color: var(--ink); font-family: inherit; font-size: 14px; padding: 9px 11px; cursor: pointer; text-align: left;
     }
     .osel-btn:focus { outline: none; border-color: var(--accent); }
@@ -291,8 +287,8 @@
     .osel.open .osel-btn .tic { transform: rotate(180deg); }
     .osel-menu {
       position: absolute; left: 0; right: 0; top: calc(100% + 5px); z-index: 320;
-      background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
-      box-shadow: 0 10px 30px rgba(23,23,40,0.16); padding: 5px; max-height: 240px; overflow: auto;
+      background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+      box-shadow: 0 8px 24px rgba(17,19,24,0.10); padding: 5px; max-height: 240px; overflow: auto;
     }
     .osel-menu button {
       display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 8px;
@@ -308,30 +304,30 @@
       display: flex; align-items: center; justify-content: center; padding: 20px;
     }
     .osui-card {
-      background: var(--surface); border-radius: 18px; padding: 20px; width: 100%; max-width: 340px;
-      box-shadow: 0 20px 60px rgba(23,23,40,0.25);
+      background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px; width: 100%; max-width: 340px;
+      box-shadow: 0 12px 32px rgba(17,19,24,0.12);
       font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
     }
     .osui-card h3 { font-size: 15px; font-weight: 650; letter-spacing: -0.01em; color: var(--ink); }
     .osui-card .txt { font-size: 13px; color: var(--ink-3); margin-top: 6px; line-height: 1.5; }
     .osui-card label { display: block; font-size: 11px; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.07em; margin: 13px 0 5px 2px; }
     .osui-card select {
-      width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 10px;
+      width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
       color: var(--ink); font-family: inherit; font-size: 14px; padding: 9px 11px;
     }
     .osui-card input {
-      width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 10px;
+      width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
       color: var(--ink); font-family: inherit; font-size: 14px; padding: 9px 11px;
     }
     .osui-card input:focus { outline: none; border-color: var(--accent); }
     .osui-card input::placeholder { color: var(--placeholder); }
     .osui-btns { display: flex; gap: 8px; margin-top: 18px; justify-content: flex-end; }
     .osui-btns button {
-      background: var(--surface); border: 1px solid var(--border); color: var(--ink-2);
-      border-radius: 10px; padding: 8px 15px; font-size: 13.5px; font-weight: 500; cursor: pointer; font-family: inherit;
+      background: var(--surface); border: 1px solid var(--border-strong); color: var(--ink-2);
+      border-radius: 6px; padding: 8px 15px; font-size: 13.5px; font-weight: 500; cursor: pointer; font-family: inherit;
     }
-    .osui-btns button:hover { color: var(--ink); border-color: var(--border-strong); }
-    .osui-btns button.primary { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 600; }
+    .osui-btns button:hover { color: var(--ink); border-color: var(--ink-3); }
+    .osui-btns button.primary { background: var(--ink); color: #fff; border-color: var(--ink); font-weight: 500; }
     .osui-btns button.danger { background: var(--bad); color: #fff; border-color: var(--bad); font-weight: 600; }
     .osui-btns button.danger-ghost { color: var(--bad); border-color: transparent; background: transparent; padding-left: 4px; }
     .osui-btns button.danger-ghost:hover { color: var(--bad); border-color: var(--bad); }

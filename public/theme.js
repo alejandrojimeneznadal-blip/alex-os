@@ -4,7 +4,7 @@
    El tema por defecto (claro) vive en el :root de cada página; aquí van
    los tokens NUEVOS compartidos y las overrides de los otros 3 temas. */
 (function () {
-  const METAS = { claro: "#f3f3f5", crema: "#f3ede2", azul: "#0d1830", negro: "#0e0e12" };
+  const METAS = { claro: "#fcfcfd", crema: "#f3ede2", azul: "#0d1830", negro: "#0e0e12" };
 
   const css = `
   /* sin zoom por doble toque (el pellizco lo bloquea el meta viewport) */
@@ -14,10 +14,10 @@
     .wrap { padding-left: 12px; padding-right: 12px; padding-top: 14px; }
     .page-title { font-size: 21px; margin-bottom: 10px; }
     .greet h1 { font-size: 22px; }
-    .card { padding: 14px; margin-bottom: 12px; border-radius: 15px; }
+    .card { padding: 16px 0 6px; margin-bottom: 8px; }
     .kpis { gap: 8px; }
-    .kpi { padding: 12px 13px; }
-    .kpi .num { font-size: 21px; }
+    .kpi { padding: 0; }
+    .kpi .num { font-size: 20px; }
     .mini-kpis { gap: 8px; }
     .mkpi { padding: 11px 12px; }
     .mkpi .n { font-size: 19px; }
@@ -26,22 +26,46 @@
   input[type="number"]::-webkit-outer-spin-button,
   input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
   input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
+  /* ---- Tinta (11 oct 2026): la esencia de Stripe en un solo color. Tema claro por defecto. ---- */
   :root {
-    --serie-1: #5546e8;
-    --serie-2: #1baf7a;
-    --grid: #e8e8ee;
-    --accent-2: #8a7bf5;
-    --accent-soft: #eeecfd;
-    --hairline: #f1f1f4;
-    --border-strong: #cfcfd8;
-    --mark-border: #d3d3db;
-    --placeholder: #b3b3bb;
-    --ok: #17a171;
-    --sb-active: #f1f1f5;
-    --warn: #9a6700;
-    --warn-bg: #fdf3dc;
-    --warn-border: #f3e3b8;
+    --bg: #fcfcfd; --surface: #ffffff; --surface-2: #f3f4f6; --border: #e6e7ea; --grid: #eceef1;
+    --ink: #111318; --ink-2: #2a2d34; --ink-3: #6b7080;
+    --accent: #111318; --accent-2: #2a2d34; --accent-soft: #ececef;
+    --serie-1: #111318; --serie-2: #0f6e3d;
+    --good: #0f6e3d; --good-bg: #dcf5e7; --bad: #b3261e; --bad-bg: #fbe9e7;
+    --hairline: #eeeff2; --border-strong: #d3d5da; --mark-border: #c9cbd1; --placeholder: #a6aab4;
+    --ok: #111318; --sb-active: transparent;
+    --warn: #8a5a00; --warn-bg: #fbf1d6; --warn-border: #eedfae;
+    --radius: 8px; --shadow: none;
   }
+  @font-face { font-family: 'Inter'; font-style: normal; font-weight: 400 700; font-display: swap; src: url(/fonts/inter-latin-ext.woff2) format('woff2'); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+  @font-face { font-family: 'Inter'; font-style: normal; font-weight: 400 700; font-display: swap; src: url(/fonts/inter-latin.woff2) format('woff2'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+  html, body { font-family: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 14px; }
+  .page-title, .greet h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.01em; }
+  .greet, .page-title { padding-bottom: 14px; border-bottom: 1px solid var(--border); margin-bottom: 20px; }
+  /* bloques: sin caja, un filete arriba y aire; login y bienvenida mantienen su caja centrada */
+  .card { background: transparent; border: 0; border-top: 1px solid var(--border); border-radius: 0; padding: 20px 0 8px; margin-bottom: 10px; box-shadow: none; }
+  .card h2 { font-size: 15px; font-weight: 600; }
+  .box .card { border: 1px solid var(--border); border-radius: 10px; padding: 26px 24px; }
+  /* KPIs: etiqueta arriba, cifra fina debajo, sin cajas ni iconos de color */
+  .kpis { gap: 16px 28px; margin-bottom: 22px; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+  .kpi { background: transparent; border: 0; box-shadow: none; padding: 0; gap: 3px; flex-direction: column-reverse; justify-content: flex-end; }
+  .kpi .num { font-size: 22px; font-weight: 400; letter-spacing: -0.01em; }
+  .kpi .num small { font-size: 13px; }
+  .kpi .lbl { font-size: 13px; color: var(--ink-2); }
+  .kpi .mini { display: none; }
+  .chart-head .big { font-weight: 400; font-size: 28px; letter-spacing: -0.01em; }
+  .curva-datos .v { font-weight: 500; }
+  .pill { border-radius: 4px; font-weight: 500; padding: 2px 6px; font-size: 12px; vertical-align: 2px; }
+  .mini-btn, .btn-mini, .btn, .btns button, .modal-card .btns button, .toggles button { border-radius: 6px; border: 1px solid var(--border-strong); background: var(--surface); color: var(--ink-2); font-weight: 500; box-shadow: 0 1px 1px rgba(17,19,24,0.04); }
+  .mini-btn.primary, .btn-mini.primary, .btn.primary, button.primary, .btns button.primary, .modal-card .btns button.primary { background: var(--ink); color: #fff; border-color: var(--ink); font-weight: 500; }
+  .toggles button.active { background: var(--ink); color: #fff; border-color: var(--ink); }
+  .tooltip { background: var(--ink); color: #d9dbe0; border-radius: 6px; box-shadow: none; }
+  .tooltip b { color: #fff; }
+  .modal-card { border-radius: 12px; border: 1px solid var(--border); box-shadow: 0 12px 32px rgba(17,19,24,0.12); }
+  .modal-card input, .modal-card select { border-radius: 6px; }
+  .sec-menu { border-radius: 8px; box-shadow: 0 8px 24px rgba(17,19,24,0.10); }
+  .entry .a { color: var(--ink-3); }
   /* crema: papel cálido con acento TERRACOTA — nada de índigo aquí */
   :root[data-theme="crema"] {
     --bg: #f3ede2;
