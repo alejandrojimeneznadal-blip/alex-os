@@ -213,6 +213,16 @@
     <h2>Hábitos y score</h2>
     <div class="note">Los hábitos se editan en el <a href="/" style="color:var(--ink-2)">panel</a> (⋯ en «Hábitos de hoy»: añadir, quitar, reordenar y cambiar puntos) o pidiéndoselo a Claude: «añade un hábito de lectura con 5 puntos»…</div>
   </div>
+
+  <div class="card">
+    <h2>Curva de capital</h2>
+    <div class="desc">El score del día funciona como un tipo de interés sobre tu capital. Un día de 100 suma un 1 %, un día en el equilibrio no mueve nada y un día en blanco resta. El equilibrio es el único ajuste: por encima compones, por debajo te deshaces.</div>
+    <label for="eqInput">Equilibrio (score que deja la curva plana)</label>
+    <input id="eqInput" type="number" inputmode="numeric" min="1" max="99" step="1" placeholder="35">
+    <div class="meta-line" id="eqAyuda"></div>
+    <div class="btns"><button class="primary" id="eqGuardar">Guardar</button></div>
+    <div class="msg" id="eqMsg"></div>
+  </div>
 </div>
 
 <script>
@@ -608,6 +618,38 @@ $("wgtGuardar").onclick = async () => {
 };
 
 cargarWidget();
+
+/* ---------- curva de capital: equilibrio ---------- */
+function setEqMsg(text, cls) { const m = $("eqMsg"); m.textContent = text; m.className = "msg" + (cls ? " " + cls : ""); }
+function pintaEqAyuda() {
+  const eq = Number($("eqInput").value);
+  if (!(eq >= 1 && eq <= 99)) { $("eqAyuda").textContent = ""; return; }
+  const blanco = (-eq / (100 - eq)).toFixed(2).replace(".", ",");
+  const a60 = Math.pow(1 + (60 - eq) / (100 - eq) / 100, 365).toFixed(1).replace(".", ",");
+  $("eqAyuda").textContent = `Con ${eq}: un día en blanco resta un ${blanco.replace("-", "")} %. Sostener una media de 60 sería ×${a60} al año.`;
+}
+$("eqInput").addEventListener("input", pintaEqAyuda);
+async function cargarEq() {
+  try {
+    const s = await api("/api/state");
+    $("eqInput").value = Number(s.config?.equilibrio) || 35;
+    pintaEqAyuda();
+  } catch (e) { setEqMsg("Error cargando: " + e.message, "err"); }
+}
+$("eqGuardar").onclick = async () => {
+  const eq = Math.round(Number($("eqInput").value));
+  if (!(eq >= 1 && eq <= 99)) return setEqMsg("Pon un número entre 1 y 99.", "err");
+  setEqMsg("Guardando…");
+  try {
+    // config es una clave top-level y el POST la sustituye entera: se relee justo antes para no pisar los hábitos
+    const s = await api("/api/state");
+    const config = { ...(s.config || {}), equilibrio: eq };
+    await api("/api/state", { method: "POST", body: JSON.stringify({ config }) });
+    try { sessionStorage.removeItem("os_cache_v1"); } catch (e) {}
+    setEqMsg(`Equilibrio en ${eq}. La curva se recalcula entera con el nuevo valor.`, "ok");
+  } catch (e) { setEqMsg("Error: " + e.message, "err"); }
+};
+cargarEq();
 
 /* ---------- memoria del asistente ---------- */
 let MEMORIA = [];

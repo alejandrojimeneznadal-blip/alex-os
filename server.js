@@ -36,6 +36,7 @@ const pool = new Pool({ connectionString: DATABASE_URL });
    ====================================================================== */
 const DEFAULT_CONFIG = {
   racha_min: 50, // score mínimo para que un día cuente en la racha
+  equilibrio: 35, // score que deja la curva de capital plana: por encima compone, por debajo se deshace
   senales: [
     { id: "contenido", label: "Contenido", tipo: "bool", peso: 25, hint: "Grabó, editó o publicó contenido" },
     { id: "deep_work", label: "Deep work", tipo: "horas", peso: 20, umbral: 4, hint: "Horas de trabajo enfocado en el proyecto prioritario" },
@@ -379,14 +380,44 @@ function buildDashboard(data) {
   // serie desde el primer día registrado (mínimo 14 días de ventana)
   let start = first < addDays(today, -13) ? first : addDays(today, -13);
 
+  /* CURVA DE CAPITAL: el score del día es un tipo de interés, no una cantidad.
+     Arranca en 100 el primer día registrado. Un día de 100 rinde +1 %, un día en el
+     equilibrio (config.equilibrio, 35 por defecto) deja el capital igual y un día en blanco
+     ya pasado resta como un 0. Hoy no descuenta hasta que se registre: el día sigue abierto.
+     Sin techo (sostener días buenos sigue multiplicando) y puede caer, que es lo que la hace honesta. */
+  const eq = Math.min(99, Math.max(1, Number(config.equilibrio) || 35));
+  const rendimiento = (score) => (score - eq) / (100 - eq); // en tanto por ciento (+1 = +1 %)
   const serie = [];
-  let acumulado = 0;
+  let acumulado = 0, capital = 100, pico = { valor: 100, fecha: first };
   for (let f = start; f <= today; f = addDays(f, 1)) {
     const d = days[f];
     const score = d ? computeScore(d.senales, config) : null;
     acumulado += score || 0;
-    serie.push({ fecha: f, score, acumulado, resumen: d?.resumen || null });
+    let rend = null;
+    if (f >= first && !(f === today && score === null)) {
+      rend = rendimiento(score ?? 0);
+      capital *= 1 + rend / 100;
+      if (capital > pico.valor) pico = { valor: capital, fecha: f };
+    }
+    serie.push({ fecha: f, score, acumulado, capital: Math.round(capital * 100) / 100, rend: rend === null ? null : Math.round(rend * 100) / 100, resumen: d?.resumen || null });
   }
+  // ritmo: tasa diaria media de los últimos 30 días (geométrica) y qué multiplicador anual implica
+  const capDe = (fecha) => serie.find((p) => p.fecha === fecha)?.capital;
+  const refFecha = addDays(today, -30) >= start ? addDays(today, -30) : start;
+  const capRef = capDe(refFecha) ?? 100;
+  const nDias = Math.max(1, Math.round((new Date(today) - new Date(refFecha)) / 86400000));
+  const ritmo = capRef > 0 ? Math.pow(capital / capRef, 1 / nDias) - 1 : 0;
+  const curva = {
+    equilibrio: eq,
+    capital: Math.round(capital * 100) / 100,
+    pico: { valor: Math.round(pico.valor * 100) / 100, fecha: pico.fecha },
+    caida_pct: Math.round((capital / pico.valor - 1) * 1000) / 10,
+    rend_hoy: days[today] ? Math.round(rendimiento(computeScore(days[today].senales, config)) * 100) / 100 : null,
+    ritmo_dia_pct: Math.round(ritmo * 10000) / 100,
+    anual: Math.round(Math.pow(1 + ritmo, 365) * 100) / 100,
+    dias_ritmo: nDias,
+    desde: first,
+  };
 
   // racha: días consecutivos con score >= racha_min, terminando hoy o ayer
   const min = Number(config.racha_min) || 50;
@@ -427,6 +458,7 @@ function buildDashboard(data) {
     pendiente, // % de crecimiento del ritmo (30d vs 30d anteriores)
     last30,
     prev30,
+    curva, // capital compuesto: hoy, pico, caída, rendimiento del día, ritmo 30d y multiplicador anual
     serie,
     dias_registrados: logged.length,
   };
@@ -667,7 +699,7 @@ function mcpTools() {
     ...TOOLS.map((t) => ({ name: t.name, description: t.description, inputSchema: t.input_schema })),
     {
       name: "get_dashboard",
-      description: "Resumen del panel: score de hoy, racha, media de 7 y 30 días, ritmo frente al mes anterior y la serie diaria con el acumulado. Empieza por aquí para saber cómo va la persona.",
+      description: "Resumen del panel: score de hoy, racha, media de 7 días, la CURVA DE CAPITAL (capital actual, pico, caída desde el pico, rendimiento de hoy, ritmo diario de los últimos 30 días y el multiplicador anual que implica) y la serie diaria con score, capital y rendimiento. Empieza por aquí para saber cómo va la persona.",
       inputSchema: { type: "object", properties: {} },
     },
     {
@@ -1325,6 +1357,7 @@ const systemPromptFor = (N, CTX, HAB) => `Eres el asistente personal de ${N}.${C
 Esta app es su panel de vida y tú estás conectado a ella por MCP: él te cuenta su día (al final o durante) y TÚ estructuras y guardas los datos con estas herramientas. El dashboard calcula un score diario 0-100 con matemática fija a partir de las señales — tú NUNCA calculas ni inventas el score, solo registras señales.
 
 Estructura del estado:
+- config.equilibrio (35 por defecto): el score que deja plana la CURVA DE CAPITAL. La curva trata el score del día como un tipo de interés: un día de 100 rinde +1 %, un día en el equilibrio no mueve nada y un día en blanco ya pasado resta como un 0; el capital arranca en 100 el primer día registrado, no tiene techo y puede caer. Es su medida de crecimiento a largo plazo ("ser un 1 % mejor cada día"): cuando pregunte cómo va, léela en get_dashboard.curva (capital, pico, caída, rend_hoy, anual = multiplicador si sostiene el ritmo de los últimos 30 días) y cuéntasela sin maquillar. Solo él cambia el equilibrio.
 - config.senales: [{ id, label, tipo: "bool"|"horas"|"kcal", peso, umbral? }] — los HÁBITOS que puntúan (${N} los llama "hábitos": dile siempre hábito, nunca señal — la clave interna sigue siendo senales). Actuales: ${HAB}
 - days: por fecha { senales: {id: valor}, resumen } — el registro diario.
 - journal: [{ fecha, area, texto }] — apuntes de contexto por área: general|sueno|gym|nutricion|proyectos|contenido|finanzas.
