@@ -1,4 +1,4 @@
-# Alex OS — guía para montar tu propia instancia
+# Daily System (antes Alex OS) — guía para montar tu propia instancia
 
 Este documento está pensado para pasárselo a una sesión de Claude Code que tenga este repo clonado. Explica qué es la app, cómo arranca, qué hay que personalizar para que sea de otra persona (no de Alex) y qué reglas de diseño no hay que romper.
 

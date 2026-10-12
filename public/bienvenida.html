@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#f3f3f5">
-<title>Bienvenida · OS</title>
+<title>Bienvenida · Daily System</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
@@ -21,7 +21,7 @@
   .box { width: 100%; max-width: 560px; }
   .top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
   .brand { display: flex; align-items: center; gap: 10px; font-weight: 750; letter-spacing: -0.01em; }
-  .brand .chip { width: 34px; height: 34px; border-radius: 11px; background: linear-gradient(135deg, var(--accent-2), var(--accent)); color: #fff; font-size: 13px; font-weight: 800; display: flex; align-items: center; justify-content: center; }
+  .brand .chip { width: 34px; height: 34px; border-radius: 11px; background: var(--ink); color: var(--surface); font-size: 12px; font-weight: 600; letter-spacing: -0.03em; display: flex; align-items: center; justify-content: center; }
   .skip { background: none; border: none; color: var(--ink-3); font-family: inherit; font-size: 13px; cursor: pointer; padding: 6px 8px; border-radius: 8px; }
   .skip:hover { color: var(--ink); background: var(--surface-2); }
   .dots { display: flex; gap: 6px; margin-bottom: 14px; }
@@ -111,7 +111,7 @@
 <script src="/icons.js"></script>
 <div class="box">
   <div class="top">
-    <div class="brand"><span class="chip">OS</span><span id="brandName">OS</span></div>
+    <div class="brand"><span class="chip">DS</span><span id="brandName">Daily System</span></div>
     <button class="skip" id="skip" title="Puedes volver desde Configuración → Repetir bienvenida">Saltar por ahora</button>
   </div>
   <div class="dots" id="dots"></div>
@@ -357,7 +357,7 @@ $("nombre").onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); $(
 (async () => {
   try {
     [ME, STATE] = await Promise.all([api("/api/me"), api("/api/state")]);
-    $("brandName").textContent = "OS";
+    $("brandName").textContent = "Daily System";
     $("nombre").value = ME.user?.display_name && ME.user.display_name.toLowerCase() !== ME.user.username ? ME.user.display_name : "";
     if (!$("nombre").value && ME.user?.display_name) $("nombre").value = ME.user.display_name;
     $("ctx").value = ME.user?.context || "";

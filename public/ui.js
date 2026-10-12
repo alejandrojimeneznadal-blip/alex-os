@@ -77,8 +77,7 @@
     }
     #sidebar .sb-brand .logo {
       width: 28px; height: 28px; border-radius: 6px; flex-shrink: 0;
-      background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--border);
-      color: var(--ink); font-size: 12px; font-weight: 600;
+      background: var(--ink); color: var(--surface); font-size: 11px; font-weight: 600; letter-spacing: -0.03em;
       display: flex; align-items: center; justify-content: center;
     }
     #sidebar .sb-brand small { color: var(--ink-3); font-weight: 500; }
@@ -162,7 +161,8 @@
 
   const nav = document.createElement("nav");
   nav.id = "sidebar";
-  const brandHTML = (name) => `<span class="logo">${esc((name || "O").charAt(0).toUpperCase())}</span><span>${esc(name || "")}<small>${name ? " / " : ""}OS</small></span>`;
+  const APP = "Daily System";
+  const brandHTML = (name) => `<span class="logo">DS</span><span>${APP}<small>${name ? " · " + esc(name) : ""}</small></span>`;
   nav.innerHTML =
     `<div class="sb-brand" id="sbBrand">${brandHTML(window.OSMe?.name())}</div>` +
     SECTIONS.map((s) => s.group
@@ -181,7 +181,7 @@
     nav.classList.toggle("is-admin", !!me.is_admin);
     document.getElementById("sbBrand").innerHTML = brandHTML(me.user?.display_name);
     const t = document.querySelector(".sb-topbar .t");
-    if (t) t.innerHTML = `${esc(me.user?.display_name || "")}<small>${me.user?.display_name ? " / " : ""}OS</small>`;
+    if (t) t.innerHTML = `${APP}<small>${me.user?.display_name ? " · " + esc(me.user.display_name) : ""}</small>`;
     if (me.viewing_as) {
       viewas.innerHTML = `<span>Viendo la cuenta de <b>${esc(me.viewing_as.display_name || me.viewing_as.username)}</b></span><button type="button" id="osViewasBack">Volver a la mía</button>`;
       viewas.classList.add("show");
@@ -221,7 +221,7 @@
       const t = document.createElement("div");
       t.className = "t";
       const n = window.OSMe?.name();
-      t.innerHTML = `${esc(n || "")}<small>${n ? " / " : ""}OS</small>`;
+      t.innerHTML = `${APP}<small>${n ? " · " + esc(n) : ""}</small>`;
       tb.appendChild(t);
       document.body.insertBefore(tb, document.body.firstChild);
     }

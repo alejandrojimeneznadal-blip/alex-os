@@ -1,4 +1,4 @@
-/* Temas de Alex OS — claro (default), crema, azul, negro.
+/* Temas de Daily System — claro/Tinta (default), crema, azul, negro.
    Se carga al PRINCIPIO del body en todas las páginas (antes de icons.js/ui.js):
    aplica data-theme al <html> antes del primer paint, así no hay flash.
    El tema por defecto (claro) vive en el :root de cada página; aquí van
@@ -197,7 +197,7 @@
   if (!document.querySelector('link[rel="apple-touch-icon"]')) addHead("link", { rel: "apple-touch-icon", href: "/icon-180.png" });
   if (!document.querySelector('meta[name="apple-mobile-web-app-capable"]')) addHead("meta", { name: "apple-mobile-web-app-capable", content: "yes" });
   if (!document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]')) addHead("meta", { name: "apple-mobile-web-app-status-bar-style", content: "default" });
-  if (!document.querySelector('meta[name="apple-mobile-web-app-title"]')) addHead("meta", { name: "apple-mobile-web-app-title", content: "Alex OS" });
+  if (!document.querySelector('meta[name="apple-mobile-web-app-title"]')) addHead("meta", { name: "apple-mobile-web-app-title", content: "Daily System" });
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
 
   window.OSTheme = {
