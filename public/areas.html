@@ -625,6 +625,13 @@ const TABS = [
   { id: "nutricion", label: "Nutrición" },
   { id: "proyectos", label: "Proyectos" },
   { id: "contenido", label: "Contenido" },
+  // 12 oct 2026 — estructura nueva (Resumen · Áreas · Cerebro). Instagram reutiliza las vistas de contenido (piezas + calendario, sin reto).
+  { id: "agenda", label: "Agenda" },
+  { id: "instagram", label: "Instagram" },
+  { id: "skool", label: "Skool" },
+  { id: "bandeja", label: "Bandeja" },
+  { id: "ideas", label: "Ideas" },
+  { id: "notas", label: "Notas" },
   // Finanzas oculta por ahora (28 ago 2026) — el área sigue funcionando en #finanzas si se reactiva aquí y en ui.js
 ];
 const FIN_SUBS = [
@@ -647,7 +654,7 @@ function parseHash() {
   active = TABS.some((t) => t.id === a) ? a : "proyectos";
   finSub = FIN_SUBS.some((x) => x.id === s) ? s : "resumen";
   proySub = a === "proyectos" && s ? decodeURIComponent(s) : null;
-  contSub = a === "contenido" && ["reto", "piezas", "calendario"].includes(s) ? s : "reto";
+  contSub = (a === "contenido" || a === "instagram") && ["reto", "piezas", "calendario"].includes(s) ? s : (a === "instagram" ? "piezas" : "reto");
   gymSub = a === "gym" && ["resumen", "tracker", "rutina"].includes(s) ? s : "resumen";
 }
 parseHash();
@@ -2505,8 +2512,8 @@ function renderPiezaPanel() {
   p.innerHTML = `
     <div class="sp-top">
       <div class="sp-ruta">
-        <span class="rlink" onclick="cerrarPieza();location.hash='contenido/piezas'">Contenido</span><span class="sep">/</span>
-        <span class="rlink" onclick="cerrarPieza();location.hash='contenido/piezas'">Piezas</span><span class="sep">/</span>
+        <span class="rlink" onclick="cerrarPieza();location.hash='${active}/piezas'">Contenido</span><span class="sep">/</span>
+        <span class="rlink" onclick="cerrarPieza();location.hash='${active}/piezas'">Piezas</span><span class="sep">/</span>
         <span class="act">${esc(c.titulo || "Sin título")}</span>
       </div>
       <button id="spFull" title="Pantalla completa">${IC_EXPAND}</button>
@@ -3192,6 +3199,27 @@ const VIEWS = {
     </div>`;
     return nav + (contSub === "piezas" ? vistaPiezas() : contSub === "calendario" ? vistaCalendario() : vistaReto());
   },
+  instagram() {
+    const selPeriodo = contSub === "piezas"
+      ? `<span style="margin-left:auto;flex-shrink:0;display:flex;gap:6px">
+          <select onchange="piezasTipo=this.value;renderContent()">` +
+        TIPOS_PIEZAS.map((t) => `<option value="${t.id}" ${t.id === piezasTipo ? "selected" : ""}>${t.l}</option>`).join("") +
+        `</select><select onchange="piezasPeriodo=this.value;renderContent()">` +
+        PERIODOS_PIEZAS.map((p) => `<option value="${p.id}" ${p.id === piezasPeriodo ? "selected" : ""}>${p.l}</option>`).join("") + `</select></span>`
+      : "";
+    const nav = `<div class="subnav">
+      <button class="${contSub === "piezas" ? "active" : ""}" onclick="location.hash='instagram/piezas'">Piezas</button>
+      <button class="${contSub === "calendario" ? "active" : ""}" onclick="location.hash='instagram/calendario'">Calendario</button>
+      ${selPeriodo}
+    </div>`;
+    const aviso = `<div class="card"><div class="empty-note">Fase 1 en marcha: aquí entrarán las piezas de Claqueta, la programación y publicación por la API de Instagram, las métricas a 24 h y 7 días y las referencias. De momento, las piezas y el calendario que ya tenías.</div></div>`;
+    return nav + aviso + (contSub === "calendario" ? vistaCalendario() : vistaPiezas());
+  },
+  agenda() { return pendiente("Agenda", "Todo lo que tiene fecha en un solo sitio: publicaciones, tareas, recordatorios, gym y universidad, en vista día, semana y mes. Debajo, la lista sin fecha.", 2); },
+  skool() { return pendiente("Skool", "Miembros frente al objetivo de 1.000, de qué pieza viene cada alta y el embudo: visitas al perfil, clics al enlace, altas. Se monta cuando abra la comunidad.", 4); },
+  bandeja() { return pendiente("Bandeja", "Todo lo que captures por voz o a mano, sin clasificar. Cada noche Claude la vacía: cada cosa pasa a idea, tarea con fecha, nota o pieza.", 2); },
+  ideas() { return pendiente("Ideas", "De contenido y de negocio. Estados: nueva, en guion, descartada. Una idea se convierte en pieza con un botón y pasa al pipeline de Instagram.", 2); },
+  notas() { return pendiente("Notas", "Notas, decisiones y aprendizajes por área y con fecha. Aquí irán las revisiones del domingo. Archivo, no papelera.", 2); },
   finanzas() {
     const nav = `<div class="subnav">` + FIN_SUBS.map((s) =>
       `<button class="${s.id === finSub ? "active" : ""}" onclick="location.hash='finanzas/${s.id}'">${s.label}</button>`
@@ -3606,6 +3634,10 @@ async function nuevaCuenta() {
     saldo: Number.isFinite(saldo) ? saldo : 0, updated: new Date().toISOString().slice(0, 10),
   });
   saveCuentas();
+}
+
+function pendiente(nombre, texto, fase) {
+  return `<div class="card"><h2>${nombre}</h2><div class="note">${texto}</div><div class="empty-note" style="margin-top:10px">Pendiente de construir · fase ${fase}.</div></div>`;
 }
 
 function renderContent() {

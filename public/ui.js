@@ -47,8 +47,19 @@
   // en la etapa Instagram → Skool (las páginas siguen vivas por URL: /areas.html#gym, #tareas…).
   // Configuración es el engranaje del pie; Usuarios (/admin.html) ya no se enlaza desde aquí.
   // Para añadir un área: { href: "/areas.html#gym", label: "Gym", icon: ic("gym", "⚓") }.
+  // 12 oct 2026: estructura acordada con Alex — Resumen · Áreas · Cerebro (ver memoria/artefacto «Estructura de Daily System»)
   const SECTIONS = [
+    { group: "Resumen" },
     { href: "/", label: "Panel", icon: ic("panel", "◱") },
+    { href: "/areas.html#agenda", label: "Agenda", icon: ic("calendario", "▦") },
+    { group: "Áreas" },
+    { href: "/areas.html#instagram", label: "Instagram", icon: ic("instagram", "◎") },
+    { href: "/areas.html#skool", label: "Skool", icon: ic("users", "◌") },
+    { href: "/areas.html#gym", label: "Gym", icon: ic("gym", "⚓") },
+    { group: "Cerebro" },
+    { href: "/areas.html#bandeja", label: "Bandeja", icon: ic("inbox", "▭") },
+    { href: "/areas.html#ideas", label: "Ideas", icon: ic("bulb", "✦") },
+    { href: "/areas.html#notas", label: "Notas", icon: ic("journal", "≡") },
   ];
 
   const css = `
@@ -100,6 +111,7 @@
       font-size: 12px; color: var(--ink-3);
       padding: 16px 8px 6px; font-weight: 500;
     }
+    #sidebar .sb-group:first-child { padding-top: 2px; }
     #sidebar a.sb-item {
       position: relative;
       display: flex; align-items: center; gap: 11px;
