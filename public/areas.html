@@ -55,7 +55,27 @@
   .item .name { font-size: 14.5px; font-weight: 600; }
   .badge { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; padding: 3px 10px; border-radius: 999px; background: var(--surface-2); color: var(--ink-3); }
   .badge.activo, .badge.publicado, .badge.ingreso { color: var(--good); background: var(--good-bg); }
-  .badge.pausado, .badge.editando, .badge.grabado { color: var(--warn); background: var(--warn-bg); }
+  .badge.pausado, .badge.editando, .badge.grabado, .badge.grabar, .badge.editar { color: var(--warn); background: var(--warn-bg); }
+  .badge.guion { color: var(--ink-2); background: var(--surface-2); }
+  .badge.lista { color: var(--accent); background: var(--accent-soft); }
+  .badge.idea { color: var(--ink-3); background: var(--surface-2); }
+  .sp-campo { margin: 10px 0 14px; }
+  .sp-campo > label { display: block; font-size: 12px; color: var(--ink-3); margin-bottom: 4px; }
+  .sp-campo textarea, .sp-campo input { width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--ink); font-family: inherit; font-size: 13.5px; padding: 8px 10px; line-height: 1.45; }
+  .sp-campo textarea { min-height: 68px; resize: vertical; }
+  .sp-campo textarea:focus, .sp-campo input:focus { outline: none; border-color: var(--accent); }
+  .sp-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; }
+  @media (max-width: 600px) { .sp-grid2 { grid-template-columns: 1fr; } }
+  .hoy-item { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--hairline); font-size: 13.5px; }
+  .hoy-item:last-child { border-bottom: 0; }
+  .hoy-item.link { cursor: pointer; }
+  .hoy-item .t { font-weight: 550; color: var(--ink); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .hoy-item .m { color: var(--ink-3); font-size: 12px; flex-shrink: 0; white-space: nowrap; }
+  .hoy-item .badge { flex-shrink: 0; }
+  .hoy-item .sp { flex: 1; }
+  .hoy-tomas { font-size: 12.5px; color: var(--ink-2); margin: 2px 0 8px 26px; line-height: 1.5; }
+  .hoy-tomas span { color: var(--ink-3); }
+  .cap-prev { font-size: 13px; color: var(--ink-2); white-space: pre-wrap; margin: 6px 0 0 26px; line-height: 1.45; }
   .badge.cerrado, .badge.gasto { color: var(--ink-3); background: var(--surface-2); }
   .item .nota { font-size: 13px; color: var(--ink-2); margin-top: 3px; }
   .item .meta { font-size: 11.5px; color: var(--ink-3); margin-top: 2px; }
@@ -654,7 +674,7 @@ function parseHash() {
   active = TABS.some((t) => t.id === a) ? a : "proyectos";
   finSub = FIN_SUBS.some((x) => x.id === s) ? s : "resumen";
   proySub = a === "proyectos" && s ? decodeURIComponent(s) : null;
-  contSub = (a === "contenido" || a === "instagram") && ["reto", "piezas", "calendario"].includes(s) ? s : (a === "instagram" ? "piezas" : "reto");
+  contSub = (a === "contenido" || a === "instagram") && ["reto", "piezas", "calendario", "hoy", "metricas", "referencias"].includes(s) ? s : (a === "instagram" ? "hoy" : "reto");
   gymSub = a === "gym" && ["resumen", "tracker", "rutina"].includes(s) ? s : "resumen";
 }
 parseHash();
@@ -2147,6 +2167,24 @@ const TIPOS_PIEZAS = [
   { id: "yt", l: "Solo YouTube" },
 ];
 let piezasTipo = "todo";
+/* pipeline de piezas (12 oct 2026): idea → guion → grabar → editar → lista → publicado. Los estados antiguos grabado/editando se leen como editar. */
+const ESTADOS_PIEZA = [
+  { id: "idea", l: "Idea" }, { id: "guion", l: "Guion" }, { id: "grabar", l: "Grabar" },
+  { id: "editar", l: "En edición" }, { id: "lista", l: "Lista" }, { id: "publicado", l: "Publicada" },
+];
+const estadoPieza = (c) => { const e = c.estado || "idea"; return e === "grabado" || e === "editando" ? "editar" : e; };
+const labelEstado = (c) => (ESTADOS_PIEZA.find((e) => e.id === estadoPieza(c)) || ESTADOS_PIEZA[0]).l;
+function ordenaPiezas(arr) {
+  // pendientes primero por fecha de plan (sin fecha al final); publicadas después, de la más reciente a la más antigua
+  return arr.slice().sort((a, b) => {
+    const pa = estadoPieza(a) === "publicado", pb = estadoPieza(b) === "publicado";
+    if (pa !== pb) return pa ? 1 : -1;
+    if (!pa) { const fa = a.fecha_plan || "9999", fb = b.fecha_plan || "9999"; return fa < fb ? -1 : fa > fb ? 1 : (a.num || 0) - (b.num || 0); }
+    return (b.fecha_pub || "") < (a.fecha_pub || "") ? -1 : 1;
+  });
+}
+const fmtHora = (c) => c.hora ? ` · ${c.hora}` : "";
+const fmtDM = (f) => f ? `${f.slice(8)}/${f.slice(5, 7)}` : "";
 
 function piezaDeTipo(c) {
   return piezasTipo === "todo" || tipoPieza(c) === piezasTipo;
@@ -2164,28 +2202,19 @@ function piezaEnPeriodo(c) {
 
 function vistaPiezas() {
   // fecha y tipo se combinan: afectan a KPIs y a la lista
-  const todas = (STATE.contenido || []).slice().reverse().filter(piezaEnPeriodo).filter(piezaDeTipo);
-  const pubTotal = todas.filter((c) => c.estado === "publicado");
-  const suma = (campo) => todas.reduce((a, c) => a + (Number(c[campo]) || 0), 0);
-  const views = suma("views"), likes = suma("likes"), comments = suma("comments");
-  const kpis = `<div class="mini-kpis">
-    <div class="mkpi"><div class="n">${pubTotal.length}</div><div class="l">Publicadas</div></div>
-    <div class="mkpi"><div class="n">${fmtN(views) ?? 0}</div><div class="l">Visualizaciones</div></div>
-    <div class="mkpi"><div class="n">${fmtN(likes) ?? 0}</div><div class="l">Likes</div></div>
-    <div class="mkpi"><div class="n">${fmtN(comments) ?? 0}</div><div class="l">Comentarios</div></div>
-  </div>`;
+  const todas = ordenaPiezas((STATE.contenido || []).filter(piezaEnPeriodo).filter(piezaDeTipo));
+  const cuenta = (id) => todas.filter((c) => estadoPieza(c) === id).length;
+  const kpis = `<div class="mini-kpis" style="grid-template-columns:repeat(auto-fit,minmax(104px,1fr))">` + ESTADOS_PIEZA.filter((e) => e.id !== "publicado").map((e) =>
+    `<div class="mkpi"><div class="n">${cuenta(e.id)}</div><div class="l">${e.l}</div></div>`).join("") +
+    `<div class="mkpi"><div class="n">${cuenta("publicado")}</div><div class="l">Publicadas</div></div></div>`;
 
-  const FILTROS = [
-    { id: "todas", label: "Todas", f: () => true },
-    { id: "ideas", label: "Ideas", f: (c) => !c.estado || c.estado === "idea" },
-    { id: "proceso", label: "En proceso", f: (c) => ["grabado", "editando"].includes(c.estado) },
-    { id: "publicadas", label: "Publicadas", f: (c) => c.estado === "publicado" },
-  ];
+  const FILTROS = [{ id: "todas", label: "Todas", f: () => true }].concat(
+    ESTADOS_PIEZA.map((e) => ({ id: e.id, label: e.id === "publicado" ? "Publicadas" : e.l, f: (c) => estadoPieza(c) === e.id })));
   const filtro = FILTROS.find((x) => x.id === contFiltro) || FILTROS[0];
   const chips = `<div class="filtros">` + FILTROS.map((x) =>
     `<button class="${x.id === contFiltro ? "on" : ""}" onclick="contFiltro='${x.id}';renderContent()">${x.label}</button>`).join("") + `</div>`;
 
-  const lista = todas.filter(filtro.f).slice(0, 40);
+  const lista = todas.filter(filtro.f).slice(0, 80);
   const items = lista.length ? lista.map((c) => {
     const idx = (STATE.contenido || []).indexOf(c);
     const views = fmtN(c.views);
@@ -2193,9 +2222,9 @@ function vistaPiezas() {
     <div class="pieza link" onclick="abrirPieza(${idx})">
       ${thumbDe(c)}
       <span class="t">${esc(c.titulo || "(sin título)")}</span>
-      <span class="badge ${esc(c.estado || "idea")}">${esc(c.estado || "idea")}</span>
+      <span class="badge ${estadoPieza(c)}">${labelEstado(c)}</span>
       ${views ? `<span class="mets"><b>${views}</b> views</span>` : ""}
-      ${c.fecha_plan && c.estado !== "publicado" ? `<span class="mets">→ ${c.fecha_plan.slice(8)}/${c.fecha_plan.slice(5, 7)}</span>` : ""}
+      ${c.fecha_plan && estadoPieza(c) !== "publicado" ? `<span class="mets">→ ${fmtDM(c.fecha_plan)}${fmtHora(c)}</span>` : ""}
       <span class="f">${fechaPub(c).slice(5).replace("-", "/")}</span>
     </div>`;
   }).join("")
@@ -2208,7 +2237,60 @@ function vistaPiezas() {
         <button class="btn-mini" id="btnMetricas" onclick="actualizarMetricas()">↻ Métricas</button>
         <button class="btn-mini primary" onclick="nuevaPieza()">${OSIcons.nueva} Nueva pieza</button>
       </span>
-    </div>${chips}${items}</div>` + journalCard("contenido");
+    </div>${chips}${items}</div>`;
+}
+
+/* ---------- Instagram · Hoy: qué se publica, qué toca grabar, qué está atrasado ---------- */
+function tomasDe(c) { return (STATE.tomas || []).filter((t) => c.cid && (t.piezas || []).includes(c.cid)); }
+function vistaHoyIG() {
+  const hoy = isoLocal(new Date());
+  const en7 = isoLocal(new Date(Date.now() + 7 * 86400000));
+  const todas = STATE.contenido || [];
+  const idx = (c) => todas.indexOf(c);
+  const pend = todas.filter((c) => estadoPieza(c) !== "publicado");
+  const deHoy = ordenaPiezas(pend.filter((c) => c.fecha_plan === hoy));
+  const atrasadas = ordenaPiezas(pend.filter((c) => c.fecha_plan && c.fecha_plan < hoy));
+  const semana = ordenaPiezas(pend.filter((c) => c.fecha_plan && c.fecha_plan > hoy && c.fecha_plan <= en7));
+  const grabar = ordenaPiezas(pend.filter((c) => estadoPieza(c) === "grabar"));
+  const fila = (c, extra = "") => `<div class="hoy-item link" onclick="abrirPieza(${idx(c)})"><span class="badge ${estadoPieza(c)}">${labelEstado(c)}</span><span class="t">${esc(c.titulo || "(sin título)")}</span><span class="sp"></span><span class="m">${fmtDM(c.fecha_plan)}${fmtHora(c)}${extra}</span></div>`;
+  const bloqueHoy = deHoy.length ? deHoy.map((c) => fila(c) + (c.caption ? `<div class="cap-prev">${esc(c.caption).slice(0, 220)}${c.caption.length > 220 ? "…" : ""}</div>` : "") +
+      `<div style="margin:6px 0 12px 26px"><button class="btn-mini primary" onclick="event.stopPropagation();marcarPublicada(${idx(c)})">Marcar publicada</button></div>`).join("")
+    : `<div class="empty-note">Nada programado para hoy.</div>`;
+  const bloqueGrabar = grabar.length ? grabar.slice(0, 8).map((c) => {
+    const ts = tomasDe(c), pendT = ts.filter((t) => t.estado !== "grabada");
+    const lista = pendT.slice(0, 4).map((t) => `${esc(t.descripcion)}${t.lugar ? ` <span>· ${esc(t.lugar)}</span>` : ""}`).join("<br>");
+    return fila(c, ts.length ? ` · ${ts.length - pendT.length}/${ts.length} tomas` : "") + (pendT.length ? `<div class="hoy-tomas">${lista}${pendT.length > 4 ? `<br><span>y ${pendT.length - 4} más</span>` : ""}</div>` : "");
+  }).join("") : `<div class="empty-note">Nada pendiente de grabar.</div>`;
+  return `<div class="card"><h2>Se publica hoy · ${fmtDM(hoy)}</h2>${bloqueHoy}</div>` +
+    (atrasadas.length ? `<div class="card"><h2>Atrasadas</h2><div class="sub">Tenían fecha y no están publicadas. Muévelas en el calendario o publícalas.</div>${atrasadas.map((c) => fila(c)).join("")}</div>` : "") +
+    `<div class="card"><h2>Próximos 7 días</h2>${semana.length ? semana.map((c) => fila(c)).join("") : `<div class="empty-note">Nada con fecha esta semana.</div>`}</div>` +
+    `<div class="card"><h2>Para grabar</h2><div class="sub">Piezas en «grabar», con sus tomas pendientes.</div>${bloqueGrabar}</div>`;
+}
+async function marcarPublicada(i) {
+  const c = (STATE.contenido || [])[i];
+  if (!c) return;
+  const r = await OSUI.form({ titulo: "Marcar publicada", texto: esc(c.titulo || ""), campos: [{ id: "url", label: "Link del reel (opcional)", valor: c.url || "", placeholder: "https://www.instagram.com/reel/…" }], ok: "Publicada" });
+  if (!r) return;
+  c.estado = "publicado"; c.fecha_pub = isoLocal(new Date());
+  if (r.url.trim()) c.url = r.url.trim();
+  saveClave("contenido");
+}
+
+/* ---------- Instagram · Métricas ---------- */
+function vistaMetricasIG() {
+  const pub = ordenaPiezas((STATE.contenido || []).filter((c) => estadoPieza(c) === "publicado"));
+  const suma = (k) => pub.reduce((a, c) => a + (Number(c[k]) || 0), 0);
+  const kpis = `<div class="mini-kpis">
+    <div class="mkpi"><div class="n">${pub.length}</div><div class="l">Publicadas</div></div>
+    <div class="mkpi"><div class="n">${fmtN(suma("views")) ?? 0}</div><div class="l">Visualizaciones</div></div>
+    <div class="mkpi"><div class="n">${fmtN(suma("likes")) ?? 0}</div><div class="l">Likes</div></div>
+    <div class="mkpi"><div class="n">${fmtN(suma("comments")) ?? 0}</div><div class="l">Comentarios</div></div>
+  </div>`;
+  const filas = pub.map((c) => `<div class="hoy-item link" onclick="abrirPieza(${(STATE.contenido || []).indexOf(c)})"><span class="t">${esc(c.titulo || "(sin título)")}</span><span class="sp"></span><span class="m">${fmtDM(c.fecha_pub || c.fecha)}</span><span class="m"><b>${fmtN(c.views) ?? "—"}</b> views</span><span class="m">${fmtN(c.likes) ?? "—"} likes</span><span class="m">${fmtN(c.comments) ?? "—"} com.</span></div>`).join("");
+  return kpis + `<div class="card">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px"><h2>Por pieza</h2><button class="btn-mini" id="btnMetricas" onclick="actualizarMetricas()">↻ Métricas</button></div>
+    <div class="sub">Las de 24 h y 7 días por pieza, y los seguidores, llegan con la conexión a la API de Instagram (fase 1b).</div>
+    ${filas || `<div class="empty-note">Sin piezas publicadas todavía.</div>`}</div>`;
 }
 
 async function actualizarMetricas(silencioso) {
@@ -2317,7 +2399,7 @@ async function planPieza(i) {
 const PIEZA_CAMPOS = (c = {}) => [
   { id: "titulo", label: "Título", valor: c.titulo || "", placeholder: "3 errores montando apps con IA" },
   { id: "tipo", label: "Tipo", tipo: "select", valor: c.tipo || "reel", opciones: [{ v: "reel", l: "Reel" }, { v: "youtube", l: "YouTube" }] },
-  { id: "estado", label: "Estado", tipo: "select", valor: c.estado || "idea", opciones: ["idea", "grabado", "editando", "publicado"] },
+  { id: "estado", label: "Estado", tipo: "select", valor: estadoPieza(c), opciones: ESTADOS_PIEZA.map((e) => ({ v: e.id, l: e.l })) },
   { id: "url", label: "Link (opcional)", valor: c.url || "", placeholder: "https://…" },
   { id: "views", label: "Views (opcional)", tipo: "number", valor: c.views ?? "" },
   { id: "likes", label: "Likes (opcional)", tipo: "number", valor: c.likes ?? "" },
@@ -2512,7 +2594,7 @@ function renderPiezaPanel() {
   p.innerHTML = `
     <div class="sp-top">
       <div class="sp-ruta">
-        <span class="rlink" onclick="cerrarPieza();location.hash='${active}/piezas'">Contenido</span><span class="sep">/</span>
+        <span class="rlink" onclick="cerrarPieza();location.hash='${active}/piezas'">${active === "instagram" ? "Instagram" : "Contenido"}</span><span class="sep">/</span>
         <span class="rlink" onclick="cerrarPieza();location.hash='${active}/piezas'">Piezas</span><span class="sep">/</span>
         <span class="act">${esc(c.titulo || "Sin título")}</span>
       </div>
@@ -2527,8 +2609,10 @@ function renderPiezaPanel() {
       <div class="sp-cols"><div class="sp-body-inner">
       <div class="sp-props">
         <div class="sp-prop"><label>Estado</label><select id="spEstado">
-          ${["idea", "grabado", "editando", "publicado"].map((s) => `<option value="${s}" ${c.estado === s ? "selected" : ""}>${s}</option>`).join("")}
+          ${ESTADOS_PIEZA.map((e) => `<option value="${e.id}" ${estadoPieza(c) === e.id ? "selected" : ""}>${e.l}</option>`).join("")}
         </select></div>
+        <div class="sp-prop"><label>Clase</label><input id="sp_clase" value="${escA(c.clase)}" placeholder="soft · hard · meme"></div>
+        <div class="sp-prop"><label>Hora</label><input id="sp_hora" value="${escA(c.hora)}" placeholder="18:00"></div>
         <div class="sp-prop"><label>Tipo</label><select id="spTipo">
           <option value="reel" ${tipoPieza(c) !== "yt" ? "selected" : ""}>Reel</option>
           <option value="youtube" ${tipoPieza(c) === "yt" ? "selected" : ""}>YouTube</option>
@@ -2539,6 +2623,37 @@ function renderPiezaPanel() {
         <div class="sp-prop"><label>Likes</label><input id="spLikes" type="number" value="${c.likes ?? ""}" placeholder="—"></div>
         <div class="sp-prop"><label>Comentarios</label><input id="spComments" type="number" value="${c.comments ?? ""}" placeholder="—"></div>
         <div class="sp-prop"><label>Creada</label><div class="osui-dw"><input class="osui-date" id="spCreada" type="text" readonly data-iso="${c.fecha || ""}" value="${c.fecha ? c.fecha.split("-").reverse().join("/") : ""}" placeholder="—"></div></div>
+      </div>
+      <div class="sp-sec">Guion</div>
+      <div class="sp-campo"><label>Gancho</label><textarea id="sp_gancho" rows="2">${esc(c.gancho)}</textarea></div>
+      <div class="sp-campo"><label>Cuerpo</label><textarea id="sp_cuerpo" rows="5">${esc(c.cuerpo)}</textarea></div>
+      <div class="sp-grid2">
+        <div class="sp-campo"><label>Cierre</label><textarea id="sp_cierre" rows="3">${esc(c.cierre)}</textarea></div>
+        <div class="sp-campo"><label>Llamada a la acción</label><textarea id="sp_cta" rows="3">${esc(c.cta)}</textarea></div>
+      </div>
+      <div class="sp-sec">Publicación</div>
+      <div class="sp-campo"><label>Caption</label><textarea id="sp_caption" rows="4">${esc(c.caption)}</textarea></div>
+      <div class="sp-campo"><label>Hashtags</label><input id="sp_hashtags" value="${escA(c.hashtags)}" placeholder="#claudecode #ia"></div>
+      <div class="sp-sec">Producción</div>
+      <div class="sp-grid2">
+        <div class="sp-campo"><label>Fuente</label><input id="sp_fuente" value="${escA(c.fuente)}"></div>
+        <div class="sp-campo"><label>Formato</label><input id="sp_formato" value="${escA(c.formato)}"></div>
+      </div>
+      <div class="sp-campo"><label>Recursos y B-roll</label><textarea id="sp_broll" rows="3">${esc(c.broll)}</textarea></div>
+      <div class="sp-campo"><label>Pantalla</label><textarea id="sp_pantalla" rows="2">${esc(c.pantalla)}</textarea></div>
+      <div class="sp-grid2">
+        <div class="sp-campo"><label>Carpeta</label><input id="sp_carpeta" value="${escA(c.carpeta)}" placeholder="Drive · 01_piezas/…"></div>
+        <div class="sp-campo"><label>Archivo final</label><input id="sp_archivo" value="${escA(c.archivo)}" placeholder="final/… .mp4"></div>
+      </div>
+      <div class="sp-grid2">
+        <div class="sp-campo"><label>Editor · enviada</label><input id="sp_ed_enviada" value="${escA(c.editor?.enviada)}" placeholder="2026-10-08"></div>
+        <div class="sp-campo"><label>Editor · recibida</label><input id="sp_ed_recibida" value="${escA(c.editor?.recibida)}" placeholder="2026-10-12"></div>
+      </div>
+      <div class="sp-campo"><label>Editor · cambios pedidos</label><textarea id="sp_ed_cambios" rows="2">${esc(c.editor?.cambios)}</textarea></div>
+      <div class="sp-campo"><label>Notas de producción</label><textarea id="sp_produccion" rows="2">${esc(c.produccion)}</textarea></div>
+      <div class="sp-grid2">
+        <div class="sp-campo"><label>Nota (1-10)</label><input id="sp_nota" type="number" min="1" max="10" value="${c.nota ?? ""}"></div>
+        <div class="sp-campo"><label>Por qué no es un 10</label><input id="sp_porque_no_10" value="${escA(c.porque_no_10)}"></div>
       </div>
       <div class="sp-sec">Pizarra
         <span class="pz-tools">
@@ -2582,6 +2697,15 @@ function renderPiezaPanel() {
   $("spViews").oninput = () => { const n = Number($("spViews").value); if ($("spViews").value !== "" && Number.isFinite(n)) c.views = n; else delete c.views; guardaPiezaQuiet(); };
   $("spLikes").oninput = () => { const n = Number($("spLikes").value); if ($("spLikes").value !== "" && Number.isFinite(n)) c.likes = n; else delete c.likes; guardaPiezaQuiet(); };
   $("spComments").oninput = () => { const n = Number($("spComments").value); if ($("spComments").value !== "" && Number.isFinite(n)) c.comments = n; else delete c.comments; guardaPiezaQuiet(); };
+  for (const k of ["clase", "hora", "gancho", "cuerpo", "cierre", "cta", "caption", "hashtags", "fuente", "formato", "broll", "pantalla", "carpeta", "archivo", "produccion", "porque_no_10"]) {
+    const el = $("sp_" + k);
+    if (el) el.oninput = () => { const v = el.value.trim(); if (v) c[k] = v; else delete c[k]; guardaPiezaQuiet(); };
+  }
+  for (const k of ["enviada", "recibida", "cambios"]) {
+    const el = $("sp_ed_" + k);
+    if (el) el.oninput = () => { c.editor = c.editor || {}; const v = el.value.trim(); if (v) c.editor[k] = v; else delete c.editor[k]; if (!Object.keys(c.editor).length) delete c.editor; guardaPiezaQuiet(); };
+  }
+  $("sp_nota").oninput = () => { const n = Number($("sp_nota").value); if ($("sp_nota").value !== "" && Number.isFinite(n)) c.nota = n; else delete c.nota; guardaPiezaQuiet(); };
   initPizarra(c, p, guardaPiezaQuiet);
   $("spBorrar").onclick = async () => {
     if (!(await OSUI.confirm("Borrar pieza", `«${esc(c.titulo || "(sin título)")}» se elimina del todo.`, { ok: "Sí, borrar" }))) return;
@@ -3201,19 +3325,14 @@ const VIEWS = {
   },
   instagram() {
     const selPeriodo = contSub === "piezas"
-      ? `<span style="margin-left:auto;flex-shrink:0;display:flex;gap:6px">
-          <select onchange="piezasTipo=this.value;renderContent()">` +
-        TIPOS_PIEZAS.map((t) => `<option value="${t.id}" ${t.id === piezasTipo ? "selected" : ""}>${t.l}</option>`).join("") +
-        `</select><select onchange="piezasPeriodo=this.value;renderContent()">` +
+      ? `<span style="margin-left:auto;flex-shrink:0;display:flex;gap:6px"><select onchange="piezasPeriodo=this.value;renderContent()">` +
         PERIODOS_PIEZAS.map((p) => `<option value="${p.id}" ${p.id === piezasPeriodo ? "selected" : ""}>${p.l}</option>`).join("") + `</select></span>`
       : "";
-    const nav = `<div class="subnav">
-      <button class="${contSub === "piezas" ? "active" : ""}" onclick="location.hash='instagram/piezas'">Piezas</button>
-      <button class="${contSub === "calendario" ? "active" : ""}" onclick="location.hash='instagram/calendario'">Calendario</button>
-      ${selPeriodo}
-    </div>`;
-    const aviso = `<div class="card"><div class="empty-note">Fase 1 en marcha: aquí entrarán las piezas de Claqueta, la programación y publicación por la API de Instagram, las métricas a 24 h y 7 días y las referencias. De momento, las piezas y el calendario que ya tenías.</div></div>`;
-    return nav + aviso + (contSub === "calendario" ? vistaCalendario() : vistaPiezas());
+    const tab = (id, l) => `<button class="${contSub === id ? "active" : ""}" onclick="location.hash='instagram/${id}'">${l}</button>`;
+    const nav = `<div class="subnav">${tab("hoy", "Hoy")}${tab("piezas", "Piezas")}${tab("calendario", "Calendario")}${tab("metricas", "Métricas")}${tab("referencias", "Referencias")}${selPeriodo}</div>`;
+    const vista = contSub === "piezas" ? vistaPiezas() : contSub === "calendario" ? vistaCalendario() : contSub === "metricas" ? vistaMetricasIG()
+      : contSub === "referencias" ? pendiente("Referencias", "Reels y cuentas que te sirven de modelo, con lo que te llevas de cada uno. Empezará con el análisis de Karro.", "1d") : vistaHoyIG();
+    return nav + vista;
   },
   agenda() { return pendiente("Agenda", "Todo lo que tiene fecha en un solo sitio: publicaciones, tareas, recordatorios, gym y universidad, en vista día, semana y mes. Debajo, la lista sin fecha.", 2); },
   skool() { return pendiente("Skool", "Miembros frente al objetivo de 1.000, de qué pieza viene cada alta y el embudo: visitas al perfil, clics al enlace, altas. Se monta cuando abra la comunidad.", 4); },
