@@ -66,7 +66,7 @@
       position: fixed; top: 0; left: 0; bottom: 0; width: var(--sbw);
       background: var(--surface); border-right: 1px solid var(--border);
       display: flex; flex-direction: column; z-index: 90;
-      padding: 20px 14px calc(16px + env(safe-area-inset-bottom));
+      padding: 16px 14px calc(16px + env(safe-area-inset-bottom));
       transition: transform 0.22s ease;
       font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
     }
@@ -162,9 +162,8 @@
   const nav = document.createElement("nav");
   nav.id = "sidebar";
   const APP = "Daily System";
-  const brandHTML = (name) => `<span class="logo">DS</span><span>${APP}<small>${name ? " · " + esc(name) : ""}</small></span>`;
+  // 12 oct 2026: sin marca arriba de la barra (Alex: «quita esto de aquí arriba a la izquierda»); el nombre solo va en la barra superior del móvil
   nav.innerHTML =
-    `<div class="sb-brand" id="sbBrand">${brandHTML(window.OSMe?.name())}</div>` +
     SECTIONS.map((s) => s.group
       ? `<div class="sb-group">${s.group}</div>`
       : `<a class="sb-item${s.admin ? " admin-only" : ""}" href="${s.href}"><span class="ic">${s.icon}</span>${s.label}</a>`
@@ -179,7 +178,6 @@
   function paintMe(me) {
     if (!me) return;
     nav.classList.toggle("is-admin", !!me.is_admin);
-    document.getElementById("sbBrand").innerHTML = brandHTML(me.user?.display_name);
     const t = document.querySelector(".sb-topbar .t");
     if (t) t.innerHTML = `${APP}<small>${me.user?.display_name ? " · " + esc(me.user.display_name) : ""}</small>`;
     if (me.viewing_as) {
