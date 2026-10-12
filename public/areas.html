@@ -672,6 +672,9 @@ function boolCell(v) {
 }
 
 function journalCard(area) {
+  // 12 oct 2026: Alex quitó los apuntes de todas las pantallas («no lo encuentro útil»). El journal sigue
+  // existiendo en el estado y por MCP (append_journal); solo deja de pintarse. Se conserva el código por si vuelve.
+  return "";
   const entries = (STATE.journal || []).filter((e) => e.area === area).slice(-10).reverse();
   const head = `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px">
     <h2>Apuntes</h2>

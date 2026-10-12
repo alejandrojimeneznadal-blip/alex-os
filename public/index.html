@@ -381,11 +381,6 @@
     <div class="chart-box" id="chartCurva"></div>
   </div>
 
-  <div class="card">
-    <h2>Últimos apuntes</h2>
-    <div id="journal"></div>
-  </div>
-
 </div>
 
 <div class="ov" id="diaOv">
@@ -502,7 +497,6 @@ function render() {
   renderSenales(d);
   renderScoreChart();
   renderCurvaChart();
-  renderJournal(STATE.journal || []);
 }
 
 /* ---------- animaciones de puntos ---------- */
@@ -1208,23 +1202,6 @@ function niceStep(max) {
   return 10 * pow;
 }
 
-/* ---------- journal ---------- */
-function renderJournal(journal) {
-  const box = $("journal");
-  const last = journal.slice(-8).reverse();
-  if (!last.length) {
-    box.innerHTML = `<div class="empty-note">Aquí saldrán los apuntes que Claude vaya guardando de lo que le cuentes.</div>`;
-    return;
-  }
-  box.innerHTML = "";
-  for (const e of last) {
-    const div = document.createElement("div");
-    div.className = "entry";
-    div.innerHTML = `<span class="f">${e.fecha}</span><span class="a">${e.area || "general"}</span><span class="t"></span>`;
-    div.querySelector(".t").textContent = e.texto;
-    box.appendChild(div);
-  }
-}
 
 function escapeHtml(s) {
   return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
