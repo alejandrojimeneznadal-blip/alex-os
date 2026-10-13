@@ -3,7 +3,7 @@ import pg from "pg";
 import path from "path";
 import crypto from "crypto";
 import { fileURLToPath } from "url";
-import { providerStatus, testProviders, runSync } from "./sync.js";
+import { providerStatus, testProviders, runSync, ebCreds, ebAspsps, ebStartAuth, ebCreateSession, ebCloseSession, encryptSecret, ebNombreCuenta } from "./sync.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -1322,6 +1322,19 @@ app.post("/api/integraciones", async (req, res) => {
       if (t) integ.mercury = { token: t };
       else delete integ.mercury;
     }
+    if (body.enablebanking !== undefined) {
+      const e = body.enablebanking;
+      if (!e) {
+        delete integ.enablebanking; // desconectar todo: credenciales y bancos enlazados
+      } else {
+        const prev = integ.enablebanking || {};
+        const appId = (e.application_id || prev.application_id || "").trim();
+        const pem = String(e.private_key || "").trim();
+        if (pem && !/BEGIN [A-Z ]*PRIVATE KEY/.test(pem)) throw new Error("La clave privada no tiene pinta de .pem (debe empezar por -----BEGIN PRIVATE KEY-----)");
+        integ.enablebanking = { ...prev, application_id: appId, private_key_enc: pem ? encryptSecret(pem, SECRET) : prev.private_key_enc, sessions: prev.sessions || [], pending: prev.pending || {} };
+        if (!integ.enablebanking.application_id || !integ.enablebanking.private_key_enc) throw new Error("Faltan el Application ID o la clave privada");
+      }
+    }
     data.integraciones = integ;
     await writeData(req.user.id, data);
     res.json(providerStatus(integ));
@@ -1333,7 +1346,7 @@ app.post("/api/integraciones", async (req, res) => {
 app.post("/api/integraciones/test", async (req, res) => {
   try {
     const data = await readData(req.user.id);
-    res.json(await testProviders(data.integraciones));
+    res.json(await testProviders(data.integraciones, SECRET));
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -1343,7 +1356,7 @@ app.post("/api/sync", async (req, res) => {
   const t0 = Date.now();
   try {
     const data = await readData(req.user.id);
-    const summary = await runSync(data);
+    const summary = await runSync(data, { ip: req.ip, userAgent: req.get("user-agent") }, SECRET);
     await writeData(req.user.id, data);
     console.log(`POST /api/sync OK en ${((Date.now() - t0) / 1000).toFixed(1)}s:`, JSON.stringify(summary));
     res.json({ ok: true, ...summary });
@@ -1352,6 +1365,104 @@ app.post("/api/sync", async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
+
+/* ---------- Enable Banking: conectar un banco (PSD2) ----------
+   1) GET /api/bancos/aspsps → lista de bancos · 2) POST /api/bancos/auth → URL del banco ·
+   3) el banco vuelve a GET /api/bancos/callback con un code → sesión + cuentas + primer sync (ventana de historial largo) */
+const ebCallbackUrl = (req) => `${req.protocol}://${req.get("host")}/api/bancos/callback`;
+
+app.get("/api/bancos/aspsps", async (req, res) => {
+  try {
+    const data = await readData(req.user.id);
+    const cfg = ebCreds(data.integraciones, SECRET);
+    if (!cfg) return res.status(400).json({ error: "Configura primero Enable Banking (Application ID y clave privada)" });
+    const country = String(req.query.country || "ES").toUpperCase().slice(0, 2);
+    const list = (await ebAspsps(cfg, country)).filter((a) => !a.psu_types || a.psu_types.includes("personal"))
+      .map((a) => ({ name: a.name, country: a.country, logo: a.logo || null, max_dias: a.maximum_consent_validity ? Math.floor(a.maximum_consent_validity / 86400) : null }))
+      .sort((a, b) => a.name.localeCompare(b.name, "es"));
+    res.json({ callback_url: ebCallbackUrl(req), aspsps: list });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post("/api/bancos/auth", async (req, res) => {
+  try {
+    const data = await readData(req.user.id);
+    const cfg = ebCreds(data.integraciones, SECRET);
+    if (!cfg) return res.status(400).json({ error: "Configura primero Enable Banking" });
+    const aspsp = String(req.body?.aspsp || "").trim(), country = String(req.body?.country || "ES").toUpperCase().slice(0, 2);
+    if (!aspsp) return res.status(400).json({ error: "Falta el banco" });
+    const maxDias = Math.min(180, Number(req.body?.max_dias) || 180);
+    const state = crypto.randomBytes(16).toString("hex");
+    const validUntil = new Date(Date.now() + maxDias * 86400000);
+    const r = await ebStartAuth(cfg, { aspspName: aspsp, country, redirectUrl: ebCallbackUrl(req), state, validUntil, psu: { ip: req.ip, userAgent: req.get("user-agent") } });
+    const eb = data.integraciones.enablebanking;
+    eb.pending = eb.pending || {};
+    for (const [k, v] of Object.entries(eb.pending)) if (Date.now() - new Date(v.created).getTime() > 3600000) delete eb.pending[k]; // limpia intentos viejos
+    eb.pending[state] = { aspsp, country, valid_until: validUntil.toISOString(), created: new Date().toISOString() };
+    await writeData(req.user.id, data);
+    res.json({ url: r.url });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get("/api/bancos/callback", async (req, res) => {
+  const data = await readData(req.user.id);
+  const eb = data.integraciones?.enablebanking;
+  const volver = (msg) => { if (eb) eb.last_error = msg; return writeData(req.user.id, data).then(() => res.redirect("/config.html#bancos")); };
+  try {
+    const { code, state, error } = req.query;
+    if (!eb) return res.redirect("/config.html#bancos");
+    if (error) return volver(`El banco devolvió un error: ${String(error).slice(0, 120)}`);
+    const pend = eb.pending?.[String(state)];
+    if (!code || !pend) return volver("Vuelta del banco sin código válido. Inténtalo otra vez.");
+    const cfg = ebCreds(data.integraciones, SECRET);
+    const ses = await ebCreateSession(cfg, String(code), { ip: req.ip, userAgent: req.get("user-agent") });
+    const accounts = (ses.accounts || []).map((a) => ({ uid: a.uid, nombre: ebNombreCuenta(pend.aspsp, a), iban_last4: (a.account_id?.iban || "").slice(-4) || null, currency: a.currency || "EUR", product: a.product || null }));
+    eb.sessions = (eb.sessions || []).filter((s) => s.aspsp !== pend.aspsp || s.status !== "active"); // reautorizar sustituye la sesión anterior del mismo banco
+    eb.sessions.push({ id: ses.session_id, aspsp: pend.aspsp, country: pend.country, status: "active", valid_until: ses.access?.valid_until || pend.valid_until, created: new Date().toISOString(), accounts });
+    delete eb.pending[String(state)];
+    delete eb.last_error;
+    await writeData(req.user.id, data);
+    // primer sync nada más autorizar: es la ventana en la que el banco suelta el historial largo
+    try { await runSync(data, { ip: req.ip, userAgent: req.get("user-agent") }, SECRET); await writeData(req.user.id, data); }
+    catch (e) { console.error("primer sync tras autorizar:", e.message); }
+    res.redirect("/areas.html#finanzas/cuentas");
+  } catch (e) {
+    console.error("callback bancos:", e.message);
+    return volver(`No se pudo crear la sesión con el banco: ${String(e.message).slice(0, 200)}`);
+  }
+});
+
+app.delete("/api/bancos/sessions/:id", async (req, res) => {
+  try {
+    const data = await readData(req.user.id);
+    const eb = data.integraciones?.enablebanking;
+    if (!eb) return res.status(404).json({ error: "sin configurar" });
+    const i = (eb.sessions || []).findIndex((s) => s.id === req.params.id);
+    if (i < 0) return res.status(404).json({ error: "sesión no encontrada" });
+    const cfg = ebCreds(data.integraciones, SECRET);
+    try { if (cfg) await ebCloseSession(cfg, req.params.id); } catch (e) { /* si ya caducó, da igual */ }
+    eb.sessions.splice(i, 1);
+    await writeData(req.user.id, data);
+    res.json(providerStatus(data.integraciones));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/* sync automático: una vez al día por usuario con bancos enlazados (sin cabeceras PSU → cuenta como petición en background) */
+setInterval(async () => {
+  try {
+    const { rows } = await pool.query("SELECT user_id AS uid FROM user_state");
+    for (const r of rows) {
+      const data = await readData(r.uid);
+      const eb = data.integraciones?.enablebanking;
+      if (!eb?.sessions?.some((s) => s.status === "active")) continue;
+      const last = data.integraciones.last_sync ? new Date(data.integraciones.last_sync).getTime() : 0;
+      if (Date.now() - last < 22 * 3600 * 1000) continue;
+      const summary = await runSync(data, null, SECRET);
+      await writeData(r.uid, data);
+      console.log("sync bancos (auto) usuario", r.uid, JSON.stringify(summary));
+    }
+  } catch (e) { console.error("sync bancos (auto):", e.message); }
+}, 60 * 60 * 1000);
 
 /* ======================================================================
    CHAT IA
@@ -1381,7 +1492,7 @@ Estructura del estado:
 - config_contenido: { inicio, dias, meta_reels, meta_yt, min_dia? } — el reto de contenido (default: 100 días desde 2026-08-13, 100 reels + 42 vídeos YT, 100 min/día). Editable si ${N} cambia las metas.
 - days.<fecha>.contenido_min: minutos dedicados a contenido ese día — el corazón del reto (objetivo min_dia, default 100). «Hoy le metí 2h al contenido» → set_value en days.<fecha>.contenido_min = 120. Si llega al objetivo, marca también la señal contenido con log_day.
 - finanzas: [{ fecha, concepto, importe, tipo: ingreso|gasto, categoria?, cuenta? }] — movimientos en euros. Categorías CANÓNICAS (usa siempre una de estas): gastos = Comida | Compras | Suscripciones | Transporte | Ocio | Salud | Negocio | Otros gastos; ingresos = Trabajo | Clientes | Contenido | Otros ingresos.
-- cuentas: [{ id, nombre, tipo: banco|efectivo|ahorro|otro, saldo, updated }] — saldos declarados por ${N} (el sync bancario opcional de Airwallex/Mercury se configura en Configuración).
+- cuentas: [{ id, nombre, tipo: banco|efectivo|ahorro|otro, saldo, updated, divisa?, provider?, banco? }] — saldos. Las cuentas con provider (enablebanking: bancos españoles por PSD2, se conectan en Configuración → Bancos) se actualizan solas con el sync; sus movimientos llegan a finanzas con ext_id y no hay que dictarlos. Las manuales (efectivo, ahorro…) sí las actualiza ${N} contigo.
 - suscripciones: [{ id, nombre, importe, periodicidad: mensual|anual, dia_cobro?, tipo: sub|deuda, cuotas_restantes?, fin?, activa }] — tipo "deuda" = pagos financiados con cuotas restantes y fecha fin.
 - config_finanzas: { objetivo_ahorro } — objetivo de ahorro en euros (el progreso lo calcula la app sumando cuentas tipo "ahorro").
 - peso: [{ fecha, kg }] — peso corporal.

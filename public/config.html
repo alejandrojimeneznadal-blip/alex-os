@@ -168,42 +168,28 @@
     <div class="msg" id="wgtMsg2"></div>
   </div>
 
-  <div class="card">
-    <h2>Airwallex <span class="estado" id="awxEstado"><span class="dot"></span><span>sin conectar</span></span></h2>
-    <div class="desc">API key con scopes de Balances, Financial transactions e Issuing (opcional, para el nombre del comercio). Recuerda el whitelist de IP en Airwallex: al deployar, la IP del servidor.</div>
-    <label for="awxId">Client ID</label>
-    <input id="awxId" autocomplete="off" placeholder="p. ej. AbCdEf...">
-    <label for="awxKey">API key</label>
-    <input id="awxKey" type="password" autocomplete="new-password" placeholder="se guarda en la BD de la app">
-    <label for="awxBase">Entorno</label>
-    <select id="awxBase">
-      <option value="prod">Producción (api.airwallex.com)</option>
-      <option value="demo">Demo (api-demo.airwallex.com)</option>
-    </select>
-  </div>
-
-  <div class="card">
-    <h2>Mercury <span class="estado" id="mcyEstado"><span class="dot"></span><span>sin conectar</span></span></h2>
-    <div class="desc">Token de API read-only (Settings → API en Mercury). Sin caducidad.</div>
-    <label for="mcyToken">API token</label>
-    <input id="mcyToken" type="password" autocomplete="new-password" placeholder="secret-token:mercury_...">
-  </div>
-
-  <div class="card">
-    <h2>Sincronización</h2>
+  <div class="card" id="bancos">
+    <h2>Bancos <span class="estado" id="ebEstado"><span class="dot"></span><span>sin configurar</span></span></h2>
+    <div class="desc">Conexión por open banking (Enable Banking, PSD2): solo lee las cuentas que enlaces tú, sin credenciales del banco. Crea una aplicación de <b>producción</b> en enablebanking.com, pega aquí su Application ID y la clave privada .pem, y da de alta en la aplicación esta URL de retorno: <code id="ebCallback" style="user-select:all">…</code></div>
+    <label for="ebAppId">Application ID</label>
+    <input id="ebAppId" autocomplete="off" placeholder="el identificador de la aplicación">
+    <label for="ebPem">Clave privada (.pem)</label>
+    <textarea id="ebPem" rows="4" autocomplete="off" placeholder="-----BEGIN PRIVATE KEY----- … (se guarda cifrada en la base de datos; solo se enseña una vez en Enable Banking)"></textarea>
     <div class="btns">
-      <button class="primary" id="btnGuardar">Guardar credenciales</button>
-      <button id="btnTest">Probar conexión</button>
-      <button id="btnSync">Sync ahora</button>
-      <button id="btnDesconectar" title="Borra las credenciales guardadas">Desconectar todo</button>
+      <button class="primary" id="ebGuardar">Guardar</button>
+      <button id="ebProbar">Probar conexión</button>
+      <button id="ebBorrar" title="Borra las credenciales y las conexiones con bancos">Desconectar todo</button>
     </div>
-    <div class="msg" id="msg"></div>
-    <div class="meta-line" id="lastSync"></div>
-  </div>
-
-  <div class="card">
-    <h2>Sync bancario</h2>
-    <div class="note">El primer sync trae 365 días de movimientos directamente de los bancos; los siguientes solapan 7 días y deduplican por id externo. Las credenciales viven solo en la base de datos de esta instancia.</div>
+    <div class="msg" id="ebMsg"></div>
+    <label style="margin-top:18px">Bancos conectados</label>
+    <div id="ebSesiones" class="note">Ninguno todavía.</div>
+    <div class="btns" style="margin-top:12px">
+      <button class="primary" id="ebConectar">Conectar un banco</button>
+      <button id="ebSync">Sincronizar ahora</button>
+    </div>
+    <div class="msg" id="ebMsg2"></div>
+    <div class="meta-line" id="ebLastSync"></div>
+    <div class="note" style="margin-top:12px">El consentimiento dura como mucho 180 días (bastantes bancos dan 90) y no se renueva solo: aquí verás los días que quedan y un botón para reautorizar. El historial largo solo lo dan los bancos en la primera hora tras autorizar, por eso el primer sync se lanza al volver del banco. Después, un sync automático al día.</div>
   </div>
 
   <div class="card">
@@ -239,95 +225,107 @@ function setMsg(text, cls) {
   m.className = "msg" + (cls ? " " + cls : "");
 }
 
+let EB = null;
+const fmtDias = (d) => d === null ? "" : d < 0 ? "caducado" : d === 0 ? "caduca hoy" : `caduca en ${d} día${d === 1 ? "" : "s"}`;
 function paint() {
-  const a = STATUS.airwallex, m = STATUS.mercury;
-  const awxE = $("awxEstado"), mcyE = $("mcyEstado");
-  awxE.className = "estado" + (a.configured ? " on" : "");
-  awxE.lastElementChild.textContent = a.configured ? `conectado ····${a.api_key_last4}` : "sin conectar";
-  if (a.client_id) $("awxId").value = a.client_id;
-  $("awxBase").value = a.base || "prod";
-  $("awxKey").placeholder = a.configured ? `guardada (····${a.api_key_last4}) — pega otra para cambiarla` : "se guarda en la BD de la app";
-  mcyE.className = "estado" + (m.configured ? " on" : "");
-  mcyE.lastElementChild.textContent = m.configured ? `conectado ····${m.token_last4}` : "sin conectar";
-  $("mcyToken").placeholder = m.configured ? `guardado (····${m.token_last4}) — pega otro para cambiarlo` : "secret-token:mercury_...";
-  const ls = $("lastSync");
+  const eb = STATUS.enablebanking || {};
+  const E = $("ebEstado");
+  E.className = "estado" + (eb.configured ? " on" : "");
+  E.lastElementChild.textContent = eb.configured ? "configurado" : "sin configurar";
+  if (eb.application_id) $("ebAppId").value = eb.application_id;
+  $("ebPem").placeholder = eb.configured ? "clave guardada y cifrada — pega otra solo para cambiarla" : "-----BEGIN PRIVATE KEY----- … (se guarda cifrada en la base de datos; solo se enseña una vez en Enable Banking)";
+  const ses = eb.sessions || [];
+  $("ebSesiones").innerHTML = ses.length ? ses.map((s) => {
+    const aviso = s.status !== "active" ? "caducado" : (s.dias_restantes !== null && s.dias_restantes <= 15 ? "pronto" : "");
+    const asp = s.aspsp.replace(/'/g, "\\'");
+    return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--hairline);flex-wrap:wrap">
+      <b>${s.aspsp}</b><span class="note">${s.cuentas.length} cuenta${s.cuentas.length === 1 ? "" : "s"}${s.cuentas.length ? ": " + s.cuentas.map((c) => c.nombre).join(", ") : ""}</span>
+      <span class="note" style="margin-left:auto;${aviso ? "color:var(--bad)" : ""}">${s.status === "active" ? fmtDias(s.dias_restantes) : "consentimiento caducado"}${s.last_error ? " · " + s.last_error : ""}</span>
+      ${s.status !== "active" || aviso === "pronto" ? `<button class="btn-mini" onclick="ebAuth('${asp}','${s.country}')">Reautorizar</button>` : ""}
+      <button class="btn-mini" onclick="ebQuitar('${s.id}','${asp}')">Quitar</button>
+    </div>`;
+  }).join("") : "Ninguno todavía.";
+  const ls = $("ebLastSync");
   if (STATUS.last_sync) {
     const r = STATUS.last_result || {};
-    ls.textContent = `Último sync: ${new Date(STATUS.last_sync).toLocaleString("es")} · ${r.movimientos ?? 0} movimientos nuevos, ${r.cuentas_nuevas ?? 0} cuentas nuevas` +
-      (r.errores?.length ? ` · errores: ${r.errores.join(" | ")}` : "");
-  } else {
-    ls.textContent = "Nunca sincronizado.";
-  }
+    ls.textContent = `Último sync: ${new Date(STATUS.last_sync).toLocaleString("es")} · ${r.movimientos ?? 0} movimientos nuevos, ${r.cuentas_nuevas ?? 0} cuentas nuevas` + (r.errores?.length ? ` · avisos: ${r.errores.join(" | ")}` : "");
+  } else ls.textContent = "Nunca sincronizado.";
+  if (eb.last_error) setMsg2(eb.last_error, "err");
 }
+function setMsg2(text, cls) { const m = $("ebMsg2"); m.textContent = text; m.className = "msg" + (cls ? " " + cls : ""); }
 
 async function api(path, opts = {}) {
-  const res = await fetch(path, {
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    ...opts,
-  });
+  const res = await fetch(path, { credentials: "include", headers: { "Content-Type": "application/json" }, ...opts });
   const body = await res.json();
   if (!res.ok) throw new Error(body.error || "HTTP " + res.status);
   return body;
 }
 
 async function load() {
-  try {
-    STATUS = await api("/api/integraciones");
-    paint();
-  } catch (e) {
-    setMsg("Error cargando: " + e.message, "err");
-  }
+  try { STATUS = await api("/api/integraciones"); paint(); }
+  catch (e) { setMsg("Error cargando: " + e.message, "err"); }
+  $("ebCallback").textContent = location.origin + "/api/bancos/callback";
 }
 
-$("btnGuardar").onclick = async () => {
+$("ebGuardar").onclick = async () => {
   setMsg("Guardando…");
   try {
-    const payload = {};
-    const id = $("awxId").value.trim(), key = $("awxKey").value.trim();
-    if (id || key) payload.airwallex = { client_id: id, api_key: key, base: $("awxBase").value };
-    const token = $("mcyToken").value.trim();
-    if (token) payload.mercury = { token };
-    if (!Object.keys(payload).length) return setMsg("No hay nada nuevo que guardar.", "err");
-    STATUS = await api("/api/integraciones", { method: "POST", body: JSON.stringify(payload) });
-    $("awxKey").value = ""; $("mcyToken").value = "";
-    paint();
-    setMsg("Credenciales guardadas.", "ok");
+    const application_id = $("ebAppId").value.trim(), private_key = $("ebPem").value.trim();
+    if (!application_id && !private_key) return setMsg("Pega el Application ID y la clave privada.", "err");
+    STATUS = await api("/api/integraciones", { method: "POST", body: JSON.stringify({ enablebanking: { application_id, private_key } }) });
+    $("ebPem").value = ""; paint();
+    setMsg("Guardado. Pulsa «Probar conexión» para comprobar la clave.", "ok");
   } catch (e) { setMsg("Error: " + e.message, "err"); }
 };
-
-$("btnTest").onclick = async () => {
-  setMsg("Probando conexión…");
+$("ebProbar").onclick = async () => {
+  setMsg("Probando…");
   try {
     const r = await api("/api/integraciones/test", { method: "POST" });
-    const lines = [];
-    lines.push("Airwallex: " + (r.airwallex.ok ? "✓ OK" : "✕ " + r.airwallex.error));
-    lines.push("Mercury: " + (r.mercury.ok ? `✓ OK (${r.mercury.cuentas} cuentas)` : "✕ " + r.mercury.error));
-    const allOk = r.airwallex.ok || r.mercury.ok;
-    setMsg(lines.join("\n"), allOk ? "ok" : "err");
+    const e = r.enablebanking || {};
+    setMsg(e.ok ? `✓ Enable Banking responde${e.nombre ? ` · aplicación «${e.nombre}»` : ""}${e.entorno ? ` (${e.entorno})` : ""}` : "✕ " + e.error, e.ok ? "ok" : "err");
   } catch (e) { setMsg("Error: " + e.message, "err"); }
 };
-
-$("btnSync").onclick = async () => {
-  $("btnSync").disabled = true;
-  setMsg("Sincronizando… (el primer sync trae 365 días, puede tardar)");
+$("ebBorrar").onclick = async () => {
+  if (!(await OSUI.confirm("Desconectar todo", "Se borran las credenciales de Enable Banking y las conexiones con tus bancos. Las cuentas y los movimientos ya descargados se quedan.", { ok: "Borrar" }))) return;
+  try {
+    STATUS = await api("/api/integraciones", { method: "POST", body: JSON.stringify({ enablebanking: null }) });
+    $("ebAppId").value = ""; $("ebPem").value = ""; paint(); setMsg("Desconectado.", "ok");
+  } catch (e) { setMsg("Error: " + e.message, "err"); }
+};
+async function ebAuth(aspsp, country, max_dias) {
+  setMsg2("Abriendo el banco…");
+  try {
+    const r = await api("/api/bancos/auth", { method: "POST", body: JSON.stringify({ aspsp, country, max_dias }) });
+    location.href = r.url;
+  } catch (e) { setMsg2("Error: " + e.message, "err"); }
+}
+$("ebConectar").onclick = async () => {
+  setMsg2("Cargando bancos…");
+  try {
+    const r = await api("/api/bancos/aspsps?country=ES");
+    const top = ["BBVA", "Revolut"];
+    const rank = (a) => { const i = top.findIndex((t) => a.name.toLowerCase().startsWith(t.toLowerCase())); return i < 0 ? 99 : i; };
+    const ops = r.aspsps.slice().sort((a, b) => rank(a) - rank(b));
+    setMsg2("");
+    const f = await OSUI.form({ titulo: "Conectar un banco", texto: "Te mandamos a tu banca para que autorices la lectura de tus cuentas. Vuelves aquí con las cuentas enlazadas y el historial descargado.", campos: [{ id: "banco", label: "Banco", tipo: "select", opciones: ops.map((a) => ({ v: a.name + "|" + a.country + "|" + (a.max_dias || ""), l: a.name + (a.max_dias && a.max_dias < 180 ? ` · consentimiento ${a.max_dias} días` : "") })) }], ok: "Ir al banco" });
+    if (!f) return;
+    const [aspsp, country, md] = f.banco.split("|");
+    ebAuth(aspsp, country, md ? Number(md) : undefined);
+  } catch (e) { setMsg2("Error: " + e.message, "err"); }
+};
+async function ebQuitar(id, aspsp) {
+  if (!(await OSUI.confirm("Quitar banco", `Se cierra la conexión con ${aspsp}. Las cuentas y movimientos ya descargados se quedan.`, { ok: "Quitar" }))) return;
+  try { STATUS = await api(`/api/bancos/sessions/${encodeURIComponent(id)}`, { method: "DELETE" }); paint(); setMsg2("Conexión cerrada.", "ok"); }
+  catch (e) { setMsg2("Error: " + e.message, "err"); }
+}
+$("ebSync").onclick = async () => {
+  $("ebSync").disabled = true; setMsg2("Sincronizando…");
   try {
     const r = await api("/api/sync", { method: "POST" });
-    setMsg(`Sync completado: ${r.movimientos} movimientos nuevos, ${r.cuentas_nuevas} cuentas nuevas.` +
-      (r.errores?.length ? `\nErrores: ${r.errores.join(" | ")}` : ""), r.errores?.length ? "err" : "ok");
+    setMsg2(`Sync completado: ${r.movimientos} movimientos nuevos, ${r.cuentas_nuevas} cuentas nuevas.` + (r.errores?.length ? `\nAvisos: ${r.errores.join(" | ")}` : ""), r.errores?.length ? "err" : "ok");
     load();
-  } catch (e) { setMsg("Error: " + e.message, "err"); }
-  finally { $("btnSync").disabled = false; }
-};
-
-$("btnDesconectar").onclick = async () => {
-  if (!(await OSUI.confirm("Desconectar bancos", "Se borran las credenciales guardadas de Airwallex y Mercury.", { ok: "Borrar" }))) return;
-  try {
-    STATUS = await api("/api/integraciones", { method: "POST", body: JSON.stringify({ airwallex: null, mercury: null }) });
-    $("awxId").value = ""; $("awxKey").value = ""; $("mcyToken").value = "";
-    paint();
-    setMsg("Credenciales borradas.", "ok");
-  } catch (e) { setMsg("Error: " + e.message, "err"); }
+  } catch (e) { setMsg2("Error: " + e.message, "err"); }
+  finally { $("ebSync").disabled = false; }
 };
 
 load();
