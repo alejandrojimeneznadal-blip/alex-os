@@ -311,6 +311,13 @@
   .entry .a { color: var(--accent); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; flex-shrink: 0; padding-top: 3px; width: 72px; font-weight: 600; }
   .entry .t { color: var(--ink-2); }
   .empty-note { color: var(--ink-3); font-size: 13px; }
+  /* Hoy toca: lo fechado para hoy (fase 2) */
+  .ht-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--hairline); font-size: 13.5px; }
+  .ht-row:last-child { border-bottom: 0; }
+  .ht-row .k { color: var(--ink-3); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; width: 92px; flex-shrink: 0; }
+  .ht-row a { color: var(--ink); text-decoration: none; font-weight: 500; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ht-row a:hover { text-decoration: underline; }
+  .ht-row .m { color: var(--ink-3); font-size: 12px; margin-left: auto; flex-shrink: 0; }
 
   @media (max-width: 520px) {
     .greet h1 { font-size: 23px; }
@@ -336,6 +343,11 @@
     <div class="kpi"><div class="num" id="kRacha">–</div><div class="lbl"><span class="mini orange"><svg class="tic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path stroke="none" d="M0 0h24v24H0z" fill="none" /><path d="M12 10.941c2.333 -3.308 .167 -7.823 -1 -8.941c0 3.395 -2.235 5.299 -3.667 6.706c-1.43 1.408 -2.333 3.294 -2.333 5.588c0 3.704 3.134 6.706 7 6.706c3.866 0 7 -3.002 7 -6.706c0 -1.712 -1.232 -4.403 -2.333 -5.588c-2.084 3.353 -3.257 3.353 -4.667 2.235" /></svg></span>Racha</div></div>
     <div class="kpi"><div class="num" id="kMedia">–</div><div class="lbl"><span class="mini pink"><svg class="tic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path stroke="none" d="M0 0h24v24H0z" fill="none" /><path d="M3 12h4l3 8l4 -16l3 8h4" /></svg></span>Media 7 días</div></div>
     <div class="kpi"><div class="num" id="kAnual">–</div><div class="lbl"><span class="mini green"><svg class="tic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path stroke="none" d="M0 0h24v24H0z" fill="none" /><path d="M3 17l6 -6l4 4l8 -8" /><path d="M14 7l7 0l0 7" /></svg></span>Al año, a este ritmo</div></div>
+  </div>
+
+  <div class="card" id="hoyToca" hidden>
+    <h2>Hoy toca</h2>
+    <div id="hoyTocaLista"></div>
   </div>
 
   <div class="card">
@@ -495,8 +507,38 @@ function render() {
   $("kAnual").style.color = d.curva ? (d.curva.anual >= 1.02 ? "var(--ok)" : d.curva.anual <= 0.98 ? "var(--bad)" : "") : "";
 
   renderSenales(d);
+  renderHoyToca();
   renderScoreChart();
   renderCurvaChart();
+}
+
+/* ---------- Hoy toca: pieza que se publica, tareas y recordatorios de hoy, gym del día ---------- */
+function tocaRec(r, f) {
+  if (!r.desde || f < r.desde) return false;
+  if (r.hasta && f > r.hasta) return false;
+  const dow = new Date(f + "T12:00").getDay();
+  if (r.frecuencia === "laborables") return dow >= 1 && dow <= 5;
+  if (/^cada_\d+$/.test(r.frecuencia || "")) { const n = Number(r.frecuencia.slice(5)) || 1; return Math.round((new Date(f + "T12:00") - new Date(r.desde + "T12:00")) / 86400000) % n === 0; }
+  if (r.frecuencia === "dias") { const DN = ["dom", "lun", "mar", "mie", "jue", "vie", "sab"]; return Array.isArray(r.dias) && r.dias.some((d) => String(d).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").slice(0, 3) === DN[dow]); }
+  return true;
+}
+function renderHoyToca() {
+  const box = $("hoyToca"), lista = $("hoyTocaLista");
+  if (!box || !STATE || !DASH) return;
+  const hoy = DASH.fecha, filas = [], e = (t) => String(t ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const ep = (c) => (c.estado === "grabado" || c.estado === "editando") ? "editar" : (c.estado || "idea");
+  for (const c of STATE.contenido || []) if (c.fecha_plan === hoy && ep(c) !== "publicado")
+    filas.push(`<div class="ht-row"><span class="k">Publicar</span><a href="/areas.html#instagram">${e(c.titulo || "(sin título)")}</a><span class="m">${c.hora ? e(c.hora) + " · " : ""}${ep(c) === "lista" ? "lista" : ep(c)}</span></div>`);
+  const activa = (t) => (t.fecha && t.fecha <= hoy) || (t.inicio && t.inicio <= hoy && (!t.fecha || t.fecha >= hoy));
+  const ts = (STATE.tareas || []).filter((t) => ["pendiente", "por_definir", "en_ejecucion", undefined].includes(t.estado) && !t.hecha && activa(t)).slice(0, 6);
+  for (const t of ts) filas.push(`<div class="ht-row"><span class="k">Tarea</span><a href="/areas.html#agenda">${e(t.titulo)}</a><span class="m">${t.fecha && t.fecha < hoy ? "atrasada" : t.estado === "en_ejecucion" ? "en ejecución" : ""}</span></div>`);
+  for (const r of (STATE.recordatorios || []).filter((r) => tocaRec(r, hoy) && !r.hechos?.[hoy]).slice(0, 4))
+    filas.push(`<div class="ht-row"><span class="k">Recordatorio</span><a href="/areas.html#agenda">${e(r.titulo)}</a></div>`);
+  const dow = new Date(hoy + "T12:00").getDay(), rut = STATE.rutina_gym?.[["domingo", "lunes", "martes", "miercoles", "jueves", "viernes", "sabado"][dow]];
+  if (STATE.entrenos?.[hoy]) filas.push(`<div class="ht-row"><span class="k">Gym</span><a href="/areas.html#gym/tracker">${e(rut?.titulo || "Entreno")}</a><span class="m">hecho</span></div>`);
+  else if (rut && (rut.ejercicios || []).length) filas.push(`<div class="ht-row"><span class="k">Gym</span><a href="/areas.html#gym/tracker">${e(rut.titulo || "Entreno")}</a><span class="m">${rut.ejercicios.length} ejercicios</span></div>`);
+  box.hidden = !filas.length;
+  lista.innerHTML = filas.join("");
 }
 
 /* ---------- animaciones de puntos ---------- */

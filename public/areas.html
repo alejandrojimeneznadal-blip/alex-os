@@ -76,6 +76,29 @@
   .hoy-tomas { font-size: 12.5px; color: var(--ink-2); margin: 2px 0 8px 26px; line-height: 1.5; }
   .hoy-tomas span { color: var(--ink-3); }
   .cap-prev { font-size: 13px; color: var(--ink-2); white-space: pre-wrap; margin: 6px 0 0 26px; line-height: 1.45; }
+  /* cerebro: bandeja e ideas */
+  .cap-form { display: flex; gap: 8px; margin: 10px 0 14px; }
+  .cap-form input { flex: 1; min-width: 0; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--ink); font-family: inherit; font-size: 14px; padding: 9px 11px; }
+  .cap-form input:focus { outline: none; border-color: var(--accent); }
+  .cap-row { display: flex; align-items: flex-start; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--hairline); }
+  .cap-row:last-child { border-bottom: 0; }
+  .cap-txt { flex: 1; min-width: 0; font-size: 13.5px; color: var(--ink); white-space: pre-wrap; line-height: 1.45; }
+  .cap-meta { font-size: 11.5px; color: var(--ink-3); margin-top: 2px; }
+  .cap-acts { display: flex; gap: 4px; flex-shrink: 0; flex-wrap: wrap; justify-content: flex-end; max-width: 46%; }
+  .cap-acts .btn-mini { padding: 4px 9px; font-size: 12px; }
+  .cap-acts .btn-mini .tic { width: 12px; height: 12px; margin: 0; }
+  @media (max-width: 600px) { .cap-row { flex-direction: column; gap: 6px; } .cap-acts { max-width: none; justify-content: flex-start; } }
+  .badge.decision { color: var(--accent); background: var(--accent-soft); }
+  .badge.aprendizaje { color: var(--good); background: var(--good-bg); }
+  .badge.revision { color: var(--warn); background: var(--warn-bg); }
+  .badge.nota { color: var(--ink-3); background: var(--surface-2); }
+  /* agenda: chips por tipo */
+  .pieza-chip.tarea { background: var(--accent-soft); color: var(--accent); border: 1px solid transparent; }
+  .pieza-chip.rec { background: var(--surface); color: var(--ink-2); border: 1px solid var(--border); }
+  .pieza-chip.gym { background: transparent; color: var(--ink-3); border: 1px dashed var(--border-strong); }
+  .pieza-chip.gymok { background: var(--good-bg); color: var(--good); border: 1px solid transparent; }
+  .ag-leyenda { display: flex; gap: 12px; flex-wrap: wrap; font-size: 11.5px; color: var(--ink-3); margin-top: 10px; }
+  .ag-leyenda i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; vertical-align: -1px; margin-right: 4px; }
   .badge.cerrado, .badge.gasto { color: var(--ink-3); background: var(--surface-2); }
   .item .nota { font-size: 13px; color: var(--ink-2); margin-top: 3px; }
   .item .meta { font-size: 11.5px; color: var(--ink-3); margin-top: 2px; }
@@ -636,6 +659,7 @@
 <aside class="side-panel" id="piezaPanel"></aside>
 <aside class="side-panel" id="subPanel"></aside>
 <aside class="side-panel" id="tareaPanel"></aside>
+<aside class="side-panel" id="notaPanel"></aside>
 
 <script>
 const TABS = [
@@ -667,6 +691,7 @@ let active = "proyectos", finSub = "resumen", finMes = new Date().toISOString().
 let proySub = null; // id de proyecto abierto (#proyectos/<id>)
 let contSub = "reto"; // pestaña de contenido (#contenido/reto | #contenido/piezas)
 let contFiltro = "todas";
+let ideasFiltro = "nueva";
 let calMes = new Date().toISOString().slice(0, 7);
 let gymSub = "resumen"; // #gym/resumen | #gym/tracker | #gym/rutina
 function parseHash() {
@@ -3334,11 +3359,36 @@ const VIEWS = {
       : contSub === "referencias" ? pendiente("Referencias", "Reels y cuentas que te sirven de modelo, con lo que te llevas de cada uno. Empezará con el análisis de Karro.", "1d") : vistaHoyIG();
     return nav + vista;
   },
-  agenda() { return pendiente("Agenda", "Todo lo que tiene fecha en un solo sitio: publicaciones, tareas, recordatorios, gym y universidad, en vista día, semana y mes. Debajo, la lista sin fecha.", 2); },
+  agenda() { return vistaAgendaCal() + VIEWS.tareas(); },
   skool() { return pendiente("Skool", "Miembros frente al objetivo de 1.000, de qué pieza viene cada alta y el embudo: visitas al perfil, clics al enlace, altas. Se monta cuando abra la comunidad.", 4); },
-  bandeja() { return pendiente("Bandeja", "Todo lo que captures por voz o a mano, sin clasificar. Cada noche Claude la vacía: cada cosa pasa a idea, tarea con fecha, nota o pieza.", 2); },
-  ideas() { return pendiente("Ideas", "De contenido y de negocio. Estados: nueva, en guion, descartada. Una idea se convierte en pieza con un botón y pasa al pipeline de Instagram.", 2); },
-  notas() { return pendiente("Notas", "Notas, decisiones y aprendizajes por área y con fecha. Aquí irán las revisiones del domingo. Archivo, no papelera.", 2); },
+  bandeja() {
+    const items = (STATE.bandeja || []).slice().reverse();
+    const fila = (b) => `<div class="cap-row"><div class="cap-txt">${esc(b.texto)}<div class="cap-meta">${fmtFecha(b.creada)}${b.origen === "voz" ? " · por voz" : ""}</div></div>
+      <div class="cap-acts">${[["idea", "Idea"], ["tarea", "Tarea"], ["nota", "Nota"], ["pieza", "Pieza"]].map(([d, l]) => `<button class="btn-mini" onclick="convertirCaptura('${esc(b.id)}','${d}')">${l}</button>`).join("")}<button class="btn-mini" title="Quitar" onclick="quitarCaptura('${esc(b.id)}')">${OSIcons.cerrar}</button></div></div>`;
+    return `<div class="card"><h2>Bandeja${items.length ? ` · ${items.length}` : ""}</h2>
+      <div class="sub">Suelta aquí lo que sea, sin clasificar. Cada noche se vacía: cada cosa pasa a idea, tarea, nota o pieza. Por voz: «apunta: …» a Claude.</div>
+      <form class="cap-form" onsubmit="event.preventDefault();nuevaCaptura(this.q.value);this.reset()"><input name="q" autocomplete="off" placeholder="Apunta algo y pulsa Enter"><button class="btn-mini primary" type="submit">Añadir</button></form>
+      ${items.length ? items.map(fila).join("") : `<div class="empty-note">Bandeja a cero.</div>`}</div>`;
+  },
+  ideas() {
+    const all = (STATE.ideas || []).slice().reverse();
+    const f = ideasFiltro;
+    const lista = all.filter((i) => f === "todas" ? true : (i.estado || "nueva") === f);
+    const chips = [["nueva", "Nuevas"], ["en_guion", "En guion"], ["descartada", "Descartadas"], ["todas", "Todas"]].map(([id, l]) =>
+      `<button class="${id === f ? "on" : ""}" onclick="ideasFiltro='${id}';renderContent()">${l}</button>`).join("");
+    const fila = (i) => `<div class="cap-row"><div class="cap-txt">${esc(i.texto)}<div class="cap-meta">${i.tipo === "negocio" ? "Negocio" : "Contenido"} · ${fmtFecha(i.creada)}${i.estado === "en_guion" ? " · convertida en pieza" : i.estado === "descartada" ? " · descartada" : ""}</div></div>
+      <div class="cap-acts">${(i.estado || "nueva") === "nueva" ? `<button class="btn-mini primary" onclick="ideaAPieza('${esc(i.id)}')">→ Pieza</button><button class="btn-mini" onclick="editarIdea('${esc(i.id)}')">Editar</button><button class="btn-mini" onclick="descartarIdea('${esc(i.id)}')">Descartar</button>` : `<button class="btn-mini" onclick="editarIdea('${esc(i.id)}')">Editar</button>`}</div></div>`;
+    return `<div class="card"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px"><h2>Ideas</h2><button class="btn-mini primary" onclick="nuevaIdea()">${OSIcons.nueva} Idea</button></div>
+      <div class="sub">De contenido y de negocio. Una idea se convierte en pieza con un botón y entra en el pipeline de Instagram.</div>
+      <div class="filtros">${chips}</div>${lista.length ? lista.map(fila).join("") : `<div class="empty-note">Nada aquí. «Idea: …» a Claude, o el botón.</div>`}</div>`;
+  },
+  notas() {
+    const all = (STATE.notas || []).filter((n) => !n.archivada).slice().sort((a, b) => ((b.fecha || "") + (b.creada || "")) > ((a.fecha || "") + (a.creada || "")) ? 1 : -1);
+    const fila = (n) => `<div class="hoy-item link" onclick="abrirNota('${esc(n.id)}')"><span class="badge ${esc(n.tipo || "nota")}">${TIPOS_NOTA[n.tipo] || "Nota"}</span><span class="t">${esc(n.titulo || "(sin título)")}</span><span class="sp"></span>${n.area ? `<span class="m">${esc(n.area)}</span>` : ""}<span class="m">${fmtFecha(n.fecha)}</span></div>`;
+    return `<div class="card"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px"><h2>Notas</h2><button class="btn-mini primary" onclick="nuevaNota()">${OSIcons.nueva} Nota</button></div>
+      <div class="sub">Notas, decisiones y aprendizajes, por área y con fecha. Las revisiones del domingo viven aquí. Archivo, no papelera.</div>
+      ${all.length ? all.map(fila).join("") : `<div class="empty-note">Sin notas todavía. «Decidido: …» a Claude, o el botón.</div>`}</div>`;
+  },
   finanzas() {
     const nav = `<div class="subnav">` + FIN_SUBS.map((s) =>
       `<button class="${s.id === finSub ? "active" : ""}" onclick="location.hash='finanzas/${s.id}'">${s.label}</button>`
@@ -3753,6 +3803,191 @@ async function nuevaCuenta() {
     saldo: Number.isFinite(saldo) ? saldo : 0, updated: new Date().toISOString().slice(0, 10),
   });
   saveCuentas();
+}
+
+/* ======================== CEREBRO: bandeja · ideas · notas (fase 2, 13 oct 2026) ======================== */
+const uidL = (p) => p + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+const fmtFecha = (f) => f ? new Date(f + "T12:00").toLocaleDateString("es", { day: "numeric", month: "short" }) : "";
+const TIPOS_NOTA = { nota: "Nota", decision: "Decisión", aprendizaje: "Aprendizaje", revision: "Revisión" };
+async function guardaYPinta(claves) { renderContent(); await postClaves(claves); load(); }
+
+async function nuevaCaptura(texto) {
+  const v = String(texto || "").trim();
+  if (!v) return;
+  (STATE.bandeja = STATE.bandeja || []).push({ id: uidL("b"), texto: v, creada: isoLocal(new Date()), origen: "mano" });
+  await guardaYPinta({ bandeja: STATE.bandeja });
+}
+async function quitarCaptura(id) {
+  const i = (STATE.bandeja || []).findIndex((x) => x.id === id);
+  if (i < 0) return;
+  STATE.bandeja.splice(i, 1);
+  await guardaYPinta({ bandeja: STATE.bandeja });
+}
+async function convertirCaptura(id, destino) {
+  const i = (STATE.bandeja || []).findIndex((x) => x.id === id);
+  if (i < 0) return;
+  const b = STATE.bandeja[i], hoy = isoLocal(new Date()), claves = {};
+  if (destino === "idea") {
+    const r = await OSUI.form({ titulo: "A ideas", texto: esc(b.texto), campos: [{ id: "tipo", label: "Tipo", tipo: "select", valor: "contenido", opciones: [{ v: "contenido", l: "Contenido" }, { v: "negocio", l: "Negocio" }] }], ok: "Guardar" });
+    if (!r) return;
+    (STATE.ideas = STATE.ideas || []).push({ id: uidL("i"), texto: b.texto, tipo: r.tipo, estado: "nueva", creada: hoy });
+    claves.ideas = STATE.ideas;
+  } else if (destino === "tarea") {
+    const r = await OSUI.form({ titulo: "A tareas", campos: [{ id: "titulo", label: "Tarea", valor: b.texto }, { id: "fecha", label: "Fecha límite", tipo: "date", valor: "", opcional: true }], ok: "Crear" });
+    if (!r || !r.titulo.trim()) return;
+    const t = { id: "t" + Date.now(), titulo: r.titulo.trim(), prioridad: "normal", creada: hoy };
+    aplicaEstadoTarea(t, "pendiente");
+    if (r.fecha) t.fecha = r.fecha;
+    (STATE.tareas = STATE.tareas || []).push(t);
+    claves.tareas = STATE.tareas;
+  } else if (destino === "nota") {
+    (STATE.notas = STATE.notas || []).push({ id: uidL("n"), titulo: b.texto.slice(0, 80), tipo: "nota", fecha: hoy, creada: hoy, ...(b.texto.length > 80 ? { notas: b.texto } : {}) });
+    claves.notas = STATE.notas;
+  } else if (destino === "pieza") {
+    (STATE.contenido = STATE.contenido || []).push({ fecha: hoy, tipo: "reel", titulo: b.texto, estado: "idea" });
+    claves.contenido = STATE.contenido;
+  } else return;
+  STATE.bandeja.splice(i, 1);
+  claves.bandeja = STATE.bandeja;
+  await guardaYPinta(claves);
+}
+
+const IDEA_CAMPOS = (i = {}) => [
+  { id: "texto", label: "Idea", valor: i.texto || "", placeholder: "Lo que se te ha ocurrido, en una frase" },
+  { id: "tipo", label: "Tipo", tipo: "select", valor: i.tipo || "contenido", opciones: [{ v: "contenido", l: "Contenido" }, { v: "negocio", l: "Negocio" }] },
+];
+async function nuevaIdea() {
+  const r = await OSUI.form({ titulo: "Nueva idea", campos: IDEA_CAMPOS(), ok: "Guardar" });
+  if (!r || !r.texto.trim()) return;
+  (STATE.ideas = STATE.ideas || []).push({ id: uidL("i"), texto: r.texto.trim(), tipo: r.tipo, estado: "nueva", creada: isoLocal(new Date()) });
+  await guardaYPinta({ ideas: STATE.ideas });
+}
+async function editarIdea(id) {
+  const i = (STATE.ideas || []).find((x) => x.id === id);
+  if (!i) return;
+  const r = await OSUI.form({ titulo: "Editar idea", campos: IDEA_CAMPOS(i).concat([{ id: "estado", label: "Estado", tipo: "select", valor: i.estado || "nueva", opciones: [{ v: "nueva", l: "Nueva" }, { v: "en_guion", l: "En guion" }, { v: "descartada", l: "Descartada" }] }]), ok: "Guardar", borrar: true });
+  if (!r) return;
+  if (r === "borrar") { STATE.ideas.splice(STATE.ideas.indexOf(i), 1); return guardaYPinta({ ideas: STATE.ideas }); }
+  if (!r.texto.trim()) return;
+  i.texto = r.texto.trim(); i.tipo = r.tipo; i.estado = r.estado;
+  await guardaYPinta({ ideas: STATE.ideas });
+}
+async function descartarIdea(id) {
+  const i = (STATE.ideas || []).find((x) => x.id === id);
+  if (!i) return;
+  i.estado = "descartada";
+  await guardaYPinta({ ideas: STATE.ideas });
+}
+async function ideaAPieza(id) {
+  const i = (STATE.ideas || []).find((x) => x.id === id);
+  if (!i) return;
+  const hoy = isoLocal(new Date());
+  const c = { cid: uidL("p"), fecha: hoy, tipo: "reel", titulo: i.texto, estado: "idea", fuente: "Idea " + fmtFecha(i.creada) };
+  (STATE.contenido = STATE.contenido || []).push(c);
+  i.estado = "en_guion"; i.pieza_cid = c.cid;
+  await guardaYPinta({ contenido: STATE.contenido, ideas: STATE.ideas });
+}
+
+let notaSel = null, notaTimer = null;
+function guardaNotaQuiet() { clearTimeout(notaTimer); notaTimer = setTimeout(() => postClaves({ notas: STATE.notas }), 500); }
+async function nuevaNota() {
+  const r = await OSUI.form({ titulo: "Nueva nota", campos: [
+    { id: "titulo", label: "Título", valor: "", placeholder: "Decidido: Skool sale a 29 $" },
+    { id: "tipo", label: "Tipo", tipo: "select", valor: "nota", opciones: Object.entries(TIPOS_NOTA).map(([v, l]) => ({ v, l })) },
+  ], ok: "Crear" });
+  if (!r || !r.titulo.trim()) return;
+  const hoy = isoLocal(new Date());
+  const n = { id: uidL("n"), titulo: r.titulo.trim(), tipo: r.tipo, fecha: hoy, creada: hoy };
+  (STATE.notas = STATE.notas || []).push(n);
+  renderContent(); await postClaves({ notas: STATE.notas });
+  abrirNota(n.id);
+}
+function abrirNota(id) {
+  notaSel = id;
+  const el = $("notaPanel");
+  renderNotaPanel();
+  if (!el.classList.contains("show")) { void el.offsetWidth; el.classList.add("show"); }
+}
+function cerrarNota() { clearTimeout(notaTimer); notaSel = null; $("notaPanel").classList.remove("show", "full"); load(); }
+function renderNotaPanel() {
+  const n = (STATE.notas || []).find((x) => x.id === notaSel);
+  if (!n) return;
+  const p = $("notaPanel");
+  p.innerHTML = `
+    <div class="sp-top">
+      <div class="sp-ruta"><span class="rlink" onclick="cerrarNota()">Notas</span><span class="sep">/</span><span class="act">${esc(n.titulo || "Sin título")}</span></div>
+      <button id="npFull" title="Pantalla completa">${IC_EXPAND}</button><span style="flex:1"></span>
+      <button id="npBorrar" title="Borrar nota">${OSIcons.borrar}</button><button id="npCerrar" title="Cerrar">${OSIcons.cerrar}</button>
+    </div>
+    <div class="sp-body">
+      <input class="sp-title" id="npTitulo" value="${escA(n.titulo)}" placeholder="Sin título">
+      <div class="sp-cols"><div class="sp-body-inner">
+      <div class="sp-props">
+        <div class="sp-prop"><label>Tipo</label><select id="npTipo">${Object.entries(TIPOS_NOTA).map(([v, l]) => `<option value="${v}" ${(n.tipo || "nota") === v ? "selected" : ""}>${l}</option>`).join("")}</select></div>
+        <div class="sp-prop"><label>Área</label><input id="npArea" value="${escA(n.area)}" placeholder="instagram · skool · gym · negocio · vida"></div>
+        <div class="sp-prop"><label>Fecha</label><div class="osui-dw"><input class="osui-date" id="npFecha" type="text" readonly data-iso="${n.fecha || ""}" value="${n.fecha ? n.fecha.split("-").reverse().join("/") : ""}"></div></div>
+      </div>
+      <div class="sp-sec">Texto<span class="pz-tools"><button data-f="h2" title="Título (# + espacio)">T</button><button data-f="h3" title="Subtítulo (## + espacio)">T·</button><button data-f="bold" title="Negrita (⌘B)"><b>B</b></button><button data-f="underline" title="Subrayado (⌘U)"><u>U</u></button></span></div>
+      <div class="sp-pizarra" id="npNotas" contenteditable="true" data-placeholder="Escribe. «# » para título, ⌘B negrita, ⌘U subrayado"></div>
+      </div></div>
+    </div>`;
+  $("npFull").onclick = () => p.classList.toggle("full");
+  $("npCerrar").onclick = cerrarNota;
+  $("npTitulo").oninput = () => { n.titulo = $("npTitulo").value.trim(); guardaNotaQuiet(); };
+  $("npTipo").onchange = () => { n.tipo = $("npTipo").value; guardaNotaQuiet(); };
+  $("npArea").oninput = () => { const v = $("npArea").value.trim(); if (v) n.area = v; else delete n.area; guardaNotaQuiet(); };
+  OSUI.initDate($("npFecha"));
+  $("npFecha").addEventListener("change", () => { const v = $("npFecha").dataset.iso; if (v) n.fecha = v; guardaNotaQuiet(); });
+  initPizarra(n, p, guardaNotaQuiet);
+  $("npBorrar").onclick = async () => {
+    if (!(await OSUI.confirm("Borrar nota", `«${esc(n.titulo || "(sin título)")}» se elimina del todo.`, { ok: "Sí, borrar" }))) return;
+    STATE.notas.splice(STATE.notas.indexOf(n), 1);
+    clearTimeout(notaTimer); notaSel = null; $("notaPanel").classList.remove("show", "full");
+    await guardaYPinta({ notas: STATE.notas });
+  };
+}
+
+/* ======================== AGENDA: todo lo que tiene fecha, en un mes ======================== */
+const DIA_ID = ["domingo", "lunes", "martes", "miercoles", "jueves", "viernes", "sabado"];
+function vistaAgendaCal() {
+  const hoy = isoLocal(new Date());
+  const [y, m] = calMes.split("-").map(Number);
+  const first = new Date(y, m - 1, 1);
+  const start = (first.getDay() + 6) % 7;
+  const nDias = new Date(y, m, 0).getDate();
+  const piezas = {}, tareasD = {};
+  (STATE.contenido || []).forEach((c, i) => {
+    const f = estadoPieza(c) === "publicado" ? (c.fecha_pub || c.fecha_plan) : c.fecha_plan;
+    if (f) (piezas[f] = piezas[f] || []).push(i);
+  });
+  (STATE.tareas || []).forEach((t) => { if (t.fecha && estadoTarea(t) !== "completado") (tareasD[t.fecha] = tareasD[t.fecha] || []).push(t); });
+  const recs = (STATE.recordatorios || []);
+  const mesTxt = first.toLocaleDateString("es", { month: "long", year: "numeric" });
+  let grid = `<div class="pubcal">` + ["L", "M", "X", "J", "V", "S", "D"].map((d) => `<span class="cd">${d}</span>`).join("");
+  for (let i = 0; i < start; i++) grid += `<div class="day off"></div>`;
+  for (let d = 1; d <= nDias; d++) {
+    const f = `${calMes}-${String(d).padStart(2, "0")}`;
+    const dow = new Date(f + "T12:00").getDay();
+    let chips = (piezas[f] || []).map((i) => { const c = STATE.contenido[i]; const pub = estadoPieza(c) === "publicado";
+      return `<span class="pieza-chip ${pub ? "pub" : "reel"}" onclick="event.stopPropagation();abrirPieza(${i})">${pub ? "✓ " : ""}${c.hora && !pub ? c.hora + " " : ""}${esc(c.titulo || "(sin título)")}</span>`; }).join("");
+    chips += (tareasD[f] || []).map((t) => `<span class="pieza-chip tarea" onclick="event.stopPropagation();abrirTarea('${esc(t.id)}','area')">${esc(t.titulo)}</span>`).join("");
+    chips += recs.filter((r) => tocaRecordatorio(r, f)).map((r) => `<span class="pieza-chip rec${r.hechos?.[f] ? " pub" : ""}" onclick="event.stopPropagation();editarRecordatorio('${esc(r.id)}')">↻ ${esc(r.titulo)}</span>`).join("");
+    const rut = STATE.rutina_gym?.[DIA_ID[dow]];
+    if (STATE.entrenos?.[f]) chips += `<span class="pieza-chip gymok">✓ Gym</span>`;
+    else if (rut && (rut.ejercicios || []).length && f >= hoy) chips += `<span class="pieza-chip gym">Gym · ${esc(rut.titulo || DIA_ID[dow])}</span>`;
+    grid += `<div class="day${f === hoy ? " hoy" : ""}"><span class="dn">${d}</span>${chips}</div>`;
+  }
+  grid += `</div>`;
+  return `<div class="card">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px;gap:8px;flex-wrap:wrap">
+      <h2>Agenda</h2>
+      <span style="display:flex;gap:6px"><button class="btn-mini" onclick="nuevoRecordatorio()">${OSIcons.nueva} Recordatorio</button><button class="btn-mini primary" onclick="nuevaTarea()">${OSIcons.nueva} Tarea</button></span>
+    </div>
+    <div class="sub">Todo lo que tiene fecha: publicaciones, tareas con fecha límite, recordatorios y gym. Toca algo para abrirlo.</div>
+    <div class="mes-nav"><button onclick="calMesMueve(-1)">‹</button><b>${mesTxt.charAt(0).toUpperCase() + mesTxt.slice(1)}</b><button onclick="calMesMueve(1)">›</button></div>
+    ${grid}
+    <div class="ag-leyenda"><span><i style="background:rgba(227,57,130,.35)"></i>Publicación</span><span><i style="background:var(--accent-soft)"></i>Tarea</span><span><i style="background:var(--surface);border:1px solid var(--border)"></i>Recordatorio</span><span><i style="border:1px dashed var(--border-strong)"></i>Gym</span><span><i style="background:var(--good-bg)"></i>Hecho</span></div>
+  </div>`;
 }
 
 function pendiente(nombre, texto, fase) {

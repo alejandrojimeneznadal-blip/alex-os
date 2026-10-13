@@ -167,6 +167,9 @@ function seedDefaults(data) {
     memoria: [],     // { id, texto, fecha } — memoria durable del chat, inyectada en su system prompt
     proyectos: [],   // { id, nombre, estado: activo|pausado|cerrado, nota, updated }
     contenido: [],   // piezas de Instagram: { cid?, num?, fecha, tipo, clase?, titulo, estado: idea|guion|grabar|editar|lista|publicado, fecha_plan?, hora?, fecha_pub?, url?, views?, likes?, comments?, gancho?, cuerpo?, cierre?, cta?, caption?, hashtags?, fuente?, formato?, broll?, pantalla?, carpeta?, archivo?, editor?, produccion?, nota?, notas? }
+    bandeja: [],     // Cerebro · captura sin clasificar: { id, texto, creada, origen?: mano|voz } — se vacía convirtiendo cada entrada en idea/tarea/nota/pieza
+    ideas: [],       // Cerebro: { id, texto, tipo: contenido|negocio, estado: nueva|en_guion|descartada, creada, notas?, pieza_cid? }
+    notas: [],       // Cerebro: { id, titulo, tipo: nota|decision|aprendizaje|revision, area?, fecha, creada, notas? (cuerpo, HTML sencillo), archivada? }
     tomas: [],       // tomas de grabación (de Claqueta): { cid, descripcion, como?, lugar?, tipo, piezas: [cid de pieza], estado: pendiente|grabada, plan?, grabada_el?, archivo?, notas? }
     finanzas: [],    // { fecha, concepto, importe, tipo: ingreso|gasto, categoria?, cuenta? }
     cuentas: [],     // { id, nombre, tipo: banco|efectivo|ahorro|otro, saldo, updated }
@@ -239,7 +242,7 @@ const ESTADOS_TAREA = ["pendiente", "por_definir", "en_ejecucion", "en_espera", 
 const PRIORIDADES_TAREA = ["urgente", "alta", "normal", "baja"];
 function normalizarTareas(data) {
   // repara ids duplicados o ausentes (tareas/recordatorios/memoria no son referenciados por nadie: seguro)
-  for (const [lista, pref] of [["tareas", "t"], ["recordatorios", "r"], ["memoria", "m"]]) {
+  for (const [lista, pref] of [["tareas", "t"], ["recordatorios", "r"], ["memoria", "m"], ["bandeja", "b"], ["ideas", "i"], ["notas", "n"]]) {
     const vistos = new Set();
     for (const x of data?.[lista] || []) {
       if (!x || typeof x !== "object") continue;
@@ -1371,6 +1374,10 @@ Estructura del estado:
 - proyectos: [{ id, nombre, icono (rocket|briefcase|code|video|mic|school|presentation|tienda|coin|chart|users|robot|server|camera|pencil|book|world|tool|flask|gamepad|palette|home|bolt|bulb), tipo: normal|periodico, estado: activo|en_cola|pausado|entregado|cerrado, desc?, siguiente?, subs, notas? (pizarra HTML sencillo, como contenido.notas), archivos? (NO tocar: se gestionan desde la página), updated }]. Un proyecto es una CARPETA: dentro viven sus tareas (campo proyecto en tareas), subproyectos, archivos y pizarra. Cada sub de subs es un SUBPROYECTO con vida propia: { id, nombre, estado: en_curso|en_cola|pausado|hecho, done (derivado: true solo si estado=hecho — para cambiarlo cambia SIEMPRE estado, nunca done), fecha? (día en que se completó, ponla al pasar a hecho), notas? (pizarra HTML sencillo, como la de contenido), archivos?: [{id, nombre, mime, size}] — NO toques archivos, se gestionan desde el panel }. Las tareas pueden colgar de un subproyecto vía su campo sub (id del sub). Si añades un sub nuevo no le pongas id (se genera solo) y usa estado en_curso o en_cola.
 - contenido: las PIEZAS del área Instagram (${N} publica solo en Instagram): [{ cid?, num?, fecha (creada), tipo: reel|youtube, clase?: soft|hard, titulo, estado: idea|guion|grabar|editar|lista|publicado (pipeline en ese orden: idea → guion escrito → por grabar → en edición → lista para publicar → publicada), fecha_plan? (día en que se publica), hora?, fecha_pub?, url?, views?, likes?, comments?, gancho?, cuerpo?, cierre?, cta?, caption?, hashtags?, fuente?, formato?, broll?, pantalla?, carpeta?, archivo?, editor?: {enviada, recibida, aprobada, cambios}, produccion?, nota? (1-10), porque_no_10?, notas? }]. «Ya grabé la 3» → estado editar (o lista si no hay editor); «la 1 está lista» → lista; «publiqué la 1» → publicado + fecha_pub. Las tomas pendientes de cada pieza están en tomas (por cid). — las métricas de piezas con link (YouTube e Instagram) se actualizan solas desde sus APIs; no hace falta que ${N} las dicte salvo que quiera corregirlas. video_url es interno (mp4 del reel para el player del panel, lo rellena la API — no lo toques). notas es la "pizarra" de la pieza y puede llevar HTML sencillo (h2/h3, b, u, div, br); si escribes tú, texto plano o ese HTML simple. — al marcar publicado, pon fecha_pub con el día real de publicación (cuenta para el reto). fecha_plan = día en que ${N} planea publicarla (calendario de publicación; «el reel del Excel sale el jueves» → fecha_plan). Si ${N} pasa el link («publiqué un reel: <link>»), guárdalo en url (sirve para la miniatura y el player del panel). Si menciona métricas («el reel lleva 4k views»), actualiza views/likes de esa pieza.
 - tomas: [{ cid, descripcion, como?, lugar?, tipo: broll|galeria|pantalla|camara|voz, piezas: [cid], estado: pendiente|grabada, plan?, grabada_el?, archivo?, notas? }] — qué hay que grabar para cada pieza. «Grabé las tomas de la cafetería» → set_value en tomas.<índice>.estado = grabada + grabada_el.
+- bandeja: [{ id, texto, creada, origen }] — la BANDEJA de captura (Cerebro). Todo lo que ${N} suelte sin clasificar («apunta: …», una idea a medias, un enlace, algo que no sabe dónde va) entra aquí con add_item SIN pensar dónde encaja. Se vacía al cerrar el día: cada entrada se convierte en idea (add_item ideas), tarea (add_item tareas), nota (add_item notas) o pieza (add_item contenido con estado idea) y se borra de la bandeja (set_value bandeja.<i> con delete, de mayor a menor índice). Cuando ${N} diga «cierro el día» o «vacía la bandeja»: lee bandeja con read_state, propón el destino de cada entrada en una línea y hazlo.
+- ideas: [{ id, texto, tipo: contenido|negocio, estado: nueva|en_guion|descartada, creada, notas?, pieza_cid? }] — ideas sueltas (Cerebro). «Idea: …» → add_item ideas (tipo contenido salvo que sea de negocio). Convertir una idea en pieza = add_item contenido { titulo, estado: idea } y poner la idea en en_guion.
+- notas: [{ id, titulo, tipo: nota|decision|aprendizaje|revision, area?, fecha, creada, notas? (cuerpo: texto plano o HTML sencillo), archivada? }] — notas, decisiones y aprendizajes (Cerebro). «Decidido: …» → add_item notas con tipo decision. REVISIÓN SEMANAL: cuando ${N} diga «revisión» (los domingos), escribe UNA nota tipo revision con guion fijo: score medio de la semana y qué hizo la curva (get_dashboard), piezas publicadas y sus métricas (contenido), bandeja a cero, y tres decisiones para la semana. Diez líneas, sin adornos.
+- Bucle diario: «buenos días» → get_dashboard y lo que toca hoy (piezas con fecha_plan hoy, tareas con fecha, recordatorios que tocan, rutina de gym del día) en cinco líneas. «cierro el día» → log_day con lo que cuente, vaciar la bandeja y decir qué pieza sale mañana.
 - config_contenido: { inicio, dias, meta_reels, meta_yt, min_dia? } — el reto de contenido (default: 100 días desde 2026-08-13, 100 reels + 42 vídeos YT, 100 min/día). Editable si ${N} cambia las metas.
 - days.<fecha>.contenido_min: minutos dedicados a contenido ese día — el corazón del reto (objetivo min_dia, default 100). «Hoy le metí 2h al contenido» → set_value en days.<fecha>.contenido_min = 120. Si llega al objetivo, marca también la señal contenido con log_day.
 - finanzas: [{ fecha, concepto, importe, tipo: ingreso|gasto, categoria?, cuenta? }] — movimientos en euros. Categorías CANÓNICAS (usa siempre una de estas): gastos = Comida | Compras | Suscripciones | Transporte | Ocio | Salud | Negocio | Otros gastos; ingresos = Trabajo | Clientes | Contenido | Otros ingresos.
@@ -1421,7 +1428,7 @@ const TOOLS = [
       properties: {
         keys: {
           type: "array",
-          items: { type: "string", enum: ["config", "days", "journal", "memoria", "tareas", "recordatorios", "proyectos", "contenido", "finanzas", "cuentas", "suscripciones", "config_finanzas", "config_contenido", "config_nutricion", "peso", "rutina_gym", "entrenos", "widget"] },
+          items: { type: "string", enum: ["config", "days", "journal", "memoria", "tareas", "recordatorios", "proyectos", "contenido", "tomas", "bandeja", "ideas", "notas", "finanzas", "cuentas", "suscripciones", "config_finanzas", "config_contenido", "config_nutricion", "peso", "rutina_gym", "entrenos", "widget"] },
         },
       },
     },
@@ -1454,11 +1461,11 @@ const TOOLS = [
   },
   {
     name: "add_item",
-    description: "Añade un elemento a una lista: memoria { texto } (hecho durable, una frase), tareas { titulo, estado? (default pendiente), prioridad? (default normal), inicio?, fecha? (límite/fin, solo si la dice), proyecto? (id), sub? (id del subproyecto), notas? }, recordatorios { titulo, desde, hasta?, frecuencia: diario|laborables|cada_2|cada_3|cada_7|dias, dias?, proyecto?, notas? }, proyectos { nombre, icono, tipo: normal|periodico, estado: activo|en_cola|pausado|entregado|cerrado, desc, siguiente, subs: [{nombre, done}], notas? }, contenido { fecha, tipo: reel|youtube, titulo, estado, fecha_pub?, url?, views?, likes? }, finanzas { fecha, concepto, importe, tipo, categoria?, cuenta? }, cuentas { nombre, tipo, saldo }, suscripciones { nombre, importe, periodicidad, dia_cobro?, tipo, cuotas_restantes?, fin?, activa }, peso { fecha, kg }.",
+    description: "Añade un elemento a una lista: memoria { texto } (hecho durable, una frase), tareas { titulo, estado? (default pendiente), prioridad? (default normal), inicio?, fecha? (límite/fin, solo si la dice), proyecto? (id), sub? (id del subproyecto), notas? }, recordatorios { titulo, desde, hasta?, frecuencia: diario|laborables|cada_2|cada_3|cada_7|dias, dias?, proyecto?, notas? }, proyectos { nombre, icono, tipo: normal|periodico, estado: activo|en_cola|pausado|entregado|cerrado, desc, siguiente, subs: [{nombre, done}], notas? }, contenido { titulo, estado (idea|guion|grabar|editar|lista|publicado), fecha_plan?, hora?, caption?, …ver manual }, bandeja { texto }, ideas { texto, tipo: contenido|negocio }, notas { titulo, tipo: nota|decision|aprendizaje|revision, area?, notas? }, finanzas { fecha, concepto, importe, tipo, categoria?, cuenta? }, cuentas { nombre, tipo, saldo }, suscripciones { nombre, importe, periodicidad, dia_cobro?, tipo, cuotas_restantes?, fin?, activa }, peso { fecha, kg }.",
     input_schema: {
       type: "object",
       properties: {
-        lista: { type: "string", enum: ["memoria", "tareas", "recordatorios", "proyectos", "contenido", "finanzas", "cuentas", "suscripciones", "peso"] },
+        lista: { type: "string", enum: ["memoria", "tareas", "recordatorios", "proyectos", "contenido", "finanzas", "cuentas", "suscripciones", "peso", "bandeja", "ideas", "notas"] },
         item: { type: "object" },
       },
       required: ["lista", "item"],
@@ -1544,7 +1551,7 @@ function getPath(obj, dottedPath) {
 
 /* claves que read_state puede devolver: nunca integraciones (credenciales bancarias) ni chats */
 const KEYS_LEIBLES = new Set([
-  "config", "days", "journal", "memoria", "tareas", "recordatorios", "proyectos", "contenido", "tomas",
+  "config", "days", "journal", "memoria", "tareas", "recordatorios", "proyectos", "contenido", "tomas", "bandeja", "ideas", "notas",
   "finanzas", "cuentas", "suscripciones", "config_finanzas", "config_contenido", "config_nutricion",
   "peso", "rutina_gym", "entrenos", "widget",
 ]);
@@ -1617,7 +1624,7 @@ function runTool(name, input, data, actions) {
 
   if (name === "add_item") {
     const lista = input?.lista;
-    if (!["memoria", "tareas", "recordatorios", "proyectos", "contenido", "finanzas", "cuentas", "suscripciones", "peso"].includes(lista)) throw new Error("lista inválida");
+    if (!["memoria", "tareas", "recordatorios", "proyectos", "contenido", "finanzas", "cuentas", "suscripciones", "peso", "bandeja", "ideas", "notas"].includes(lista)) throw new Error("lista inválida");
     if (!input?.item || typeof input.item !== "object") throw new Error("item requerido");
     if (!Array.isArray(data[lista])) data[lista] = [];
     const item = { ...input.item };
@@ -1635,6 +1642,20 @@ function runTool(name, input, data, actions) {
     } else if (lista === "memoria") {
       item.id = item.id || uid("m");
       item.fecha = item.fecha || todayISO();
+    } else if (lista === "bandeja") {
+      item.id = item.id || uid("b");
+      item.creada = item.creada || todayISO();
+      item.origen = item.origen || "voz";
+    } else if (lista === "ideas") {
+      item.id = item.id || uid("i");
+      item.creada = item.creada || todayISO();
+      if (!["contenido", "negocio"].includes(item.tipo)) item.tipo = "contenido";
+      if (!["nueva", "en_guion", "descartada"].includes(item.estado)) item.estado = "nueva";
+    } else if (lista === "notas") {
+      item.id = item.id || uid("n");
+      item.creada = item.creada || todayISO();
+      item.fecha = item.fecha || todayISO();
+      if (!["nota", "decision", "aprendizaje", "revision"].includes(item.tipo)) item.tipo = "nota";
     } else if (["proyectos", "cuentas", "suscripciones"].includes(lista)) {
       item.id = item.id || uid(lista[0]);
       item.updated = todayISO();
