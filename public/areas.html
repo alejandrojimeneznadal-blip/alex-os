@@ -506,6 +506,8 @@
   .sp-pizarra h2 { font-size: 19px; font-weight: 700; letter-spacing: -0.015em; margin: 16px 0 4px; }
   .sp-pizarra h3 { font-size: 15.5px; font-weight: 650; margin: 12px 0 3px; }
   .sp-pizarra u { text-underline-offset: 3px; }
+  .msg { font-size: 13px; margin-top: 10px; color: var(--ink-2); white-space: pre-wrap; }
+  .msg.ok { color: var(--good); } .msg.err { color: var(--bad); }
   .filtros { display: flex; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; }
   .filtros button { font-size: 11.5px; padding: 4px 12px; border-radius: 999px; background: var(--surface-2); color: var(--ink-3); font-weight: 550; border: none; cursor: pointer; font-family: inherit; }
   .filtros button.on { background: var(--ink); color: var(--bg); }
@@ -3612,12 +3614,19 @@ const FIN_VIEWS = {
     const html = cs.length ? cs.map((c, i) => `
       <div class="item row-click" onclick="editarCuenta(${i})" title="Toca para editar">
         <div class="head"><span class="name">${esc(c.nombre)}</span><span class="badge">${eur(c.saldo)}</span></div>
-        <div class="meta">${esc(c.tipo || "banco")}${c.updated ? " · actualizado " + c.updated : ""}</div>
+        <div class="meta">${c.provider === "enablebanking" ? `${esc(c.banco || "banco")} · conectada` : esc(c.tipo || "banco")}${c.updated ? " · actualizado " + c.updated : ""}</div>
       </div>`).join("")
-      : `<div class="empty-note">Sin cuentas. Dile a Claude «tengo 850 en Revolut y 200 en efectivo» o créala aquí.</div>`;
-    return `<div class="card"><h2>Cuentas · total ${eur(saldoTotal())}</h2>${html}
-      <div style="margin-top:12px"><button class="btn-mini" onclick="nuevaCuenta()">${OSIcons.nueva} Añadir cuenta</button></div>
-      <div class="empty-note" style="margin-top:10px">Las cuentas bancarias se actualizan con el sync (Configuración); las manuales las tocas aquí.</div></div>`;
+      : `<div class="empty-note">Sin cuentas. Conecta tu banco aquí, o dile a Claude «tengo 850 en Revolut y 200 en efectivo».</div>`;
+    const hayBancos = cs.some((c) => c.provider === "enablebanking");
+    setTimeout(pintaBancosFin, 0);
+    return `<div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px;gap:8px;flex-wrap:wrap">
+        <h2>Cuentas · total ${eur(saldoTotal())}</h2>
+        <span style="display:flex;gap:6px">${hayBancos ? `<button class="btn-mini" id="btnSyncFin" onclick="sincronizarBancos()">↻ Sincronizar</button>` : ""}<button class="btn-mini primary" onclick="conectarBanco()">${OSIcons.nueva} Añadir cuenta</button></span>
+      </div>${html}
+      <div id="finBancos" style="margin-top:10px"></div>
+      <div class="msg" id="finSyncMsg" style="min-height:0"></div>
+      <div class="empty-note" style="margin-top:10px">Las cuentas conectadas se actualizan solas cada día. Las manuales (efectivo, ahorro…) las tocas aquí.</div></div>`;
   },
 
   transacciones() {
@@ -3794,8 +3803,91 @@ async function editarCuenta(i) {
   saveCuentas();
 }
 
+/* ---------- bancos conectados (Enable Banking) desde Finanzas · 13 oct 2026 ---------- */
+function setFinMsg(t, cls) { const m = $("finSyncMsg"); if (m) { m.textContent = t; m.className = "msg" + (cls ? " " + cls : ""); } }
+async function pintaBancosFin() {
+  const box = $("finBancos");
+  if (!box) return;
+  try {
+    const r = await fetch("/api/integraciones", { credentials: "include" });
+    if (!r.ok) return;
+    const st = await r.json(); EB_STATUS = st;
+    const ses = st.enablebanking?.sessions || [];
+    if (!ses.length) { box.innerHTML = ""; return; }
+    const dias = (d) => d === null ? "" : d < 0 ? "caducado" : d === 0 ? "caduca hoy" : `consentimiento: ${d} día${d === 1 ? "" : "s"}`;
+    box.innerHTML = ses.map((x) => {
+      const mal = x.status !== "active" || (x.dias_restantes !== null && x.dias_restantes <= 15);
+      return `<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-top:1px solid var(--hairline);font-size:12.5px;flex-wrap:wrap">
+        <b>${esc(x.aspsp)}</b><span style="color:var(--ink-3)">${x.cuentas.length} cuenta${x.cuentas.length === 1 ? "" : "s"}</span>
+        <span style="margin-left:auto;color:${mal ? "var(--bad)" : "var(--ink-3)"}">${x.status === "active" ? dias(x.dias_restantes) : "consentimiento caducado"}${x.last_error ? " · " + esc(x.last_error) : ""}</span>
+        ${mal ? `<button class="btn-mini" onclick="conectarBanco('${esc(x.aspsp).replace(/'/g, "\\'")}','${esc(x.country)}')">Reautorizar</button>` : ""}
+        <button class="btn-mini" onclick="quitarBanco('${esc(x.id)}','${esc(x.aspsp).replace(/'/g, "\\'")}')">Quitar</button>
+      </div>`;
+    }).join("") + (st.last_sync ? `<div class="empty-note" style="margin-top:6px">Último sync: ${new Date(st.last_sync).toLocaleString("es")}${st.last_result?.errores?.length ? " · avisos: " + esc(st.last_result.errores.join(" | ")) : ""}</div>` : "");
+  } catch (e) { /* sin estado, sin bloque */ }
+}
+let EB_STATUS = null;
+async function conectarBanco(aspspFijo, countryFijo) {
+  setFinMsg("Cargando bancos…");
+  try {
+    const r = await fetch("/api/bancos/aspsps?country=ES", { credentials: "include" });
+    const body = await r.json();
+    if (!r.ok) {
+      setFinMsg("");
+      if (/Configura primero/i.test(body.error || "")) {
+        if (await OSUI.confirm("Falta la conexión con Enable Banking", "Antes hay que pegar la aplicación y su clave en Configuración → Bancos. ¿Vamos?", { ok: "Ir a Configuración", danger: false })) location.href = "/config.html#bancos";
+        return;
+      }
+      const manual = await OSUI.confirm("No se pudo cargar la lista de bancos", esc(body.error || "error") + "\n\n¿Quieres crear una cuenta manual en su lugar?", { ok: "Cuenta manual", danger: false });
+      if (manual) nuevaCuenta();
+      return;
+    }
+    setFinMsg("");
+    const top = ["bbva", "revolut"];
+    const rank = (a) => { const i = top.findIndex((t) => a.name.toLowerCase().startsWith(t)); return i < 0 ? 99 : i; };
+    const ops = body.aspsps.slice().sort((a, b) => rank(a) - rank(b));
+    let aspsp = aspspFijo, country = countryFijo || "ES", md;
+    if (!aspsp) {
+      const f = await OSUI.form({
+        titulo: "Añadir cuenta",
+        texto: "Conecta tu banco: te mandamos a tu banca, autorizas la lectura de tus cuentas y vuelves aquí con las cuentas y el historial. O crea una cuenta manual (efectivo, ahorro…).",
+        campos: [{ id: "banco", label: "Banco", tipo: "select", opciones: [{ v: "manual", l: "Cuenta manual (sin banco)" }].concat(ops.map((a) => ({ v: a.name + "|" + a.country + "|" + (a.max_dias || ""), l: a.name + (a.max_dias && a.max_dias < 180 ? ` · consentimiento ${a.max_dias} días` : "") }))) }],
+        ok: "Continuar",
+      });
+      if (!f) return;
+      if (f.banco === "manual") return nuevaCuenta();
+      [aspsp, country, md] = f.banco.split("|");
+    }
+    setFinMsg("Abriendo " + aspsp + "…");
+    const a = await fetch("/api/bancos/auth", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ aspsp, country, max_dias: md ? Number(md) : undefined }) });
+    const ab = await a.json();
+    if (!a.ok) throw new Error(ab.error || "HTTP " + a.status);
+    location.href = ab.url;
+  } catch (e) { setFinMsg("Error: " + e.message, "err"); }
+}
+async function sincronizarBancos() {
+  const b = $("btnSyncFin"); if (b) b.disabled = true;
+  setFinMsg("Sincronizando con los bancos…");
+  try {
+    const r = await fetch("/api/sync", { method: "POST", credentials: "include" });
+    const body = await r.json();
+    if (!r.ok) throw new Error(body.error || "HTTP " + r.status);
+    setFinMsg(`Listo: ${body.movimientos} movimientos nuevos, ${body.cuentas_nuevas} cuentas nuevas.` + (body.errores?.length ? " Avisos: " + body.errores.join(" | ") : ""), body.errores?.length ? "err" : "ok");
+    load();
+  } catch (e) { setFinMsg("Error: " + e.message, "err"); }
+  finally { if (b) b.disabled = false; }
+}
+async function quitarBanco(id, aspsp) {
+  if (!(await OSUI.confirm("Quitar banco", `Se cierra la conexión con ${aspsp}. Las cuentas y los movimientos ya descargados se quedan.`, { ok: "Quitar" }))) return;
+  try {
+    const r = await fetch(`/api/bancos/sessions/${encodeURIComponent(id)}`, { method: "DELETE", credentials: "include" });
+    if (!r.ok) throw new Error((await r.json()).error || "HTTP " + r.status);
+    pintaBancosFin(); setFinMsg("Conexión cerrada.", "ok");
+  } catch (e) { setFinMsg("Error: " + e.message, "err"); }
+}
+
 async function nuevaCuenta() {
-  const r = await OSUI.form({ titulo: "Nueva cuenta", campos: CUENTA_CAMPOS(), ok: "Crear" });
+  const r = await OSUI.form({ titulo: "Cuenta manual", campos: CUENTA_CAMPOS(), ok: "Crear" });
   if (!r || !r.nombre.trim()) return;
   const saldo = Number(String(r.saldo).replace(",", "."));
   if (!STATE.cuentas) STATE.cuentas = [];
