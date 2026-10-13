@@ -3322,7 +3322,7 @@ const VIEWS = {
     </div>`;
     const kcalCard = conK.length
       ? `<div class="card">${kcalHead}<div class="sub">Hoy ${fmtN(kHoy)} · media 7d ${fmtN(k7)} · media 30d ${fmtN(k30)} · objetivo ${obj.toLocaleString("es")} kcal</div><div class="chart-bars">${barsKcal(d30k, obj)}</div></div>`
-      : `<div class="card">${kcalHead}<div class="empty-note">Sin días registrados. Dile al chat «hoy he comido unas 2.800 kcal» o registra aquí el total del día, a grosso modo.</div></div>`;
+      : `<div class="card">${kcalHead}<div class="empty-note">Sin días registrados. Dile a Claude «hoy he comido unas 2.800 kcal» o registra aquí el total del día, a grosso modo.</div></div>`;
 
     return kpis + kcalCard + cal + journalCard("nutricion");
   },
@@ -3614,7 +3614,7 @@ const FIN_VIEWS = {
         <div class="head"><span class="name">${esc(c.nombre)}</span><span class="badge">${eur(c.saldo)}</span></div>
         <div class="meta">${esc(c.tipo || "banco")}${c.updated ? " · actualizado " + c.updated : ""}</div>
       </div>`).join("")
-      : `<div class="empty-note">Sin cuentas. Dile al chat «tengo 850 en Revolut y 200 en efectivo» o créala aquí.</div>`;
+      : `<div class="empty-note">Sin cuentas. Dile a Claude «tengo 850 en Revolut y 200 en efectivo» o créala aquí.</div>`;
     return `<div class="card"><h2>Cuentas · total ${eur(saldoTotal())}</h2>${html}
       <div style="margin-top:12px"><button class="btn-mini" onclick="nuevaCuenta()">${OSIcons.nueva} Añadir cuenta</button></div>
       <div class="empty-note" style="margin-top:10px">Las cuentas bancarias se actualizan con el sync (Configuración); las manuales las tocas aquí.</div></div>`;
