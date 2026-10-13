@@ -56,6 +56,7 @@
     { href: "/areas.html#instagram", label: "Instagram", icon: ic("instagram", "◎") },
     { href: "/areas.html#skool", label: "Skool", icon: ic("users", "◌") },
     { href: "/areas.html#gym", label: "Gym", icon: ic("gym", "⚓") },
+    { href: "/areas.html#finanzas", label: "Finanzas", icon: ic("finanzas", "€") },
     { group: "Cerebro" },
     { href: "/areas.html#bandeja", label: "Bandeja", icon: ic("inbox", "▭") },
     { href: "/areas.html#ideas", label: "Ideas", icon: ic("bulb", "✦") },

@@ -676,7 +676,8 @@ const TABS = [
   { id: "bandeja", label: "Bandeja" },
   { id: "ideas", label: "Ideas" },
   { id: "notas", label: "Notas" },
-  // Finanzas oculta por ahora (28 ago 2026) — el área sigue funcionando en #finanzas si se reactiva aquí y en ui.js
+  { id: "finanzas", label: "Finanzas" }, // reactivada el 13 oct 2026 a petición de Alex
+  // Finanzas estuvo oculta por ahora (28 ago 2026) — el área sigue funcionando en #finanzas si se reactiva aquí y en ui.js
 ];
 const FIN_SUBS = [
   { id: "resumen", label: "Resumen" },
@@ -3259,7 +3260,7 @@ const VIEWS = {
     </div>`;
     const pesoCard = pesos.length
       ? `<div class="card">${pesoHead}<div class="sub">${pesos.length} pesajes · aquí o a Claude: «peso 68.2»</div><div class="chart-bars">${lineaPeso(pesos.slice(-40))}</div></div>`
-      : `<div class="card">${pesoHead}<div class="empty-note">Sin pesajes. Registra el primero aquí o dile al chat «peso 68.2».</div></div>`;
+      : `<div class="card">${pesoHead}<div class="empty-note">Sin pesajes. Registra el primero aquí o dile a Claude «peso 68.2».</div></div>`;
 
     return kpis + cal + pesoCard + journalCard("gym");
   },
@@ -3649,7 +3650,7 @@ const FIN_VIEWS = {
         <div class="head"><span class="name">${esc(s.nombre)}</span><span class="badge">${eur(s.importe)}/${s.periodicidad === "anual" ? "año" : "mes"}</span></div>
         <div class="meta">${s.dia_cobro ? "cobro día " + s.dia_cobro : ""}${s.activa === false ? " · inactiva" : ""}</div>
       </div>`).join("")
-      : `<div class="empty-note">Sin suscripciones. Añade una aquí o dile al chat «pago 20€/mes de ChatGPT el día 3».</div>`;
+      : `<div class="empty-note">Sin suscripciones. Añade una aquí o dile a Claude «pago 20€/mes de ChatGPT el día 3».</div>`;
     const totalSubs = activas.filter((s) => s.activa !== false).reduce((a, s) => a + cuotaMensual(s), 0);
     const deudaHtml = deudas.length ? deudas.map((s) => {
       const pendiente = (Number(s.cuotas_restantes) || 0) * (Number(s.importe) || 0);
@@ -3697,7 +3698,7 @@ const FIN_VIEWS = {
       </div>
       <div class="meter"><div class="fill" style="width:${pct}%"></div></div>
       <div class="empty-note">${eta}</div>
-      ${sinCuenta ? `<div class="empty-note" style="margin-top:8px">No hay ninguna cuenta de tipo «ahorro» — márcala en Cuentas o dile al chat «mi cuenta X es de ahorro».</div>` : ""}
+      ${sinCuenta ? `<div class="empty-note" style="margin-top:8px">No hay ninguna cuenta de tipo «ahorro» — márcala en Cuentas o dile a Claude «mi cuenta X es de ahorro».</div>` : ""}
     </div>` + journalCard("finanzas");
   },
 };
