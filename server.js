@@ -9,7 +9,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const {
   DATABASE_URL,
-  AUTH_USER = "alex",
+  AUTH_USER = "admin",
   AUTH_PASS,
   YOUTUBE_API_KEY,
   APIFY_TOKEN,
@@ -185,12 +185,13 @@ async function initSchema() {
   const nUsers = Number((await pool.query("SELECT COUNT(*)::int AS n FROM users")).rows[0].n);
   if (nUsers === 0) {
     const adminId = uid("u");
-    await pool.query(
-      "INSERT INTO users (id, username, password_hash, display_name, context, role, created, onboarded) VALUES ($1, $2, $3, $4, $5, 'admin', $6, true)",
-      [adminId, AUTH_USER.toLowerCase(), await hashPassword(AUTH_PASS), OWNER_NAME || capital(AUTH_USER), OWNER_CONTEXT || null, Date.now()]
-    );
     const legacy = await pool.query("SELECT data FROM app_state WHERE id = 1");
     const legacyData = legacy.rows[0]?.data || {};
+    // instalación nueva (sin datos que heredar) → su dueño pasa por la bienvenida al entrar
+    await pool.query(
+      "INSERT INTO users (id, username, password_hash, display_name, context, role, created, onboarded) VALUES ($1, $2, $3, $4, $5, 'admin', $6, $7)",
+      [adminId, AUTH_USER.toLowerCase(), await hashPassword(AUTH_PASS), OWNER_NAME || capital(AUTH_USER), OWNER_CONTEXT || null, Date.now(), Object.keys(legacyData).length > 0]
+    );
     await pool.query("INSERT INTO user_state (user_id, data) VALUES ($1, $2::jsonb)", [adminId, JSON.stringify(legacyData)]);
     await pool.query("UPDATE chat_images SET user_id = $1 WHERE user_id IS NULL", [adminId]);
     await pool.query("UPDATE app_files SET user_id = $1 WHERE user_id IS NULL", [adminId]);
@@ -214,11 +215,11 @@ function seedDefaults(data) {
     referencias: [], // Instagram · referencias: { id, cuenta, url?, titulo?, nota (qué me llevo), formato?, creada }
     ganchos: [],     // Instagram · banco de ganchos: { id, texto, tipo?, fuente?, nota?, creada }
     notas: [],       // Cerebro: { id, titulo, tipo: nota|decision|aprendizaje|revision, area?, fecha, creada, notas? (cuerpo, HTML sencillo), archivada? }
-    tomas: [],       // tomas de grabación (de Claqueta): { cid, descripcion, como?, lugar?, tipo, piezas: [cid de pieza], estado: pendiente|grabada, plan?, grabada_el?, archivo?, notas? }
+    tomas: [],       // tomas de grabación: { cid, descripcion, como?, lugar?, tipo, piezas: [cid de pieza], estado: pendiente|grabada, plan?, grabada_el?, archivo?, notas? }
     finanzas: [],    // { fecha, concepto, importe, tipo: ingreso|gasto, categoria?, cuenta? }
     cuentas: [],     // { id, nombre, tipo: banco|efectivo|ahorro|otro, saldo, updated }
     suscripciones: [], // { id, nombre, importe, periodicidad: mensual|anual, dia_cobro?, tipo: sub|deuda, cuotas_restantes?, fin?, activa }
-    config_finanzas: { objetivo_ahorro: 10800 },
+    config_finanzas: { objetivo_ahorro: 0 },
     config_nutricion: { kcal_obj: 2500 },
     integraciones: {}, // { airwallex: {client_id, api_key, base}, mercury: {token}, last_sync, last_result } — credenciales en BD, se configuran desde /config.html
     peso: [],        // { fecha, kg }
@@ -244,7 +245,7 @@ function seedDefaults(data) {
    Cumplido = kcal registradas >= config_nutricion.kcal_obj. Sin kcal = día sin registrar.
    Se aplica al leer y al escribir, así que es la única verdad posible. */
 function derivarNutricion(data) {
-  const obj = Number(data?.config_nutricion?.kcal_obj) || 3500;
+  const obj = Number(data?.config_nutricion?.kcal_obj) || 2500;
   const days = data?.days;
   if (!days || typeof days !== "object") return data;
   for (const f of Object.keys(days)) {
@@ -281,7 +282,7 @@ function uid(prefijo) {
   return prefijo + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 }
 
-/* las tareas llevan estado (sistema de growing-projects) y prioridad; hecha se deriva */
+/* las tareas llevan estado (el sistema típico de un gestor de proyectos) y prioridad; hecha se deriva */
 const ESTADOS_TAREA = ["pendiente", "por_definir", "en_ejecucion", "en_espera", "falta_revision", "completado"];
 const PRIORIDADES_TAREA = ["urgente", "alta", "normal", "baja"];
 function normalizarTareas(data) {
@@ -537,7 +538,7 @@ function buildDashboard(data) {
       kcal: Number(hoy?.kcal) > 0 ? Math.round(Number(hoy.kcal)) : null,
       score: hoy ? computeScore(hoy.senales, config) : null,
     },
-    kcal_obj: Number(data.config_nutricion?.kcal_obj) || 3500,
+    kcal_obj: Number(data.config_nutricion?.kcal_obj) || 2500,
     racha,
     media7,
     pendiente, // % de crecimiento del ritmo (30d vs 30d anteriores)
@@ -623,7 +624,7 @@ function buildWidget(data, user, q = {}) {
   const fecha = /^\d{4}-\d{2}-\d{2}$/.test(q.fecha || "") ? q.fecha : todayISO();
   const hora = hora2(q.hora) || new Date().toTimeString().slice(0, 5);
   const config = data.config || DEFAULT_CONFIG;
-  const kcalObj = Number(data.config_nutricion?.kcal_obj) || 3500;
+  const kcalObj = Number(data.config_nutricion?.kcal_obj) || 2500;
   const dia = data.days?.[fecha] || null;
   const vals = dia?.senales || {};
 
@@ -1086,12 +1087,19 @@ function requireAdmin(req, res, next) {
 const USERNAME_RE = /^[a-z0-9._-]{2,32}$/;
 
 /* ---------- cuenta propia ---------- */
-app.get("/api/me", (req, res) => {
+app.get("/api/me", async (req, res) => {
+  // partes activas del panel (config.modulos): la barra lateral las pinta; null = las de siempre
+  let modulos = null;
+  try {
+    const r = await pool.query("SELECT data->'config'->'modulos' AS m FROM user_state WHERE user_id = $1", [req.user.id]);
+    if (Array.isArray(r.rows[0]?.m)) modulos = r.rows[0].m.filter((x) => typeof x === "string");
+  } catch (e) {}
   res.json({
     user: publicUser(req.user),
     actor: publicUser(req.actor),
     viewing_as: req.viewingAs ? publicUser(req.user) : null,
     is_admin: isAdmin(req),
+    modulos,
   });
 });
 
@@ -2028,16 +2036,17 @@ Esta app es su panel de vida y tú estás conectado a ella por MCP: él te cuent
 Estructura del estado:
 - config.equilibrio (35 por defecto): el score que deja plana la CURVA DE CAPITAL. La curva trata el score del día como un tipo de interés: un día de 100 rinde +1 %, un día en el equilibrio no mueve nada y un día en blanco ya pasado resta como un 0; el capital arranca en 100 el primer día registrado, no tiene techo y puede caer. Es su medida de crecimiento a largo plazo ("ser un 1 % mejor cada día"): cuando pregunte cómo va, léela en get_dashboard.curva (capital, pico, caída, rend_hoy, anual = multiplicador si sostiene el ritmo de los últimos 30 días) y cuéntasela sin maquillar. Solo él cambia el equilibrio.
 - config.senales: [{ id, label, tipo: "bool"|"horas"|"kcal", peso, umbral? }] — los HÁBITOS que puntúan (${N} los llama "hábitos": dile siempre hábito, nunca señal — la clave interna sigue siendo senales). Actuales: ${HAB}
+- config.modulos: [ids] — las PARTES del panel que ${N} usa (la barra lateral solo enseña esas). Catálogo: agenda (calendario + tareas + recordatorios), instagram (piezas de contenido: tablero, cola, grabación, edición con editor, referencias, visión), gym (rutina, series y peso), sueno, nutricion (kcal frente a objetivo), finanzas (cuentas, bancos, movimientos, suscripciones, ahorro), proyectos (carpetas con subproyectos, tareas y archivos), bandeja, ideas, notas (las tres del Cerebro) y skool (reservado, sin construir). El Panel siempre está. Si no existe la clave se ven las de siempre. Cámbiala solo con su OK, con set_value config.modulos y la lista entera.
 - days: por fecha { senales: {id: valor}, resumen } — el registro diario.
 - journal: [{ fecha, area, texto }] — apuntes de contexto por área: general|sueno|gym|nutricion|proyectos|contenido|finanzas.
 - memoria: [{ id, texto, fecha }] — TU memoria durable entre conversaciones. Va entera al final de estas instrucciones, así que la tienes delante desde el primer mensaje sin leerla: guarda ahí con add_item lo que deba sobrevivir a esta conversación.
-- tareas: [{ id, titulo, estado, prioridad: urgente|alta|normal|baja, inicio?, fecha?, proyecto?, sub?, notas? (pizarra: texto plano o HTML sencillo h2/h3/b/u/div/br, como contenido.notas), hecha (derivada: true solo si estado=completado — cambia SIEMPRE estado, nunca hecha), creada, hecha_el? }] — la lista de tareas (área Tareas). Estados (mismo sistema que growing-projects): pendiente (sin iniciar) | por_definir (activa pero falta concretar) | en_ejecucion | en_espera (bloqueada por alguien/algo) | falta_revision (hecha pero pendiente de revisar) | completado (cerrada). fecha = fecha límite/fin; inicio = arranque de su ventana (time frame: con inicio y fecha la tarea está "activa" ese rango). Solo pon fechas si ${N} las dice. «Apunta que tengo que llamar a María el jueves» → add_item con fecha del jueves. «Estoy con X» → en_ejecucion; «X espera a Y» → en_espera; «X hecho, falta repasarlo» → falta_revision; «esto es urgente/importante» → prioridad urgente/alta. Cuando diga que algo está terminado del todo, pon estado completado + hecha_el — NO la borres. Solo borra si lo pide explícitamente (set_value con delete).
+- tareas: [{ id, titulo, estado, prioridad: urgente|alta|normal|baja, inicio?, fecha?, proyecto?, sub?, notas? (pizarra: texto plano o HTML sencillo h2/h3/b/u/div/br, como contenido.notas), hecha (derivada: true solo si estado=completado — cambia SIEMPRE estado, nunca hecha), creada, hecha_el? }] — la lista de tareas (área Tareas). Estados (como un gestor de proyectos): pendiente (sin iniciar) | por_definir (activa pero falta concretar) | en_ejecucion | en_espera (bloqueada por alguien/algo) | falta_revision (hecha pero pendiente de revisar) | completado (cerrada). fecha = fecha límite/fin; inicio = arranque de su ventana (time frame: con inicio y fecha la tarea está "activa" ese rango). Solo pon fechas si ${N} las dice. «Apunta que tengo que llamar a María el jueves» → add_item con fecha del jueves. «Estoy con X» → en_ejecucion; «X espera a Y» → en_espera; «X hecho, falta repasarlo» → falta_revision; «esto es urgente/importante» → prioridad urgente/alta. Cuando diga que algo está terminado del todo, pon estado completado + hecha_el — NO la borres. Solo borra si lo pide explícitamente (set_value con delete).
 - recordatorios: [{ id, titulo, desde, hasta?, frecuencia: diario|laborables|cada_2|cada_3|cada_7|dias, dias? (si frecuencia=dias: ["lun","mar","mie","jue","vie","sab","dom"]), proyecto?, notas?, hechos: { "<fecha>": true } }] — recordatorios PERIÓDICOS dentro de una ventana (área Tareas). Cada día que toca aparece en "Para hoy"; marcarlo escribe hechos.<fecha>=true y reaparece el siguiente día que toque; al pasar hasta caduca solo. «Recuérdame hacer follow-up a María cada 2 días durante 2 semanas» → add_item en recordatorios con desde=hoy, hasta=+14 días, frecuencia=cada_2. cada_2/cada_3/cada_7 cuentan a partir del campo desde. No toques hechos salvo que ${N} diga que ya lo hizo hoy.
 - rutina_gym: { lunes..domingo: { titulo, ejercicios: [{ nombre, series, reps, nota? }] } } — la rutina semanal de gym (editable en el panel, pestaña Gym → Rutina). Si ${N} pide cambios de rutina, edítala con set_value respetando la estructura.
 - entrenos: { "<fecha>": { dia, sets: { "<nombre ejercicio>": [{ kg, reps }, ...una entrada por serie] } } } — lo que ${N} levanta cada día (Gym → Tracker). Si dice «hoy press inclinado 3×10 con 40kg», regístralo aquí con set_value y marca la señal entreno. REGLAS AL ESCRIBIR AQUÍ, el historial se indexa por nombre y se rompe si te desvías: (1) el campo "dia" = el id del día de la semana de ESA fecha (lunes|martes|miercoles|jueves|viernes|sabado|domingo), nunca el título del día ("Push", "Pierna 1"…). (2) El nombre del ejercicio debe coincidir LETRA POR LETRA con el de rutina_gym[dia].ejercicios[].nombre; léelo antes con read_state si no lo tienes delante. (3) Si el ejercicio no está en la rutina de ese día, usa el nombre tal cual aparece en otro día de la rutina. (4) Si no existe en ningún día, pregunta antes de inventarte un nombre nuevo: cada variante crea un historial separado.
 - days.<fecha>.sueno_horario: { acostar: "23:00", levantar: "06:00" } — opcional. Si ${N} dice a qué hora se acostó y se levantó, calcula las horas dormidas (si se acostó antes de medianoche, suma las 24h), regístralas como señal sueno con log_day y guarda el horario con set_value en days.<fecha>.sueno_horario.
 - proyectos: [{ id, nombre, icono (rocket|briefcase|code|video|mic|school|presentation|tienda|coin|chart|users|robot|server|camera|pencil|book|world|tool|flask|gamepad|palette|home|bolt|bulb), tipo: normal|periodico, estado: activo|en_cola|pausado|entregado|cerrado, desc?, siguiente?, subs, notas? (pizarra HTML sencillo, como contenido.notas), archivos? (NO tocar: se gestionan desde la página), updated }]. Un proyecto es una CARPETA: dentro viven sus tareas (campo proyecto en tareas), subproyectos, archivos y pizarra. Cada sub de subs es un SUBPROYECTO con vida propia: { id, nombre, estado: en_curso|en_cola|pausado|hecho, done (derivado: true solo si estado=hecho — para cambiarlo cambia SIEMPRE estado, nunca done), fecha? (día en que se completó, ponla al pasar a hecho), notas? (pizarra HTML sencillo, como la de contenido), archivos?: [{id, nombre, mime, size}] — NO toques archivos, se gestionan desde el panel }. Las tareas pueden colgar de un subproyecto vía su campo sub (id del sub). Si añades un sub nuevo no le pongas id (se genera solo) y usa estado en_curso o en_cola.
-- contenido: las PIEZAS del área Instagram (${N} publica solo en Instagram): [{ cid?, num?, fecha (creada), tipo: reel|youtube, clase?: soft|hard, titulo, estado: idea|guion|grabar|editar|lista|publicado (pipeline en ese orden: idea → guion escrito → por grabar → en edición → lista para publicar → publicada), fecha_plan? (día en que se publica), hora?, fecha_pub?, url?, views?, likes?, comments?, gancho?, cuerpo?, cierre?, cta?, caption?, hashtags?, fuente?, formato?, broll?, pantalla?, carpeta?, archivo?, editor?: {enviada, recibida, aprobada, cambios}, produccion?, nota? (1-10), porque_no_10?, notas? }]. «Ya grabé la 3» → estado editar (o lista si no hay editor); «la 1 está lista» → lista; «publiqué la 1» → publicado + fecha_pub. palabra? = palabra clave del CTA («comenta CLAUDE» → CLAUDE). edicion = SOLO LECTURA, la añade el servidor cuando la pieza está asignada a un editor ({ editor_nombre, estado: por_editar|en_edicion|entregada|cambios|aprobada, fecha_limite, brief, entregas, mensajes }); no la escribas: la gestionan ${N} y el editor desde el panel. Las tomas pendientes de cada pieza están en tomas (por cid). — las métricas de piezas con link (YouTube e Instagram) se actualizan solas desde sus APIs; no hace falta que ${N} las dicte salvo que quiera corregirlas. video_url es interno (mp4 del reel para el player del panel, lo rellena la API — no lo toques). notas es la "pizarra" de la pieza y puede llevar HTML sencillo (h2/h3, b, u, div, br); si escribes tú, texto plano o ese HTML simple. — al marcar publicado, pon fecha_pub con el día real de publicación (cuenta para el reto). fecha_plan = día en que ${N} planea publicarla (calendario de publicación; «el reel del Excel sale el jueves» → fecha_plan). Si ${N} pasa el link («publiqué un reel: <link>»), guárdalo en url (sirve para la miniatura y el player del panel). Si menciona métricas («el reel lleva 4k views»), actualiza views/likes de esa pieza.
+- contenido: las PIEZAS del área Instagram: [{ cid?, num?, fecha (creada), tipo: reel|youtube, clase?: soft|hard, titulo, estado: idea|guion|grabar|editar|lista|publicado (pipeline en ese orden: idea → guion escrito → por grabar → en edición → lista para publicar → publicada), fecha_plan? (día en que se publica), hora?, fecha_pub?, url?, views?, likes?, comments?, gancho?, cuerpo?, cierre?, cta?, caption?, hashtags?, fuente?, formato?, broll?, pantalla?, carpeta?, archivo?, editor?: {enviada, recibida, aprobada, cambios}, produccion?, nota? (1-10), porque_no_10?, notas? }]. «Ya grabé la 3» → estado editar (o lista si no hay editor); «la 1 está lista» → lista; «publiqué la 1» → publicado + fecha_pub. palabra? = palabra clave del CTA («comenta CLAUDE» → CLAUDE). edicion = SOLO LECTURA, la añade el servidor cuando la pieza está asignada a un editor ({ editor_nombre, estado: por_editar|en_edicion|entregada|cambios|aprobada, fecha_limite, brief, entregas, mensajes }); no la escribas: la gestionan ${N} y el editor desde el panel. Las tomas pendientes de cada pieza están en tomas (por cid). — las métricas de piezas con link (YouTube e Instagram) se actualizan solas desde sus APIs; no hace falta que ${N} las dicte salvo que quiera corregirlas. video_url es interno (mp4 del reel para el player del panel, lo rellena la API — no lo toques). notas es la "pizarra" de la pieza y puede llevar HTML sencillo (h2/h3, b, u, div, br); si escribes tú, texto plano o ese HTML simple. — al marcar publicado, pon fecha_pub con el día real de publicación (cuenta para el reto). fecha_plan = día en que ${N} planea publicarla (calendario de publicación; «el reel del Excel sale el jueves» → fecha_plan). Si ${N} pasa el link («publiqué un reel: <link>»), guárdalo en url (sirve para la miniatura y el player del panel). Si menciona métricas («el reel lleva 4k views»), actualiza views/likes de esa pieza.
 - referencias: [{ id, cuenta, url?, titulo?, nota (qué se lleva de ella), formato?, creada }] — reels y cuentas modelo (Instagram → Referencias). «Guárdame este reel de X como referencia: me gusta cómo…» → add_item referencias.
 - ganchos: [{ id, texto, tipo?, fuente?, nota?, creada }] — banco de ganchos reutilizables. Los ganchos de sus propias piezas ya salen solos del campo gancho de contenido; aquí van los ajenos o sueltos.
 - VISIÓN (su «Creator Vision»: mensaje, pilares, a quién le habla, su historia, rueda LIFE, tres porqués, ganchos y planificador): vive aparte del estado, con historial de versiones (Instagram → Visión). Léela con get_vision cuando vayas a idear, escribir un guion o decidir algo de contenido: es la base de la que partir. Cambiarla es delicado: SOLO con update_vision y SOLO cuando ${N} esté hablando de su visión y te pida cambiarla. Antes de guardar, enséñale el texto exacto que quedará en cada casilla y espera su OK; guarda con un resumen de una frase (qué cambia y por qué). Cada guardado es una versión nueva y la anterior se puede restaurar desde el panel. Nunca la toques de paso en otra tarea.
@@ -2046,7 +2055,7 @@ Estructura del estado:
 - ideas: [{ id, texto, tipo: contenido|negocio, estado: nueva|en_guion|descartada, creada, notas?, pieza_cid? }] — ideas sueltas (Cerebro). «Idea: …» → add_item ideas (tipo contenido salvo que sea de negocio). Convertir una idea en pieza = add_item contenido { titulo, estado: idea } y poner la idea en en_guion.
 - notas: [{ id, titulo, tipo: nota|decision|aprendizaje|revision, area?, fecha, creada, notas? (cuerpo: texto plano o HTML sencillo), archivada? }] — notas, decisiones y aprendizajes (Cerebro). «Decidido: …» → add_item notas con tipo decision. REVISIÓN SEMANAL: cuando ${N} diga «revisión» (los domingos), escribe UNA nota tipo revision con guion fijo: score medio de la semana y qué hizo la curva (get_dashboard), piezas publicadas y sus métricas (contenido), bandeja a cero, y tres decisiones para la semana. Diez líneas, sin adornos.
 - Bucle diario: «buenos días» → get_dashboard y lo que toca hoy (piezas con fecha_plan hoy, tareas con fecha, recordatorios que tocan, rutina de gym del día) en cinco líneas. «cierro el día» → log_day con lo que cuente, vaciar la bandeja y decir qué pieza sale mañana.
-- config_contenido: { inicio, dias, meta_reels, meta_yt, min_dia? } — el reto de contenido (default: 100 días desde 2026-08-13, 100 reels + 42 vídeos YT, 100 min/día). Editable si ${N} cambia las metas.
+- config_contenido: { inicio, dias, meta_reels, meta_yt, min_dia?, por_semana? } — metas de contenido (si faltan: 100 días desde el primer día registrado, 100 reels, 42 vídeos, 100 min/día, 7 piezas a la semana). Editable si ${N} cambia las metas.
 - days.<fecha>.contenido_min: minutos dedicados a contenido ese día — el corazón del reto (objetivo min_dia, default 100). «Hoy le metí 2h al contenido» → set_value en days.<fecha>.contenido_min = 120. Si llega al objetivo, marca también la señal contenido con log_day.
 - finanzas: [{ fecha, concepto, importe, tipo: ingreso|gasto, categoria?, cuenta? }] — movimientos en euros. Categorías CANÓNICAS (usa siempre una de estas): gastos = Comida | Compras | Suscripciones | Transporte | Ocio | Salud | Negocio | Otros gastos; ingresos = Trabajo | Clientes | Contenido | Otros ingresos.
 - cuentas: [{ id, nombre, tipo: banco|efectivo|ahorro|otro, saldo, updated, divisa?, provider?, banco? }] — saldos. Las cuentas con provider (enablebanking: bancos españoles por PSD2, se conectan en Configuración → Bancos) se actualizan solas con el sync; sus movimientos llegan a finanzas con ext_id y no hay que dictarlos. Las manuales (efectivo, ahorro…) sí las actualiza ${N} contigo.
@@ -2074,17 +2083,35 @@ Reglas de comportamiento:
 /* Instrucciones que recibe la IA externa en el initialize del MCP. Heredan el manual que antes
    tenía el chat de la app (estructura del estado y reglas), más sus hábitos reales y su memoria
    durable: así un Claude de fuera sabe tanto como sabía el chat de dentro. */
+/* Onboarding con Claude: en una cuenta recién creada el manual trae el protocolo entero y le pide
+   ofrecerlo antes que nada; en las demás, una línea para rehacerlo si la persona lo pide. */
+const ONBOARDING = (N) => `ONBOARDING (dejar el panel a la medida de ${N}; nada se escribe sin su OK):
+1. Qué necesita. Empieza abierto: para qué quiere este panel, qué le gustaría que hiciera por él cada día, qué usa ahora para organizarse y qué le falla.
+2. Su vida, una pregunta cada vez y sin interrogatorio: trabajo o estudios y su objetivo de los próximos 3-6 meses · su día tipo (a qué hora se levanta y se acuesta, mañanas, tardes, fines de semana) · cuerpo (si entrena y cómo, cuánto duerme, si cuida la comida o cuenta calorías) · dinero (bancos y cuentas, gastos fijos, suscripciones o deudas, objetivo de ahorro) · proyectos aparte y si crea contenido · cabeza (dónde apunta ideas y tareas, qué le cuesta: constancia, foco, móvil…) · su ancla: por qué hace todo esto, en una palabra o una frase.
+3. Análisis. Devuélvele en un mensaje corto lo que has entendido (3-5 líneas) y una propuesta: qué partes del panel activar y por qué, cuáles no y por qué (mejor 3-5 bien usadas que todas vacías), de 4 a 7 hábitos medibles conectados a sus objetivos con pesos que sumen 100 (sí/no, horas con un umbral realista, o kcal si cuenta calorías), objetivos concretos (kcal, ahorro) y lo que necesitaría y el panel no tiene: eso se construye aparte con Claude Code sobre el código, no lo des por hecho.
+4. Con su OK, configura: set_value config.modulos (la lista entera) · set_value config.senales (ids en minúsculas, sin espacios ni tildes; conserva los ids que ya existan si solo cambias nombre o peso) · config_nutricion.kcal_obj y config_finanzas.objetivo_ahorro si aplican · su rutina en rutina_gym si entrena con una · add_item memoria con 5-10 hechos durables (objetivos, contexto, preferencias, su ancla) · set_value config.onboarding con la fecha de hoy. Si activa finanzas, explícale cómo conectar su banco: Configuración → Bancos (credenciales de Enable Banking) y después Finanzas → Cuentas → Añadir cuenta.
+5. Cierra con el uso diario en pocas frases: «buenos días» para ver qué toca, contarte el día cuando quiera para que lo apuntes, «cierro el día» para registrarlo y vaciar la bandeja, y «revisión» los domingos.
+Reglas: el panel sale de su vida, no copies el de nadie; no inventes datos; si algo no encaja en ninguna parte, apúntalo en ideas como mejora del panel.`;
+
+/* Instrucciones que recibe la IA externa en el initialize del MCP. Heredan el manual que antes
+   tenía el chat de la app (estructura del estado y reglas), más sus hábitos reales y su memoria
+   durable: así un Claude de fuera sabe tanto como sabía el chat de dentro. */
 function instruccionesMcp(data, user) {
   const hab = (data?.config?.senales || []).map((s) =>
     `${s.id} "${s.label}" (${s.tipo === "horas" ? `horas, umbral ${s.umbral}` : s.tipo === "kcal" ? "tipo kcal: DERIVADO, ver abajo" : "bool"}, ${s.peso} pts)`
   ).join(", ") || "ninguno configurado todavía";
-  const SYSTEM_PROMPT = systemPromptFor(user?.display_name || capital(user?.username) || "ti", user?.context || "", hab + ".");
+  const N = user?.display_name || capital(user?.username) || "ti";
+  const SYSTEM_PROMPT = systemPromptFor(N, user?.context || "", hab + ".");
+  const nueva = !data?.config?.onboarding && Object.keys(data?.days || {}).length < 3;
+  const onb = nueva
+    ? "\n\nESTA CUENTA ESTÁ RECIÉN CREADA: antes de nada, ofrécele hacer el onboarding (unos 20 minutos de conversación) para dejar el panel a su medida.\n" + ONBOARDING(N)
+    : `\n\nSi ${N} pide rehacer el onboarding o replantear el panel: pregúntale qué necesita, repasa su vida por bloques (trabajo, día tipo, cuerpo, dinero, proyectos, cabeza, ancla), propón partes (config.modulos) y hábitos (config.senales, pesos que sumen 100) y configura solo con su OK.`;
   const mems = Array.isArray(data?.memoria) ? data.memoria : [];
   if (!mems.length) {
-    return SYSTEM_PROMPT + "\n\nMEMORIA: vacía todavía — ve guardando hechos durables con add_item en memoria.";
+    return SYSTEM_PROMPT + onb + "\n\nMEMORIA: vacía todavía — ve guardando hechos durables con add_item en memoria.";
   }
   const lineas = mems.map((m, i) => `${i}. [${m.fecha || "?"}] ${m.texto}`).join("\n");
-  return SYSTEM_PROMPT + `\n\nMEMORIA (tus ${mems.length} recuerdos durables; el número es el índice para set_value memoria.<i>):\n` + lineas;
+  return SYSTEM_PROMPT + onb + `\n\nMEMORIA (tus ${mems.length} recuerdos durables; el número es el índice para set_value memoria.<i>):\n` + lineas;
 }
 
 const TOOLS = [

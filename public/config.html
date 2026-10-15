@@ -101,6 +101,16 @@
   .tema .prev { height: 46px; border-radius: 8px; position: relative; overflow: hidden; border: 1px solid rgba(128,128,128,0.18); }
   .tema .prev .pcard { position: absolute; left: 9px; top: 9px; right: 9px; bottom: -8px; border-radius: 6px; }
   .tema .prev .pdot { position: absolute; left: 16px; top: 16px; width: 18px; height: 5px; border-radius: 3px; }
+  /* partes del panel */
+  .mods { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 8px; margin-top: 12px; }
+  .mod { display: grid; grid-template-columns: 20px 1fr; gap: 10px; align-items: start; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; cursor: pointer; background: var(--surface); text-align: left; font-family: inherit; color: inherit; width: 100%; }
+  .mod:hover { border-color: var(--border-strong); }
+  .mod .chk { width: 18px; height: 18px; border-radius: 5px; border: 1.5px solid var(--border-strong); display: grid; place-items: center; margin-top: 1px; color: var(--surface); }
+  .mod.on .chk { background: var(--ink); border-color: var(--ink); }
+  .mod .chk .tic { width: 12px; height: 12px; }
+  .mod b { font-size: 14px; font-weight: 600; color: var(--ink); }
+  .mod .g { font-size: 11.5px; color: var(--ink-3); margin-left: 6px; }
+  .mod p { font-size: 12.5px; color: var(--ink-3); margin-top: 2px; line-height: 1.4; }
   .admin-link { margin-top: 14px; font-size: 12px; }
   .admin-link a { color: var(--ink-3); text-decoration: none; }
   .admin-link a:hover { color: var(--ink); text-decoration: underline; }
@@ -123,10 +133,18 @@
     <div class="btns">
       <button class="primary" id="accGuardar">Guardar</button>
       <button id="accPass">Cambiar contraseña</button>
-      <button id="accOnb" title="Vuelve a pasar por la configuración inicial: nombre, contexto, hábitos y tema">Repetir bienvenida</button>
+      <button id="accOnb" title="Vuelve a pasar por la configuración inicial: para qué lo quieres, partes, nombre, contexto, hábitos y tema">Repetir bienvenida</button>
     </div>
     <div class="msg" id="accMsg"></div>
     <div class="admin-link" id="accAdmin" hidden><a href="/admin.html">Usuarios y grupos (solo admin)</a></div>
+  </div>
+
+  <div class="card" id="partes">
+    <h2>Partes del panel</h2>
+    <div class="desc">Elige qué partes usas: la barra lateral solo enseña esas y el Panel siempre está. Lo que desactives no se borra, vuelve tal cual si lo activas otra vez. Claude también puede cambiarlas si se lo pides.</div>
+    <div class="mods" id="mods"></div>
+    <div class="btns"><button class="primary" id="modsGuardar">Guardar</button></div>
+    <div class="msg" id="modsMsg"></div>
   </div>
 
   <div class="card">
@@ -135,7 +153,7 @@
     <div class="temas" id="temas"></div>
   </div>
 
-  <div class="card">
+  <div class="card" id="conectar-ia">
     <h2>Conectar con otras IAs</h2>
     <div class="desc">Genera un token para usar este panel desde Claude Code, Claude Desktop u otra IA compatible con MCP: podrá consultar tu score, tus tareas y tus proyectos, y registrar lo que le cuentes. Cada token da acceso <b>solo a tu cuenta</b>, y puedes revocarlo cuando quieras.</div>
     <div id="mcpLista"></div>
@@ -745,6 +763,37 @@ for (const t of TEMAS) {
   };
   temasBox.appendChild(b);
 }
+
+/* ---------- Partes del panel (config.modulos; catálogo en OS_MODULOS de ui.js) ---------- */
+let MODS = null;
+async function cargaMods() {
+  try {
+    const st = await (await fetch("/api/state", { credentials: "include" })).json();
+    MODS = new Set(Array.isArray(st.config?.modulos) ? st.config.modulos : OS_MODULOS.legado);
+    pintaMods();
+  } catch (e) { document.getElementById("modsMsg").textContent = "No se pudieron cargar: " + e.message; }
+}
+function pintaMods() {
+  const box = document.getElementById("mods");
+  box.innerHTML = OS_MODULOS.catalogo.filter((m) => !m.reservado || MODS.has(m.id)).map((m) =>
+    `<button type="button" class="mod ${MODS.has(m.id) ? "on" : ""}" data-id="${m.id}"><span class="chk">${MODS.has(m.id) ? (OSIcons.check || "✓") : ""}</span><span><b>${m.label}</b><span class="g">${m.grupo}</span><p>${m.desc}</p></span></button>`).join("");
+  box.querySelectorAll(".mod").forEach((b) => { b.onclick = () => { const id = b.dataset.id; if (MODS.has(id)) MODS.delete(id); else MODS.add(id); pintaMods(); }; });
+}
+document.getElementById("modsGuardar").onclick = async () => {
+  const msg = document.getElementById("modsMsg");
+  if (!MODS) return;
+  try {
+    // config es una clave entera: se relee antes de escribir para no pisar hábitos ni nada más
+    const st = await (await fetch("/api/state", { credentials: "include" })).json();
+    const modulos = OS_MODULOS.catalogo.map((m) => m.id).filter((id) => MODS.has(id));
+    const r = await fetch("/api/state", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ config: { ...(st.config || {}), modulos } }) });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    try { sessionStorage.removeItem("os_me_v1"); sessionStorage.removeItem("os_cache_v1"); } catch (e) {}
+    await OSMe.refresh();
+    msg.textContent = "Guardado: la barra ya enseña solo esas partes.";
+  } catch (e) { msg.textContent = "No se pudo guardar: " + e.message; }
+};
+cargaMods();
 </script>
 <div id="ready"></div>
 </body>

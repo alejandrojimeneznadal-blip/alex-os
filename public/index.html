@@ -527,15 +527,18 @@ function renderHoyToca() {
   if (!box || !STATE || !DASH) return;
   const hoy = DASH.fecha, filas = [], e = (t) => String(t ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const ep = (c) => (c.estado === "grabado" || c.estado === "editando") ? "editar" : (c.estado || "idea");
-  for (const c of STATE.contenido || []) if (c.fecha_plan === hoy && ep(c) !== "publicado")
+  // solo lo de las partes activas de la cuenta (config.modulos; sin ella, las de siempre)
+  const mods = Array.isArray(STATE.config?.modulos) ? STATE.config.modulos : (window.OS_MODULOS?.legado || []);
+  const on = (id) => mods.includes(id);
+  if (on("instagram")) for (const c of STATE.contenido || []) if (c.fecha_plan === hoy && ep(c) !== "publicado")
     filas.push(`<div class="ht-row"><span class="k">Publicar</span><a href="/areas.html#instagram">${e(c.titulo || "(sin título)")}</a><span class="m">${c.hora ? e(c.hora) + " · " : ""}${ep(c) === "lista" ? "lista" : ep(c)}</span></div>`);
   const activa = (t) => (t.fecha && t.fecha <= hoy) || (t.inicio && t.inicio <= hoy && (!t.fecha || t.fecha >= hoy));
-  const ts = (STATE.tareas || []).filter((t) => ["pendiente", "por_definir", "en_ejecucion", undefined].includes(t.estado) && !t.hecha && activa(t)).slice(0, 6);
+  const ts = on("agenda") ? (STATE.tareas || []).filter((t) => ["pendiente", "por_definir", "en_ejecucion", undefined].includes(t.estado) && !t.hecha && activa(t)).slice(0, 6) : [];
   for (const t of ts) filas.push(`<div class="ht-row"><span class="k">Tarea</span><a href="/areas.html#agenda">${e(t.titulo)}</a><span class="m">${t.fecha && t.fecha < hoy ? "atrasada" : t.estado === "en_ejecucion" ? "en ejecución" : ""}</span></div>`);
-  for (const r of (STATE.recordatorios || []).filter((r) => tocaRec(r, hoy) && !r.hechos?.[hoy]).slice(0, 4))
+  for (const r of on("agenda") ? (STATE.recordatorios || []).filter((r) => tocaRec(r, hoy) && !r.hechos?.[hoy]).slice(0, 4) : [])
     filas.push(`<div class="ht-row"><span class="k">Recordatorio</span><a href="/areas.html#agenda">${e(r.titulo)}</a></div>`);
   const dow = new Date(hoy + "T12:00").getDay(), rut = STATE.rutina_gym?.[["domingo", "lunes", "martes", "miercoles", "jueves", "viernes", "sabado"][dow]];
-  if (STATE.entrenos?.[hoy]) filas.push(`<div class="ht-row"><span class="k">Gym</span><a href="/areas.html#gym/tracker">${e(rut?.titulo || "Entreno")}</a><span class="m">hecho</span></div>`);
+  if (!on("gym")) {} else if (STATE.entrenos?.[hoy]) filas.push(`<div class="ht-row"><span class="k">Gym</span><a href="/areas.html#gym/tracker">${e(rut?.titulo || "Entreno")}</a><span class="m">hecho</span></div>`);
   else if (rut && (rut.ejercicios || []).length) filas.push(`<div class="ht-row"><span class="k">Gym</span><a href="/areas.html#gym/tracker">${e(rut.titulo || "Entreno")}</a><span class="m">${rut.ejercicios.length} ejercicios</span></div>`);
   box.hidden = !filas.length;
   lista.innerHTML = filas.join("");
@@ -637,7 +640,7 @@ function renderSenales(d) {
       div.onclick = (e) => { if (e.target !== inp) inp.focus(); };
     } else if (s.tipo === "kcal") {
       // nutrición: NO se marca a mano, se deriva de las kcal del día (objetivo en config_nutricion)
-      const obj = Number(d.kcal_obj) || 3500;
+      const obj = Number(d.kcal_obj) || 2500;
       const num = Number(d.hoy.kcal);
       const logged = Number.isFinite(num) && num > 0;
       const done = logged && num >= obj;
@@ -699,7 +702,7 @@ function renderRdLista() {
         else rdSen[s.id] = n;
       };
     } else if (s.tipo === "kcal") {
-      const obj = Number(STATE?.config_nutricion?.kcal_obj) || 3500;
+      const obj = Number(STATE?.config_nutricion?.kcal_obj) || 2500;
       row.innerHTML = `<span class="lab">${s.label}</span><input type="number" inputmode="numeric" step="50" value="${rdKcal ?? ""}" placeholder="—"><span class="um">/ ${obj.toLocaleString("es")} kcal</span>`;
       row.style.cursor = "default";
       row.querySelector("input").oninput = (e) => {

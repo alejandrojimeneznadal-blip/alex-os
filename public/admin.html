@@ -219,7 +219,7 @@ function modalCuenta({ titulo, u = null, ok }) {
     card.style.maxWidth = "420px";
     const nuevo = !u;
     card.innerHTML = `<h3>${titulo}</h3>
-      ${nuevo ? `<label>Usuario (para entrar)</label><input data-id="username" autocapitalize="none" autocomplete="off" placeholder="p. ej. juanca">` : ""}
+      ${nuevo ? `<label>Usuario (para entrar)</label><input data-id="username" autocapitalize="none" autocomplete="off" placeholder="p. ej. maria">` : ""}
       <label>Nombre</label><input data-id="display_name" value="${esc(u?.display_name || "")}" placeholder="Cómo le llama el asistente">
       <label>Contexto para el asistente</label><textarea data-id="context" rows="3" placeholder="Dos o tres frases: a qué se dedica, qué persigue, qué tono prefiere. Lo puede editar después en Configuración.">${esc(u?.context || "")}</textarea>
       ${nuevo ? `<label>Contraseña inicial</label><div class="pwrow"><input data-id="password" type="text" autocomplete="off" value="${passAleatoria()}"><button type="button" data-a="gen">Otra</button></div><div class="hint">Cópiala y pásasela: es la que usará para entrar. Después puede cambiarla en Configuración.</div>` : ""}
@@ -243,7 +243,7 @@ function modalCuenta({ titulo, u = null, ok }) {
 }
 
 $("btnGrupo").onclick = async () => {
-  const nombre = await OSUI.prompt("Nuevo grupo", "", { label: "Nombre", placeholder: "p. ej. Amigos, Growing Inmobiliario", ok: "Crear" });
+  const nombre = await OSUI.prompt("Nuevo grupo", "", { label: "Nombre", placeholder: "p. ej. Amigos, Trabajo", ok: "Crear" });
   if (!nombre || !nombre.trim()) return;
   try {
     await api("/api/admin/workspaces", { method: "POST", body: JSON.stringify({ nombre }) });

@@ -37,8 +37,30 @@
   window.OSMe.refresh();
 })();
 
+/* ---------- Partes del panel (config.modulos) ----------
+   Cada persona elige qué partes usa y la barra solo enseña esas. Sin config.modulos se ven las de
+   siempre (legado). Lo usan la barra, la bienvenida, Configuración y el «Hoy toca» del panel. */
+window.OS_MODULOS = (function () {
+  const catalogo = [
+    { id: "agenda", grupo: "Resumen", label: "Agenda", href: "/areas.html#agenda", icon: "calendario", fb: "▦", desc: "Calendario con tareas, recordatorios y lo que toca cada día." },
+    { id: "instagram", grupo: "Áreas", label: "Instagram", href: "/areas.html#instagram", icon: "instagram", fb: "◎", desc: "Piezas de contenido de la idea a la publicación: tablero, cola, grabación, edición con editor, referencias y visión." },
+    { id: "skool", grupo: "Áreas", label: "Skool", href: "/areas.html#skool", icon: "users", fb: "◌", desc: "Reservado: todavía sin construir.", reservado: true },
+    { id: "gym", grupo: "Áreas", label: "Gym", href: "/areas.html#gym", icon: "gym", fb: "⚓", desc: "Rutina semanal, las series de cada día frente a la última vez y el peso corporal." },
+    { id: "sueno", grupo: "Áreas", label: "Sueño", href: "/areas.html#sueno", icon: "sueno", fb: "☾", desc: "Horas por noche, medias, racha y rutinas de despertar." },
+    { id: "nutricion", grupo: "Áreas", label: "Nutrición", href: "/areas.html#nutricion", icon: "nutricion", fb: "◔", desc: "Calorías de cada día frente a tu objetivo." },
+    { id: "finanzas", grupo: "Áreas", label: "Finanzas", href: "/areas.html#finanzas", icon: "finanzas", fb: "€", desc: "Cuentas (tu banco conectado o a mano), movimientos, suscripciones y ahorro." },
+    { id: "proyectos", grupo: "Áreas", label: "Proyectos", href: "/areas.html#proyectos", icon: "proyectos", fb: "◫", desc: "Cada proyecto es una carpeta con subproyectos, tareas, archivos y notas." },
+    { id: "bandeja", grupo: "Cerebro", label: "Bandeja", href: "/areas.html#bandeja", icon: "inbox", fb: "▭", desc: "Apunta cualquier cosa sin clasificar y vacíala cada noche." },
+    { id: "ideas", grupo: "Cerebro", label: "Ideas", href: "/areas.html#ideas", icon: "bulb", fb: "✦", desc: "Ideas sueltas que pueden acabar en una pieza, una tarea o un proyecto." },
+    { id: "notas", grupo: "Cerebro", label: "Notas", href: "/areas.html#notas", icon: "journal", fb: "≡", desc: "Notas, decisiones, aprendizajes y la revisión de cada domingo." },
+  ];
+  const legado = ["agenda", "instagram", "skool", "gym", "finanzas", "bandeja", "ideas", "notas"];
+  const activos = (me) => (Array.isArray(me?.modulos) ? me.modulos : legado);
+  return { catalogo, legado, activos, on: (id, me) => activos(me === undefined ? window.OSMe?.get() : me).includes(id) };
+})();
+
 (function () {
-  if (window.OS_SIN_BARRA) return; // páginas sin barra lateral (la del editor)
+  if (window.OS_SIN_BARRA) return; // páginas sin barra lateral (la del editor, la bienvenida)
   const SBW = 228;
 
   // iconos Tabler inlineados en /icons.js (debe cargarse antes que ui.js)
@@ -46,26 +68,18 @@
   const ic = (k, fb) => I[k] || `<span>${fb}</span>`;
   const esc = (t) => String(t ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
-  // 11 oct 2026: el panel es personal. Las áreas salen de la barra hasta decidir cuáles entran
-  // en la etapa Instagram → Skool (las páginas siguen vivas por URL: /areas.html#gym, #tareas…).
-  // Configuración es el engranaje del pie; Usuarios (/admin.html) ya no se enlaza desde aquí.
-  // Para añadir un área: { href: "/areas.html#gym", label: "Gym", icon: ic("gym", "⚓") }.
-  // 12 oct 2026: estructura acordada con Alex — Resumen · Áreas · Cerebro (ver memoria/artefacto «Estructura de Daily System»)
-  const SECTIONS = [
-    { group: "Resumen" },
-    { href: "/", label: "Panel", icon: ic("panel", "◱") },
-    { href: "/areas.html#agenda", label: "Agenda", icon: ic("calendario", "▦") },
-    { group: "Áreas" },
-    { href: "/areas.html#instagram", label: "Instagram", icon: ic("instagram", "◎") },
-    { href: "/areas.html#skool", label: "Skool", icon: ic("users", "◌") },
-    { href: "/areas.html#gym", label: "Gym", icon: ic("gym", "⚓") },
-    { href: "/areas.html#finanzas", label: "Finanzas", icon: ic("finanzas", "€") },
-    { group: "Cerebro" },
-    { href: "/areas.html#bandeja", label: "Bandeja", icon: ic("inbox", "▭") },
-    { href: "/areas.html#ideas", label: "Ideas", icon: ic("bulb", "✦") },
-    { href: "/areas.html#notas", label: "Notas", icon: ic("journal", "≡") },
-  ];
-
+  // Panel siempre; el resto según las partes activas de la cuenta (OS_MODULOS). Configuración es el engranaje del pie.
+  function secciones(me) {
+    const on = new Set(OS_MODULOS.activos(me));
+    const out = [{ group: "Resumen" }, { href: "/", label: "Panel", icon: ic("panel", "◱") }];
+    let grupo = "Resumen";
+    for (const m of OS_MODULOS.catalogo) {
+      if (!on.has(m.id)) continue;
+      if (m.grupo !== grupo) { out.push({ group: m.grupo }); grupo = m.grupo; }
+      out.push({ href: m.href, label: m.label, icon: ic(m.icon, m.fb) });
+    }
+    return out;
+  }
   const css = `
     :root { --sbw: ${SBW}px; }
     @view-transition { navigation: auto; }
@@ -178,12 +192,13 @@
   const nav = document.createElement("nav");
   nav.id = "sidebar";
   const APP = "Daily System";
-  // 12 oct 2026: sin marca arriba de la barra (Alex: «quita esto de aquí arriba a la izquierda»); el nombre solo va en la barra superior del móvil
-  nav.innerHTML =
-    SECTIONS.map((s) => s.group
+  // sin marca arriba de la barra: el nombre solo va en la barra superior del móvil
+  const pintaItems = (me) => secciones(me).map((s) => s.group
       ? `<div class="sb-group">${s.group}</div>`
-      : `<a class="sb-item${s.admin ? " admin-only" : ""}" href="${s.href}"><span class="ic">${s.icon}</span>${s.label}</a>`
-    ).join("") +
+      : `<a class="sb-item" href="${s.href}"><span class="ic">${s.icon}</span>${s.label}</a>`
+    ).join("");
+  nav.innerHTML =
+    `<div class="sb-items">${pintaItems(window.OSMe?.get())}</div>` +
     `<div class="sb-foot"><a class="sb-gear" href="/config.html" title="Configuración" aria-label="Configuración">${ic("config", "⚙")}</a><button class="sb-logout" id="sbLogout">${ic("salir", "←")} Salir</button></div>`;
   document.body.appendChild(nav);
 
@@ -209,6 +224,15 @@
     }
   }
   if (window.OSMe) window.OSMe.onChange(paintMe);
+  let itemsPintados = JSON.stringify(OS_MODULOS.activos(window.OSMe?.get()));
+  function repintaItems(me) {
+    const k = JSON.stringify(OS_MODULOS.activos(me));
+    if (k === itemsPintados) return;
+    itemsPintados = k;
+    nav.querySelector(".sb-items").innerHTML = pintaItems(me);
+    setActive();
+  }
+  if (window.OSMe) window.OSMe.onChange((me) => repintaItems(me));
 
   const overlay = document.createElement("div");
   overlay.id = "sb-overlay";
@@ -273,9 +297,7 @@
   window.addEventListener("hashchange", () => { setActive(); closeSb(); });
   setActive();
 
-  nav.querySelectorAll("a.sb-item").forEach((a) => {
-    a.addEventListener("click", () => setTimeout(closeSb, 50));
-  });
+  nav.addEventListener("click", (e) => { if (e.target.closest("a.sb-item")) setTimeout(closeSb, 50); });
 
   document.getElementById("sbLogout").onclick = async () => {
     try { await fetch("/api/logout", { method: "POST", credentials: "include" }); } catch (e) {}

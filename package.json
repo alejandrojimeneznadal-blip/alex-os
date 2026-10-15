@@ -1,11 +1,12 @@
 {
-  "name": "alex-os",
+  "name": "daily-system",
   "version": "1.0.0",
-  "description": "Panel personal de Alex — señales diarias, score y chat IA",
+  "description": "Daily System: panel personal de vida. Hábitos que puntúan el día, curva de crecimiento y las partes que cada persona elija, conectado a Claude por MCP.",
   "main": "server.js",
   "type": "module",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "dev": "node --env-file=.env server.js"
   },
   "engines": {
     "node": ">=20"

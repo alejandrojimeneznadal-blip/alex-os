@@ -3,101 +3,100 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<meta name="theme-color" content="#f3f3f5">
+<meta name="theme-color" content="#f6f7f9">
 <title>Bienvenida · Daily System</title>
 <style>
+  /* Primera vez de una cuenta: para qué lo quiere y qué partes usa, nombre, contexto, hábitos y tema.
+     Colores y letra vienen de theme.js; el onboarding a fondo lo hace luego Claude por MCP. */
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  :root {
-    --bg: #f3f3f5; --surface: #ffffff; --surface-2: #f4f4f7; --border: #e9e9ee;
-    --ink: #17171c; --ink-2: #4c4c56; --ink-3: #8b8b94; --accent: #5546e8; --accent-2: #7b6cff;
-    --good: #0a7d0a; --bad: #d03b3b; --radius: 18px;
-  }
-  html, body {
-    background: var(--bg); color: var(--ink); min-height: 100%;
-    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-    -webkit-font-smoothing: antialiased; font-size: 15px; line-height: 1.45;
-  }
+  html, body { background: var(--bg); color: var(--ink); min-height: 100%; -webkit-font-smoothing: antialiased; line-height: 1.45; }
   body { display: flex; align-items: flex-start; justify-content: center; padding: 28px 16px 60px; }
-  .box { width: 100%; max-width: 560px; }
+  .box { width: 100%; max-width: 600px; }
   .top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
-  .brand { display: flex; align-items: center; gap: 10px; font-weight: 750; letter-spacing: -0.01em; }
-  .brand .chip { width: 34px; height: 34px; border-radius: 11px; background: var(--ink); color: var(--surface); font-size: 12px; font-weight: 600; letter-spacing: -0.03em; display: flex; align-items: center; justify-content: center; }
-  .skip { background: none; border: none; color: var(--ink-3); font-family: inherit; font-size: 13px; cursor: pointer; padding: 6px 8px; border-radius: 8px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 650; font-size: 15px; }
+  .brand .chip { width: 28px; height: 28px; border-radius: 6px; background: var(--ink); color: var(--surface); font-size: 11px; font-weight: 600; letter-spacing: -0.03em; display: grid; place-items: center; }
+  .skip { background: none; border: none; color: var(--ink-3); font-family: inherit; font-size: 13px; cursor: pointer; padding: 6px 8px; border-radius: 6px; }
   .skip:hover { color: var(--ink); background: var(--surface-2); }
   .dots { display: flex; gap: 6px; margin-bottom: 14px; }
-  .dots span { height: 4px; flex: 1; border-radius: 4px; background: var(--border); transition: background 0.2s; }
-  .dots span.on { background: var(--accent); }
-  .card {
-    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 26px 24px;
-    box-shadow: 0 1px 2px rgba(23,23,40,0.04), 0 12px 32px rgba(23,23,40,0.07);
-  }
+  .dots span { height: 3px; flex: 1; border-radius: 3px; background: var(--border); transition: background 0.2s; }
+  .dots span.on { background: var(--ink); }
+  .card { padding: 26px 24px; }
   .step { display: none; }
   .step.on { display: block; animation: in 0.22s ease; }
   @keyframes in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
-  .k { font-size: 11px; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.09em; font-weight: 650; margin-bottom: 8px; }
-  h1 { font-size: 24px; font-weight: 750; letter-spacing: -0.02em; line-height: 1.2; margin-bottom: 8px; }
-  .lead { font-size: 14px; color: var(--ink-2); line-height: 1.55; margin-bottom: 18px; }
-  label { display: block; font-size: 11px; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.07em; margin: 14px 0 6px 2px; }
+  .k { font-size: 11.5px; color: var(--ink-3); font-weight: 600; margin-bottom: 8px; }
+  h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.01em; line-height: 1.25; margin-bottom: 8px; }
+  .lead { font-size: 14px; color: var(--ink-2); line-height: 1.55; margin-bottom: 16px; }
+  label { display: block; font-size: 12.5px; color: var(--ink-2); font-weight: 550; margin: 14px 0 6px 1px; }
   input, textarea {
-    width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 11px;
-    color: var(--ink); font-family: inherit; font-size: 15px; padding: 12px 13px;
+    width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+    color: var(--ink); font-family: inherit; font-size: 14.5px; padding: 10px 12px;
   }
-  textarea { resize: vertical; line-height: 1.5; min-height: 120px; }
-  input:focus, textarea:focus { outline: none; border-color: var(--accent); }
-  input::placeholder, textarea::placeholder { color: var(--ink-3); opacity: 0.8; }
+  textarea { resize: vertical; line-height: 1.5; min-height: 110px; }
+  input:focus, textarea:focus { outline: none; border-color: var(--ink-3); }
+  input::placeholder, textarea::placeholder { color: var(--placeholder, var(--ink-3)); }
   .hint { font-size: 12.5px; color: var(--ink-3); margin-top: 8px; line-height: 1.55; }
   .ejemplos { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
-  .ejemplos button { background: var(--surface-2); border: 1px solid transparent; color: var(--ink-2); border-radius: 999px; padding: 5px 11px; font-size: 12.5px; font-family: inherit; cursor: pointer; }
+  .ejemplos button { background: var(--surface-2); border: 1px solid transparent; color: var(--ink-2); border-radius: 6px; padding: 5px 10px; font-size: 12.5px; font-family: inherit; cursor: pointer; }
   .ejemplos button:hover { border-color: var(--border); color: var(--ink); }
 
+  /* partes del panel */
+  .mods { display: grid; gap: 8px; }
+  .mod { display: grid; grid-template-columns: 20px 1fr; gap: 10px; align-items: start; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; cursor: pointer; background: var(--surface); text-align: left; font-family: inherit; color: inherit; width: 100%; }
+  .mod:hover { border-color: var(--border-strong); }
+  .mod .chk { width: 18px; height: 18px; border-radius: 5px; border: 1.5px solid var(--border-strong); display: grid; place-items: center; margin-top: 1px; color: var(--surface); }
+  .mod.on .chk { background: var(--ink); border-color: var(--ink); }
+  .mod .chk .tic { width: 12px; height: 12px; }
+  .mod b { font-size: 14px; font-weight: 600; color: var(--ink); }
+  .mod .g { font-size: 11.5px; color: var(--ink-3); margin-left: 6px; }
+  .mod p { font-size: 12.5px; color: var(--ink-3); margin-top: 2px; line-height: 1.4; }
+  .fijo { padding: 10px 12px; border: 1px dashed var(--border-strong); border-radius: 8px; font-size: 13px; color: var(--ink-3); margin-bottom: 8px; }
+  .fijo b { color: var(--ink-2); }
+
   /* hábitos */
-  .hab { display: grid; grid-template-columns: 26px 1fr auto; gap: 10px; align-items: center; padding: 10px 4px; border-bottom: 1px solid var(--border); }
+  .hab { display: grid; grid-template-columns: 26px 1fr auto; gap: 10px; align-items: center; padding: 9px 2px; border-bottom: 1px solid var(--hairline); }
   .hab:last-of-type { border-bottom: none; }
   .hab.off .l input, .hab.off .meta { opacity: 0.45; }
-  .hab .chk { width: 22px; height: 22px; border-radius: 7px; border: 1.5px solid var(--border); background: var(--surface); cursor: pointer; display: flex; align-items: center; justify-content: center; color: #fff; }
-  .hab.on .chk { background: var(--accent); border-color: var(--accent); }
-  .hab .chk svg { width: 14px; height: 14px; }
-  .hab .l input { border: none; background: transparent; padding: 4px 6px; font-size: 14.5px; font-weight: 600; border-radius: 7px; }
+  .hab .chk { width: 20px; height: 20px; border-radius: 5px; border: 1.5px solid var(--border-strong); background: var(--surface); cursor: pointer; display: grid; place-items: center; color: var(--surface); }
+  .hab.on .chk { background: var(--ink); border-color: var(--ink); }
+  .hab .chk svg { width: 13px; height: 13px; }
+  .hab .l input { border: none; background: transparent; padding: 4px 6px; font-size: 14px; font-weight: 600; border-radius: 6px; }
   .hab .l input:hover, .hab .l input:focus { background: var(--bg); }
   .hab .meta { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; justify-content: flex-end; font-size: 12.5px; color: var(--ink-3); }
-  .hab .meta .tipo { background: var(--surface-2); border-radius: 999px; padding: 3px 9px; font-weight: 550; }
+  .hab .meta .tipo { background: var(--surface-2); border-radius: 4px; padding: 2px 8px; font-weight: 550; }
   .hab .meta .num { display: inline-flex; align-items: center; gap: 4px; }
-  .hab .meta input { width: 58px; padding: 6px 8px; font-size: 13.5px; text-align: right; border-radius: 8px; font-variant-numeric: tabular-nums; }
+  .hab .meta input { width: 58px; padding: 6px 8px; font-size: 13px; text-align: right; font-variant-numeric: tabular-nums; }
   .hab .del { background: none; border: none; color: var(--ink-3); cursor: pointer; padding: 4px; border-radius: 6px; font-size: 14px; line-height: 1; }
   .hab .del:hover { color: var(--bad); background: var(--surface-2); }
-  .total { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 14px; padding: 12px 14px; border-radius: 12px; background: var(--surface-2); font-size: 13.5px; }
+  .total { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 14px; padding: 10px 12px; border-radius: 8px; background: var(--surface-2); font-size: 13.5px; }
   .total b { font-variant-numeric: tabular-nums; }
   .total.ok b { color: var(--good); }
   .total.bad b { color: var(--bad); }
-  .total button { background: var(--surface); border: 1px solid var(--border); border-radius: 9px; padding: 6px 11px; font-size: 12.5px; font-family: inherit; cursor: pointer; color: var(--ink-2); }
-  .total button:hover { color: var(--ink); }
+  .total button, .add button { background: var(--surface); border: 1px solid var(--border-strong); border-radius: 6px; padding: 6px 11px; font-size: 12.5px; font-family: inherit; cursor: pointer; color: var(--ink-2); white-space: nowrap; }
+  .total button:hover, .add button:hover { color: var(--ink); }
   .add { margin-top: 12px; display: flex; gap: 8px; }
-  .add input { flex: 1; padding: 10px 12px; font-size: 14px; }
-  .add button { background: var(--surface); border: 1px solid var(--border); border-radius: 11px; padding: 0 14px; font-family: inherit; font-size: 13.5px; cursor: pointer; color: var(--ink-2); white-space: nowrap; }
-  .add button:hover { color: var(--ink); }
+  .add input { flex: 1; }
 
   /* temas */
   .temas { display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); gap: 10px; }
-  .tema { background: var(--surface); border: 1.5px solid var(--border); border-radius: 12px; padding: 8px; cursor: pointer; font-family: inherit; font-size: 12.5px; font-weight: 550; color: var(--ink-2); display: flex; flex-direction: column; gap: 7px; text-align: center; }
-  .tema.active { border-color: var(--accent); color: var(--ink); }
-  .tema .prev { height: 46px; border-radius: 8px; position: relative; overflow: hidden; border: 1px solid rgba(128,128,128,0.18); }
-  .tema .prev .pcard { position: absolute; left: 9px; top: 9px; right: 9px; bottom: -8px; border-radius: 6px; }
+  .tema { background: var(--surface); border: 1.5px solid var(--border); border-radius: 8px; padding: 8px; cursor: pointer; font-family: inherit; font-size: 12.5px; font-weight: 550; color: var(--ink-2); display: flex; flex-direction: column; gap: 7px; text-align: center; }
+  .tema.active { border-color: var(--ink); color: var(--ink); }
+  .tema .prev { height: 46px; border-radius: 6px; position: relative; overflow: hidden; border: 1px solid rgba(128,128,128,0.18); }
+  .tema .prev .pcard { position: absolute; left: 9px; top: 9px; right: 9px; bottom: -8px; border-radius: 5px; }
   .tema .prev .pdot { position: absolute; left: 16px; top: 16px; width: 18px; height: 5px; border-radius: 3px; }
 
-  /* resumen final */
-  .res { display: grid; gap: 8px; margin-top: 6px; }
-  .res div { display: flex; justify-content: space-between; gap: 12px; padding: 10px 12px; border-radius: 11px; background: var(--surface-2); font-size: 13.5px; }
+  /* final */
+  .res { display: grid; gap: 6px; margin-top: 6px; }
+  .res div { display: flex; justify-content: space-between; gap: 12px; padding: 9px 12px; border-radius: 8px; background: var(--surface-2); font-size: 13.5px; }
   .res div span:first-child { color: var(--ink-3); flex-shrink: 0; }
   .res div span:last-child { text-align: right; }
-  .ejemplo-chat { margin-top: 16px; padding: 14px; border-radius: 12px; border: 1px dashed var(--border); font-size: 13.5px; color: var(--ink-2); line-height: 1.55; }
-  .ejemplo-chat b { color: var(--ink); }
+  .siguiente { margin-top: 16px; padding: 14px 16px; border-radius: 8px; border: 1px solid var(--border-strong); font-size: 13.5px; color: var(--ink-2); line-height: 1.55; }
+  .siguiente b { color: var(--ink); }
+  .siguiente .frase { display: inline-block; margin-top: 6px; background: var(--surface-2); border-radius: 6px; padding: 4px 9px; font-weight: 600; color: var(--ink); }
 
   .nav { display: flex; gap: 8px; margin-top: 22px; justify-content: space-between; align-items: center; }
   .nav .msg { font-size: 12.5px; color: var(--bad); min-height: 16px; flex: 1; }
-  .btn { background: var(--surface); border: 1px solid var(--border); color: var(--ink-2); border-radius: 11px; padding: 11px 18px; font-size: 14px; font-weight: 550; cursor: pointer; font-family: inherit; }
-  .btn:hover { color: var(--ink); }
-  .btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 650; }
-  .btn.primary:hover { opacity: 0.92; }
+  .btn { padding: 9px 16px; font-size: 14px; cursor: pointer; font-family: inherit; }
   .btn:disabled { opacity: 0.5; cursor: default; }
   @media (max-width: 520px) {
     .card { padding: 20px 16px; }
@@ -107,55 +106,71 @@
 </style>
 </head>
 <body>
+<script>window.OS_SIN_BARRA = true;</script>
 <script src="/theme.js"></script>
 <script src="/icons.js"></script>
+<script src="/ui.js"></script>
 <div class="box">
   <div class="top">
-    <div class="brand"><span class="chip">DS</span><span id="brandName">Daily System</span></div>
+    <div class="brand"><span class="chip">DS</span><span>Daily System</span></div>
     <button class="skip" id="skip" title="Puedes volver desde Configuración → Repetir bienvenida">Saltar por ahora</button>
   </div>
   <div class="dots" id="dots"></div>
   <div class="card">
 
     <section class="step" data-step="0">
-      <div class="k">1 de 5 · Tú</div>
-      <h1>Empecemos por lo básico</h1>
-      <p class="lead">Este panel es tuyo: cada día le cuentas al asistente cómo ha ido, él lo apunta y tú ves si vas hacia donde quieres. Primero, ¿cómo quieres que te llame?</p>
-      <label for="nombre">Tu nombre</label>
-      <input id="nombre" autocomplete="nickname" placeholder="p. ej. Dani">
+      <div class="k">1 de 6 · Para qué</div>
+      <h1>¿Qué quieres que haga por ti?</h1>
+      <p class="lead">Este panel se monta alrededor de tu vida, no de la de otro. Cuéntame en una o dos frases para qué lo quieres: qué te gustaría tener controlado cada día y qué te falla ahora.</p>
+      <textarea id="paraque" placeholder="p. ej. Quiero dejar de olvidarme de cosas, entrenar con constancia y saber en qué se me va el dinero."></textarea>
+      <div class="hint">Lo leerá Claude cuando lo conectes, para afinar el panel contigo.</div>
     </section>
 
     <section class="step" data-step="1">
-      <div class="k">2 de 5 · Contexto</div>
-      <h1>Cuéntale quién eres</h1>
-      <p class="lead">Dos o tres frases que el asistente tendrá delante en cada conversación: a qué te dedicas, qué persigues estos meses y cómo prefieres que te hable. Lo puedes cambiar cuando quieras en Configuración.</p>
-      <textarea id="ctx" placeholder="p. ej. Comercial en una inmobiliaria, 29 años. Quiero ser constante con el gym y dormir mejor. Háblame directo, sin frases motivacionales."></textarea>
-      <div class="ejemplos" id="ejemplos"></div>
-      <div class="hint">Cuanto más concreto, mejor entiende lo que te importa. No hace falta que sea perfecto.</div>
+      <div class="k">2 de 6 · Partes</div>
+      <h1>Elige las partes que vas a usar</h1>
+      <p class="lead">Empieza con pocas: es mejor tener tres que mires de verdad que nueve vacías. Puedes cambiarlas cuando quieras en Configuración.</p>
+      <div class="fijo"><b>Panel</b> · siempre está: tus hábitos del día, el score de 0 a 100 y la curva que enseña si vas hacia arriba o hacia abajo.</div>
+      <div class="mods" id="mods"></div>
     </section>
 
     <section class="step" data-step="2">
-      <div class="k">3 de 5 · Hábitos</div>
+      <div class="k">3 de 6 · Tú</div>
+      <h1>¿Cómo quieres que te llame?</h1>
+      <p class="lead">Es el nombre que verás en el panel y el que usará Claude cuando hable contigo.</p>
+      <label for="nombre">Tu nombre</label>
+      <input id="nombre" autocomplete="nickname" placeholder="Tu nombre">
+    </section>
+
+    <section class="step" data-step="3">
+      <div class="k">4 de 6 · Contexto</div>
+      <h1>Cuéntale quién eres</h1>
+      <p class="lead">Dos o tres frases que Claude tendrá delante cada vez que lo uses con tu panel: a qué te dedicas, qué persigues estos meses y cómo prefieres que te hable.</p>
+      <textarea id="ctx" placeholder="p. ej. Estudio y trabajo de camarero los fines de semana. Quiero aprobar este curso y entrenar cuatro días. Háblame directo."></textarea>
+      <div class="ejemplos" id="ejemplos"></div>
+      <div class="hint">No hace falta que sea perfecto: lo puedes cambiar en Configuración.</div>
+    </section>
+
+    <section class="step" data-step="4">
+      <div class="k">5 de 6 · Hábitos</div>
       <h1>¿Qué cuenta en tu día?</h1>
-      <p class="lead">Cada día se puntúa de 0 a 100 con estos hábitos. Activa los que quieras seguir, cámbiales el nombre y reparte los puntos según lo que más te importe. Los de horas dan crédito parcial: 3h de 4h suman el 75%.</p>
+      <p class="lead">Cada día se puntúa de 0 a 100 con estos hábitos. Activa los que quieras seguir, cámbiales el nombre y reparte los puntos según lo que más te importe. Los de horas dan crédito parcial: 3 h de 4 h suman el 75 %.</p>
       <div id="habs"></div>
       <div class="add"><input id="nuevoHab" placeholder="Otro hábito, p. ej. Leer 20 min"><button type="button" id="addHab">Añadir</button></div>
       <div class="total" id="total"></div>
     </section>
 
-    <section class="step" data-step="3">
-      <div class="k">4 de 5 · Aspecto</div>
-      <h1>Elige cómo lo quieres ver</h1>
-      <p class="lead">Se aplica al instante y se recuerda en este dispositivo.</p>
-      <div class="temas" id="temas"></div>
-    </section>
-
-    <section class="step" data-step="4">
-      <div class="k">5 de 5 · Listo</div>
+    <section class="step" data-step="5">
+      <div class="k">6 de 6 · Listo</div>
       <h1 id="finTitulo">Todo listo</h1>
-      <p class="lead">Así queda tu panel. A partir de ahora, la forma de usarlo es simple: al final del día (o durante) le cuentas al chat qué has hecho, y él marca los hábitos, guarda el resto y calcula tu score.</p>
-      <div class="res" id="resumen"></div>
-      <div class="ejemplo-chat" id="ejemploChat"></div>
+      <p class="lead">Así queda tu panel. Elige también cómo lo quieres ver: el tema se aplica al instante y se recuerda en este dispositivo.</p>
+      <div class="temas" id="temas"></div>
+      <div class="res" id="resumen" style="margin-top:14px"></div>
+      <div class="siguiente">
+        <b>Siguiente paso: hazlo tuyo con Claude.</b> Conecta Claude en Configuración → Conectar con otras IAs y dile:<br>
+        <span class="frase">Hazme el onboarding</span><br>
+        Te preguntará qué necesitas y cómo es tu vida, y te propondrá qué partes y qué hábitos encajan contigo. No cambia nada sin tu OK.
+      </div>
     </section>
 
     <div class="nav">
@@ -170,11 +185,12 @@
 const $ = (id) => document.getElementById(id);
 const I = window.OSIcons || {};
 const esc = (t) => String(t ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-const N_STEPS = 5;
+const N_STEPS = 6;
 let step = 0;
 let ME = null, STATE = null;
 let HABS = []; // { id, label, tipo, peso, umbral?, hint?, on }
 let KCAL = 2500;
+let MODS = new Set();
 
 async function api(path, opts = {}) {
   const res = await fetch(path, { credentials: "include", headers: { "Content-Type": "application/json" }, ...opts });
@@ -185,8 +201,8 @@ async function api(path, opts = {}) {
 }
 
 const EJEMPLOS = [
-  "Autónomo, quiero ser constante con el deporte y dormir 7h. Directo y sin rodeos.",
-  "Estudio y trabajo. Mi prioridad estos meses es estudiar 3h al día sin móvil. Tono cercano.",
+  "Autónomo, quiero ser constante con el deporte y dormir 7 h. Directo y sin rodeos.",
+  "Estudio y trabajo. Mi prioridad estos meses es estudiar 3 h al día sin móvil. Tono cercano.",
   "Comercial. Persigo una rutina de mañanas: madrugar, entrenar y llegar al trabajo con el día planificado.",
 ];
 
@@ -201,9 +217,18 @@ function show(i) {
   $("sig").textContent = step === N_STEPS - 1 ? "Ir a mi panel" : "Siguiente";
   $("msg").textContent = "";
   paintDots();
-  if (step === 2) paintHabs();
-  if (step === 4) paintResumen();
+  if (step === 1) paintMods();
+  if (step === 4) paintHabs();
+  if (step === 5) paintResumen();
   window.scrollTo({ top: 0 });
+}
+
+/* ---------- partes del panel (catálogo en OS_MODULOS, ui.js) ---------- */
+function paintMods() {
+  const box = $("mods");
+  box.innerHTML = OS_MODULOS.catalogo.filter((m) => !m.reservado).map((m) =>
+    `<button type="button" class="mod ${MODS.has(m.id) ? "on" : ""}" data-id="${m.id}"><span class="chk">${MODS.has(m.id) ? (I.check || "✓") : ""}</span><span><b>${m.label}</b><span class="g">${m.grupo}</span><p>${m.desc}</p></span></button>`).join("");
+  box.querySelectorAll(".mod").forEach((b) => { b.onclick = () => { const id = b.dataset.id; if (MODS.has(id)) MODS.delete(id); else MODS.add(id); paintMods(); }; });
 }
 
 /* ---------- hábitos ---------- */
@@ -219,7 +244,7 @@ function totalOn() { return HABS.filter((h) => h.on).reduce((a, h) => a + (Numbe
 function paintHabs() {
   const box = $("habs");
   box.innerHTML = HABS.map((h, i) => `<div class="hab ${h.on ? "on" : "off"}" data-i="${i}">
-      <button type="button" class="chk" data-a="toggle" aria-label="activar">${I.check || "✓"}</button>
+      <button type="button" class="chk" data-a="toggle" aria-label="activar">${h.on ? (I.check || "✓") : ""}</button>
       <div class="l"><input data-f="label" value="${esc(h.label)}" ${h.hint ? `title="${esc(h.hint)}"` : ""}></div>
       <div class="meta">
         ${h.tipo === "horas" ? `<span class="num"><input data-f="umbral" type="number" inputmode="decimal" step="0.5" min="0.5" value="${h.umbral ?? 1}"> h/día</span>`
@@ -242,7 +267,7 @@ function paintHabs() {
         else if (f === "umbral") h.umbral = Math.max(0.5, Number(inp.value) || 1);
         else if (f === "kcal") KCAL = Math.max(500, Math.round(Number(inp.value) || 2500));
       };
-      inp.onfocus = () => { if (!h.on) { h.on = true; row.classList.remove("off"); row.classList.add("on"); paintTotal(); } };
+      inp.onfocus = () => { if (!h.on) { h.on = true; paintHabs(); } };
     });
   });
   paintTotal();
@@ -281,7 +306,7 @@ $("nuevoHab").onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); 
 
 /* ---------- temas ---------- */
 const TEMAS = [
-  { id: "claro", label: "Claro",   bg: "#f3f3f5", surface: "#ffffff", accent: "#5546e8" },
+  { id: "claro", label: "Claro",   bg: "#f6f7f9", surface: "#ffffff", accent: "#111318" },
   { id: "crema", label: "Crema",   bg: "#f3ede2", surface: "#fdfaf3", accent: "#bc5f2e" },
   { id: "azul",  label: "Azulado", bg: "#0d1830", surface: "#15233f", accent: "#4d8dff" },
   { id: "negro", label: "Negro",   bg: "#0e0e12", surface: "#17171d", accent: "#7b6cff" },
@@ -299,22 +324,21 @@ for (const t of TEMAS) {
 function paintResumen() {
   const nombre = $("nombre").value.trim() || ME?.user?.display_name || "";
   const on = HABS.filter((h) => h.on && h.peso > 0);
+  const partes = ["Panel", ...OS_MODULOS.catalogo.filter((m) => MODS.has(m.id)).map((m) => m.label)];
   $("finTitulo").textContent = nombre ? `Todo listo, ${nombre}` : "Todo listo";
   $("resumen").innerHTML = [
     ["Te llama", nombre || "—"],
+    ["Partes", partes.join(" · ")],
     ["Hábitos que puntúan", on.map((h) => `${h.label} (${h.peso})`).join(" · ") || "ninguno"],
-    ["Tema", TEMAS.find((t) => t.id === OSTheme.get())?.label || "Claro"],
   ].map(([k, v]) => `<div><span>${k}</span><span>${esc(v)}</span></div>`).join("");
-  const ej = on.slice(0, 3).map((h) => h.tipo === "horas" ? `${h.label.toLowerCase()} ${h.umbral}h` : h.tipo === "kcal" ? `unas ${KCAL} kcal` : h.label.toLowerCase()).join(", ");
-  $("ejemploChat").innerHTML = `<b>Por ejemplo, esta noche escríbele:</b> «Hoy ${ej || "he cumplido todo"}. Mañana quiero madrugar.» Él lo apunta y te devuelve el score del día.`;
 }
 
 /* ---------- guardar ---------- */
 async function guardar() {
   const nombre = $("nombre").value.trim();
-  if (!nombre) { show(0); $("msg").textContent = "Dime cómo quieres que te llame."; return false; }
+  if (!nombre) { show(2); $("msg").textContent = "Dime cómo quieres que te llame."; return false; }
   const on = HABS.filter((h) => h.on && Number(h.peso) > 0);
-  if (!on.length) { show(2); $("msg").textContent = "Activa al menos un hábito con puntos."; return false; }
+  if (!on.length) { show(4); $("msg").textContent = "Activa al menos un hábito con puntos."; return false; }
   if (totalOn() !== 100) repartir();
   const senales = HABS.filter((h) => h.on && Number(h.peso) > 0).map((h) => {
     const s = { id: h.id, label: (h.label || "").trim() || h.id, tipo: h.tipo, peso: Number(h.peso) };
@@ -322,13 +346,23 @@ async function guardar() {
     if (h.hint) s.hint = h.hint;
     return s;
   });
+  const modulos = OS_MODULOS.catalogo.map((m) => m.id).filter((id) => MODS.has(id));
   $("sig").disabled = true;
   try {
     await api("/api/me/profile", { method: "POST", body: JSON.stringify({ display_name: nombre, context: $("ctx").value }) });
-    const fresh = await api("/api/state"); // config es top-level: se refresca antes de escribir para no pisar racha_min u otras claves
-    const config = { ...(fresh.config || {}), senales };
-    const config_nutricion = { ...(fresh.config_nutricion || {}), kcal_obj: KCAL };
-    await api("/api/state", { method: "POST", body: JSON.stringify({ config, config_nutricion }) });
+    const fresh = await api("/api/state"); // claves enteras: se relee antes de escribir para no pisar nada
+    const body = {
+      config: { ...(fresh.config || {}), senales, modulos },
+      config_nutricion: { ...(fresh.config_nutricion || {}), kcal_obj: KCAL },
+    };
+    // «para qué lo quiero» queda en la memoria del asistente: Claude lo tendrá delante en el onboarding
+    const paraque = $("paraque").value.trim();
+    if (paraque) {
+      const hoy = new Date().toISOString().slice(0, 10);
+      const id = "m" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+      body.memoria = [...(Array.isArray(fresh.memoria) ? fresh.memoria : []), { id, texto: `Para qué quiere el panel (bienvenida): ${paraque.slice(0, 600)}`, fecha: hoy }];
+    }
+    await api("/api/state", { method: "POST", body: JSON.stringify(body) });
     await api("/api/me/onboarded", { method: "POST", body: JSON.stringify({ done: true }) });
     try { sessionStorage.clear(); } catch (e) {}
     return true;
@@ -340,8 +374,8 @@ async function guardar() {
 }
 
 $("sig").onclick = async () => {
-  if (step === 0 && !$("nombre").value.trim()) { $("msg").textContent = "Dime cómo quieres que te llame."; $("nombre").focus(); return; }
-  if (step === 2 && !HABS.some((h) => h.on && h.peso > 0)) { $("msg").textContent = "Activa al menos un hábito con puntos."; return; }
+  if (step === 2 && !$("nombre").value.trim()) { $("msg").textContent = "Dime cómo quieres que te llame."; $("nombre").focus(); return; }
+  if (step === 4 && !HABS.some((h) => h.on && h.peso > 0)) { $("msg").textContent = "Activa al menos un hábito con puntos."; return; }
   if (step < N_STEPS - 1) return show(step + 1);
   if (await guardar()) location.href = "/";
 };
@@ -357,16 +391,18 @@ $("nombre").onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); $(
 (async () => {
   try {
     [ME, STATE] = await Promise.all([api("/api/me"), api("/api/state")]);
-    $("brandName").textContent = "Daily System";
-    $("nombre").value = ME.user?.display_name && ME.user.display_name.toLowerCase() !== ME.user.username ? ME.user.display_name : "";
-    if (!$("nombre").value && ME.user?.display_name) $("nombre").value = ME.user.display_name;
+    const dn = ME.user?.display_name || "";
+    $("nombre").value = dn && dn.toLowerCase() !== (ME.user?.username || "") ? dn : "";
     $("ctx").value = ME.user?.context || "";
     HABS = (STATE.config?.senales || []).map((s) => ({ ...s, on: true }));
     KCAL = Number(STATE.config_nutricion?.kcal_obj) || 2500;
+    // partes: las que ya tenga la cuenta; sin elegir aún, las de siempre si ya tiene datos y Agenda y Bandeja si es nueva
+    MODS = new Set(Array.isArray(STATE.config?.modulos) ? STATE.config.modulos
+      : Object.keys(STATE.days || {}).length ? OS_MODULOS.legado : ["agenda", "bandeja"]);
     $("ejemplos").innerHTML = EJEMPLOS.map((t, i) => `<button type="button" data-i="${i}">Ejemplo ${i + 1}</button>`).join("");
     $("ejemplos").querySelectorAll("button").forEach((b) => { b.onclick = () => { $("ctx").value = EJEMPLOS[Number(b.dataset.i)]; $("ctx").focus(); }; });
     show(0);
-    $("nombre").focus();
+    $("paraque").focus();
   } catch (e) {
     $("msg").textContent = "Error cargando: " + e.message;
   }

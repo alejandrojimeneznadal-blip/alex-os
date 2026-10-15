@@ -234,7 +234,7 @@
   .badge.en_espera { background: var(--warn-bg); color: var(--warn); }
   .badge.en_ejecucion { background: var(--accent-soft); color: var(--accent); }
   .t-chip.rec { color: var(--accent); background: var(--accent-soft); border-color: transparent; }
-  /* iconos de estado y banderita de prioridad (sistema growing-projects) */
+  /* iconos de estado y banderita de prioridad */
   .est-ic { display: inline-flex; align-items: center; justify-content: center; }
   .est-ic svg { width: 17px; height: 17px; display: block; }
   .est-pendiente, .est-por_definir { color: var(--ink-3); }
@@ -831,8 +831,8 @@ const TABS = [
   { id: "bandeja", label: "Bandeja" },
   { id: "ideas", label: "Ideas" },
   { id: "notas", label: "Notas" },
-  { id: "finanzas", label: "Finanzas" }, // reactivada el 13 oct 2026 a petición de Alex
-  // Finanzas estuvo oculta por ahora (28 ago 2026) — el área sigue funcionando en #finanzas si se reactiva aquí y en ui.js
+  { id: "finanzas", label: "Finanzas" },
+  // qué partes salen en la barra lo decide cada cuenta (config.modulos, ver OS_MODULOS en ui.js); las demás siguen vivas por URL
 ];
 const FIN_SUBS = [
   { id: "resumen", label: "Resumen" },
@@ -882,7 +882,7 @@ function boolCell(v) {
 }
 
 function journalCard(area) {
-  // 12 oct 2026: Alex quitó los apuntes de todas las pantallas («no lo encuentro útil»). El journal sigue
+  // 12 oct 2026: los apuntes salen de todas las pantallas («no lo encuentro útil»). El journal sigue
   // existiendo en el estado y por MCP (append_journal); solo deja de pintarse. Se conserva el código por si vuelve.
   return "";
   const entries = (STATE.journal || []).filter((e) => e.area === area).slice(-10).reverse();
@@ -973,7 +973,7 @@ async function saveClave(clave) {
   }
 }
 
-/* ---------- tareas: estados (sistema growing-projects) + prioridades ---------- */
+/* ---------- tareas: estados (como un gestor de proyectos) + prioridades ---------- */
 const ESTADOS_TAREA_UI = [
   { v: "pendiente", l: "Pendiente", g: "Sin iniciar" },
   { v: "por_definir", l: "Por definir", g: "Activa" },
@@ -1406,7 +1406,7 @@ async function registrarKcal() {
 }
 
 async function editarObjetivoKcal() {
-  const actual = Number(STATE.config_nutricion?.kcal_obj) || 3500;
+  const actual = Number(STATE.config_nutricion?.kcal_obj) || 2500;
   const v = await OSUI.prompt("Objetivo diario", actual, { label: "kcal/día", tipo: "number", ok: "Guardar" });
   if (v === null || String(v).trim() === "") return;
   const kcal = Math.round(Number(String(v).replace(",", ".")));
@@ -2178,7 +2178,7 @@ async function editarSiguiente(pi) {
 function cfgReto() {
   const c = STATE.config_contenido || {};
   return {
-    inicio: c.inicio || "2026-08-13",
+    inicio: c.inicio || Object.keys(STATE.days || {}).filter((k) => /^\d{4}-\d{2}-\d{2}$/.test(k)).sort()[0] || isoLocal(new Date()),
     dias: Number(c.dias) || 100,
     meta_reels: Number(c.meta_reels ?? 100),
     meta_yt: Number(c.meta_yt ?? 42),
@@ -2989,57 +2989,8 @@ const DIAS_SEM = [
   { id: "jueves", l: "J" }, { id: "viernes", l: "V" }, { id: "sabado", l: "S" }, { id: "domingo", l: "D" },
 ];
 
-// rutina traída de la app rutina-gym (v2) — se usa hasta que Alex la edite y se guarde la suya
-const RUTINA_DEFAULT = {
-  lunes: { titulo: "Pecho · Tríceps", ejercicios: [
-    { nombre: "Press inclinado máquina", series: 3, reps: "8-12" },
-    { nombre: "Pec deck (aperturas)", series: 3, reps: "10-12" },
-    { nombre: "Cruce poleas alto→bajo", series: 4, reps: "10-12" },
-    { nombre: "Elevaciones laterales máquina", series: 4, reps: "12-15", nota: "última serie: drop set (−25%, al fallo)" },
-    { nombre: "Fondos máquina", series: 3, reps: "8-12" },
-    { nombre: "Extensión tríceps polea", series: 4, reps: "10-12" },
-    { nombre: "Press francés", series: 3, reps: "10-12" },
-  ] },
-  martes: { titulo: "Pull", ejercicios: [
-    { nombre: "Jalón al pecho agarre ancho", series: 4, reps: "8-10" },
-    { nombre: "Remo sentado máquina", series: 4, reps: "10-12" },
-    { nombre: "Pullover máquina", series: 3, reps: "12-15" },
-    { nombre: "Remo máquina agarre cerrado", series: 3, reps: "10-12" },
-    { nombre: "Pájaros máquina (rear delt)", series: 4, reps: "12-15" },
-    { nombre: "Elevaciones laterales polea (un brazo)", series: 4, reps: "12-15" },
-    { nombre: "Curl bíceps máquina", series: 3, reps: "10-12" },
-    { nombre: "Curl martillo polea", series: 3, reps: "12-15", nota: "última serie: drop set (−25%, al fallo)" },
-    { nombre: "Curl predicador máquina", series: 3, reps: "10-12" },
-  ] },
-  miercoles: { titulo: "Pierna A", ejercicios: [
-    { nombre: "Prensa 45°", series: 4, reps: "10-12" },
-    { nombre: "Hack squat máquina", series: 3, reps: "8-10" },
-    { nombre: "Extensión cuádriceps", series: 4, reps: "12-15", nota: "última serie: drop set (−25%, al fallo)" },
-    { nombre: "Curl femoral tumbado", series: 3, reps: "10-12" },
-    { nombre: "Glute kickback máquina", series: 3, reps: "12-15" },
-    { nombre: "Gemelo de pie máquina", series: 4, reps: "15-20" },
-  ] },
-  jueves: { titulo: "Hombro + Upper", ejercicios: [
-    { nombre: "Press hombro máquina", series: 4, reps: "8-10" },
-    { nombre: "Elevaciones laterales", series: 4, reps: "12-15", nota: "última serie: drop set (−25%, al fallo)" },
-    { nombre: "Press plano máquina", series: 3, reps: "10-12" },
-    { nombre: "Jalón agarre neutro", series: 4, reps: "10-12" },
-    { nombre: "Remo máquina", series: 3, reps: "10-12" },
-    { nombre: "Curl bíceps polea", series: 3, reps: "12" },
-    { nombre: "Press tríceps polea barra V", series: 3, reps: "12" },
-  ] },
-  viernes: { titulo: "Pierna B", ejercicios: [
-    { nombre: "Curl femoral sentado máquina", series: 4, reps: "8-10" },
-    { nombre: "Hip thrust máquina", series: 4, reps: "10-12" },
-    { nombre: "Prensa 45° pies altos", series: 3, reps: "10-12" },
-    { nombre: "Curl femoral tumbado (variación)", series: 3, reps: "12-15", nota: "última serie: drop set (−25%, al fallo)" },
-    { nombre: "Abductor máquina", series: 4, reps: "15" },
-    { nombre: "Gemelo sentado máquina", series: 4, reps: "15-20" },
-    { nombre: "Crunch máquina", series: 3, reps: "15" },
-  ] },
-  sabado: { titulo: "Descanso", ejercicios: [] },
-  domingo: { titulo: "Descanso", ejercicios: [] },
-};
+// rutina por defecto vacía: cada persona monta la suya en Gym → Rutina (o se la pide a Claude)
+const RUTINA_DEFAULT = Object.fromEntries(["lunes", "martes", "miercoles", "jueves", "viernes", "sabado", "domingo"].map((d) => [d, { titulo: "", ejercicios: [] }]));
 
 function rutinaGym() { return STATE.rutina_gym || RUTINA_DEFAULT; }
 function rutinaEditable() {
@@ -3537,7 +3488,7 @@ const VIEWS = {
       <div class="mkpi"><div class="n">${racha}<small> ${racha === 1 ? "día" : "días"}</small></div><div class="l">Racha actual</div></div>
     </div>`;
 
-    const obj = Number(STATE.config_nutricion?.kcal_obj) || 3500;
+    const obj = Number(STATE.config_nutricion?.kcal_obj) || 2500;
     const cal = `<div class="card"><h2>Días en objetivo de calorías · último año</h2><div class="sub">La intensidad es lo cerca que quedaste del objetivo (${obj.toLocaleString("es")} kcal); verde pleno = en objetivo. Desliza a la izquierda para ver meses anteriores.</div>${heatmapAnual((f) => {
       const k = kcalDe(f);
       if (k === null) return { n: 0, tip: f.slice(5) + " · sin registrar" };
@@ -3596,7 +3547,7 @@ const VIEWS = {
     return nav + vista;
   },
   agenda() { return vistaAgendaCal() + VIEWS.tareas(); },
-  skool() { return pendiente("Skool", "Miembros frente al objetivo de 1.000, de qué pieza viene cada alta y el embudo: visitas al perfil, clics al enlace, altas. Se monta cuando abra la comunidad.", 4); },
+  skool() { return pendiente("Skool", "Miembros de la comunidad, de qué pieza viene cada alta y el embudo: visitas al perfil, clics al enlace, altas. Se monta cuando abra la comunidad.", 4); },
   bandeja() {
     const items = (STATE.bandeja || []).slice().reverse();
     const fila = (b) => `<div class="cap-row"><div class="cap-txt">${esc(b.texto)}<div class="cap-meta">${fmtFecha(b.creada)}${b.origen === "voz" ? " · por voz" : ""}</div></div>
@@ -4218,7 +4169,7 @@ let notaSel = null, notaTimer = null;
 function guardaNotaQuiet() { clearTimeout(notaTimer); notaTimer = setTimeout(() => postClaves({ notas: STATE.notas }), 500); }
 async function nuevaNota() {
   const r = await OSUI.form({ titulo: "Nueva nota", campos: [
-    { id: "titulo", label: "Título", valor: "", placeholder: "Decidido: Skool sale a 29 $" },
+    { id: "titulo", label: "Título", valor: "", placeholder: "Decidido: …" },
     { id: "tipo", label: "Tipo", tipo: "select", valor: "nota", opciones: Object.entries(TIPOS_NOTA).map(([v, l]) => ({ v, l })) },
   ], ok: "Crear" });
   if (!r || !r.titulo.trim()) return;
@@ -4250,7 +4201,7 @@ function renderNotaPanel() {
       <div class="sp-cols"><div class="sp-body-inner">
       <div class="sp-props">
         <div class="sp-prop"><label>Tipo</label><select id="npTipo">${Object.entries(TIPOS_NOTA).map(([v, l]) => `<option value="${v}" ${(n.tipo || "nota") === v ? "selected" : ""}>${l}</option>`).join("")}</select></div>
-        <div class="sp-prop"><label>Área</label><input id="npArea" value="${escA(n.area)}" placeholder="instagram · skool · gym · negocio · vida"></div>
+        <div class="sp-prop"><label>Área</label><input id="npArea" value="${escA(n.area)}" placeholder="trabajo · gym · dinero · vida"></div>
         <div class="sp-prop"><label>Fecha</label><div class="osui-dw"><input class="osui-date" id="npFecha" type="text" readonly data-iso="${n.fecha || ""}" value="${n.fecha ? n.fecha.split("-").reverse().join("/") : ""}"></div></div>
       </div>
       <div class="sp-sec">Texto<span class="pz-tools"><button data-f="h2" title="Título (# + espacio)">T</button><button data-f="h3" title="Subtítulo (## + espacio)">T·</button><button data-f="bold" title="Negrita (⌘B)"><b>B</b></button><button data-f="underline" title="Subrayado (⌘U)"><u>U</u></button></span></div>
