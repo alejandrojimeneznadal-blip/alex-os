@@ -3352,15 +3352,9 @@ const VIEWS = {
     return nav + (contSub === "piezas" ? vistaPiezas() : contSub === "calendario" ? vistaCalendario() : vistaReto());
   },
   instagram() {
-    const selPeriodo = contSub === "piezas"
-      ? `<span style="margin-left:auto;flex-shrink:0;display:flex;gap:6px"><select onchange="piezasPeriodo=this.value;renderContent()">` +
-        PERIODOS_PIEZAS.map((p) => `<option value="${p.id}" ${p.id === piezasPeriodo ? "selected" : ""}>${p.l}</option>`).join("") + `</select></span>`
-      : "";
-    const tab = (id, l) => `<button class="${contSub === id ? "active" : ""}" onclick="location.hash='instagram/${id}'">${l}</button>`;
-    const nav = `<div class="subnav">${tab("hoy", "Hoy")}${tab("piezas", "Piezas")}${tab("calendario", "Calendario")}${tab("metricas", "Métricas")}${tab("referencias", "Referencias")}${selPeriodo}</div>`;
-    const vista = contSub === "piezas" ? vistaPiezas() : contSub === "calendario" ? vistaCalendario() : contSub === "metricas" ? vistaMetricasIG()
-      : contSub === "referencias" ? pendiente("Referencias", "Reels y cuentas que te sirven de modelo, con lo que te llevas de cada uno. Empezará con el análisis de Karro.", "1d") : vistaHoyIG();
-    return nav + vista;
+    // 15 oct 2026: Alex vacía el área para rediseñarla parte por parte. Los datos (contenido, tomas) siguen intactos
+    // y las funciones de piezas siguen vivas porque las usan la Agenda y el Panel.
+    return `<div class="card"><div class="empty-note">En rediseño. Tus piezas y tus tomas siguen guardadas; vuelven aquí cuando elijamos qué entra.</div></div>`;
   },
   agenda() { return vistaAgendaCal() + VIEWS.tareas(); },
   skool() { return pendiente("Skool", "Miembros frente al objetivo de 1.000, de qué pieza viene cada alta y el embudo: visitas al perfil, clics al enlace, altas. Se monta cuando abra la comunidad.", 4); },
