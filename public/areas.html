@@ -622,6 +622,113 @@
   .hmc[onclick]:hover { outline: 1.5px solid var(--ink-3); outline-offset: -1.5px; }
   .hm-leyenda { display: flex; align-items: center; gap: 5px; justify-content: flex-end; margin-top: 4px; font-size: 11px; color: var(--ink-3); }
   .hm-leyenda .hmc { width: 12px; height: 12px; display: inline-block; }
+  /* ---------- Instagram · rediseño 15 oct 2026 ---------- */
+  .wrap.ancho { max-width: 1320px; }
+  .row-h { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 2px; }
+  .row-h h2 { margin-bottom: 0; }
+  .kb-bar { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
+  .kb-bar input[type=search] { flex: 1; min-width: 180px; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 8px 11px; color: var(--ink); font-family: inherit; font-size: 13.5px; }
+  .kb-bar input[type=search]:focus { outline: none; border-color: var(--accent); }
+  .kb { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(176px, 1fr); gap: 10px; overflow-x: auto; padding-bottom: 6px; align-items: start; }
+  .kb.kb-5 { grid-auto-columns: minmax(168px, 1fr); }
+  .kb-col { min-width: 0; border-radius: 10px; padding: 6px; transition: background 0.12s; }
+  .kb-col.over { background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--border-strong); }
+  .kb-head { display: flex; justify-content: space-between; align-items: baseline; font-size: 12.5px; font-weight: 600; color: var(--ink-2); padding: 2px 4px 8px; }
+  .kb-n { color: var(--ink-3); font-weight: 500; font-size: 12px; font-variant-numeric: tabular-nums; }
+  .kb-list { display: grid; gap: 8px; }
+  .kb-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px 11px; cursor: pointer; transition: border-color 0.12s; }
+  .kb-card:hover { border-color: var(--border-strong); }
+  .kb-t { font-size: 13.5px; font-weight: 550; color: var(--ink); line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  .kb-meta { display: flex; flex-wrap: wrap; gap: 4px 8px; margin-top: 7px; font-size: 11.5px; color: var(--ink-3); }
+  .kb-atras { color: var(--bad); }
+  .kb-tag { border: 1px solid var(--border); border-radius: 4px; padding: 0 5px; }
+  .kb-ed { border-radius: 4px; padding: 0 5px; background: var(--surface-2); color: var(--ink-2); }
+  .kb-ed.entregada { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+  .kb-ed.cambios { background: var(--warn-bg); color: var(--warn); }
+  .kb-ed.aprobada { background: var(--good-bg); color: var(--good); }
+  .kb-vacio { color: var(--ink-3); font-size: 12px; padding: 4px; }
+  .kb-mas { background: none; border: 1px dashed var(--border-strong); color: var(--ink-3); border-radius: 8px; padding: 7px; font-family: inherit; font-size: 12px; cursor: pointer; }
+  .kb-mas:hover { color: var(--ink); }
+  @media (max-width: 700px) {
+    .kb, .kb.kb-5 { grid-auto-columns: 80%; scroll-snap-type: x mandatory; }
+    .kb-col { scroll-snap-align: start; }
+  }
+  /* editores */
+  .ed-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--hairline); flex-wrap: wrap; }
+  .ed-row:last-child { border-bottom: 0; }
+  .ed-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; font-size: 13.5px; }
+  .ed-main span { color: var(--ink-3); font-size: 12px; }
+  .ed-acts { display: flex; gap: 6px; flex-wrap: wrap; }
+  /* cola */
+  .cola-dia { display: flex; gap: 14px; padding: 9px 0; border-bottom: 1px solid var(--hairline); }
+  .cola-dia:last-child { border-bottom: 0; }
+  .cola-f { width: 66px; flex-shrink: 0; display: flex; flex-direction: column; font-size: 12px; color: var(--ink-3); padding-top: 3px; }
+  .cola-f b { color: var(--ink); font-size: 13px; font-weight: 600; }
+  .cola-dia.hoy .cola-f b { text-decoration: underline; text-underline-offset: 3px; }
+  .cola-items { flex: 1; min-width: 0; display: grid; gap: 6px; }
+  .cola-p { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; cursor: pointer; font-size: 13.5px; padding: 3px 0; }
+  .cola-p .t { font-weight: 550; color: var(--ink); min-width: 0; }
+  .cola-p.pub .t { color: var(--ink-2); font-weight: 500; }
+  .cola-p .m { color: var(--ink-3); font-size: 12px; }
+  .cola-falta { display: inline-flex; gap: 4px; flex-wrap: wrap; margin-left: auto; }
+  .cola-falta i { font-style: normal; font-size: 11px; color: var(--ink-3); border: 1px solid var(--border); border-radius: 4px; padding: 0 5px; }
+  .cola-falta i.ok { color: var(--good); border-color: transparent; background: var(--good-bg); }
+  .cola-hueco { background: none; border: 1px dashed var(--border-strong); color: var(--ink-3); border-radius: 6px; padding: 6px 10px; font-family: inherit; font-size: 12.5px; cursor: pointer; text-align: left; }
+  .cola-hueco:hover { color: var(--ink); border-color: var(--ink-3); }
+  /* grabación */
+  .gr-toma { display: flex; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--hairline); align-items: flex-start; }
+  .gr-toma:last-child { border-bottom: 0; }
+  .gr-main { flex: 1; min-width: 0; }
+  .gr-d { font-size: 13.5px; color: var(--ink); font-weight: 500; }
+  .gr-como { font-size: 12px; color: var(--ink-3); margin-top: 2px; }
+  .gr-ps { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+  .gr-pieza { background: var(--surface-2); border: 0; border-radius: 4px; padding: 2px 7px; font-family: inherit; font-size: 11.5px; color: var(--ink-2); cursor: pointer; }
+  .gr-pieza:hover { color: var(--ink); }
+  /* referencias y ganchos */
+  .ref-row, .gancho { padding: 10px 0; border-bottom: 1px solid var(--hairline); cursor: pointer; }
+  .ref-row:last-child, .gancho:last-child { border-bottom: 0; }
+  .ref-h { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13.5px; }
+  .ref-link { margin-left: auto; font-size: 12px; color: var(--ink-3); }
+  .ref-t { font-size: 12.5px; color: var(--ink-2); margin-top: 2px; }
+  .ref-nota { font-size: 13px; color: var(--ink-2); margin-top: 4px; line-height: 1.45; white-space: pre-wrap; }
+  .g-t { font-size: 14px; color: var(--ink); font-weight: 550; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  .g-m { font-size: 12px; color: var(--ink-3); margin-top: 3px; }
+  /* ficha en pestañas */
+  .ft-tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--border); margin: 6px 0 14px; overflow-x: auto; }
+  .ft-tabs button { background: none; border: 0; border-bottom: 2px solid transparent; color: var(--ink-3); font-family: inherit; font-size: 13.5px; font-weight: 500; padding: 8px 10px; cursor: pointer; margin-bottom: -1px; white-space: nowrap; }
+  .ft-tabs button.on { color: var(--ink); border-bottom-color: var(--ink); font-weight: 600; }
+  .ft-sec { display: none; }
+  .ft-sec.on { display: block; }
+  .ft-dur { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 12.5px; color: var(--ink-3); margin-top: 2px; }
+  .ft-cnt { float: right; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+  .ft-nota { font-size: 12px; color: var(--ink-3); margin-top: -6px; }
+  .sp-grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0 12px; }
+  .ft-toma { display: flex; gap: 8px; align-items: flex-start; font-size: 13.5px; padding: 5px 0; color: var(--ink); cursor: pointer; }
+  .ft-toma i { color: var(--ink-3); font-style: normal; }
+  .ft-sub { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 16px 0 6px; font-size: 12px; font-weight: 650; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.07em; }
+  .ed-entrega { padding: 8px 0; border-bottom: 1px solid var(--hairline); font-size: 13.5px; display: flex; gap: 10px; flex-wrap: wrap; align-items: baseline; }
+  .ed-entrega a { color: var(--ink); font-weight: 550; }
+  .ed-entrega span { color: var(--ink-3); font-size: 12px; }
+  .ed-entrega .nota { flex-basis: 100%; color: var(--ink-2); font-size: 13px; white-space: pre-wrap; }
+  .ed-btns { display: flex; gap: 8px; margin: 12px 0 4px; flex-wrap: wrap; }
+  .ed-msgs { display: grid; gap: 8px; margin: 6px 0 10px; }
+  .ed-msg { background: var(--surface-2); border-radius: 8px; padding: 8px 10px; font-size: 13.5px; max-width: 88%; white-space: pre-wrap; justify-self: start; }
+  .ed-msg.mio { justify-self: end; background: var(--accent-soft); }
+  .ed-msg-h { font-size: 11.5px; color: var(--ink-3); margin-bottom: 3px; }
+  .ed-enviar { display: flex; gap: 8px; }
+  .ed-enviar input { flex: 1; min-width: 0; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--ink); font-family: inherit; font-size: 13.5px; padding: 8px 10px; }
+  .ed-enviar input:focus { outline: none; border-color: var(--accent); }
+  /* teleprompter: fondo negro fijo a propósito, se usa grabando */
+  .tp-ov { position: fixed; inset: 0; background: #000; color: #fff; z-index: 600; display: flex; flex-direction: column; }
+  .tp-scroll { flex: 1; overflow-y: auto; padding: 0 7vw; scrollbar-width: none; cursor: pointer; }
+  .tp-scroll::-webkit-scrollbar { display: none; }
+  .tp-pad { height: 42vh; }
+  .tp-txt { line-height: 1.42; font-weight: 600; text-align: center; max-width: 1100px; margin: 0 auto; transform-origin: center; }
+  .tp-guia { position: absolute; left: 0; right: 0; top: 40vh; height: 2px; background: rgba(255,255,255,0.16); pointer-events: none; }
+  .tp-bar { display: flex; gap: 8px; justify-content: center; align-items: center; padding: 12px; padding-bottom: calc(12px + env(safe-area-inset-bottom)); background: #0c0c0c; flex-wrap: wrap; }
+  .tp-bar button { background: #1d1d1d; color: #fff; border: 1px solid #333; border-radius: 6px; padding: 8px 12px; font-family: inherit; font-size: 14px; cursor: pointer; }
+  .tp-bar button:hover { background: #2a2a2a; }
+  .tp-bar span { color: #aaa; min-width: 36px; text-align: center; font-variant-numeric: tabular-nums; }
 </style>
 </head>
 <body>
@@ -702,7 +809,9 @@ function parseHash() {
   active = TABS.some((t) => t.id === a) ? a : "proyectos";
   finSub = FIN_SUBS.some((x) => x.id === s) ? s : "resumen";
   proySub = a === "proyectos" && s ? decodeURIComponent(s) : null;
-  contSub = (a === "contenido" || a === "instagram") && ["reto", "piezas", "calendario", "hoy", "metricas", "referencias"].includes(s) ? s : (a === "instagram" ? "hoy" : "reto");
+  contSub = a === "instagram"
+    ? (["tablero", "edicion", "cola", "grabacion", "referencias"].includes(s) ? s : "tablero")
+    : (a === "contenido" && ["reto", "piezas", "calendario"].includes(s) ? s : "reto");
   gymSub = a === "gym" && ["resumen", "tracker", "rutina"].includes(s) ? s : "resumen";
 }
 parseHash();
@@ -2461,15 +2570,16 @@ const escA = (s) => esc(String(s ?? "")).replace(/"/g, "&quot;");
 const IC_EXPAND = `<svg class="tic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4l4 0l0 4"/><path d="M14 10l6 -6"/><path d="M8 20l-4 0l0 -4"/><path d="M4 20l6 -6"/></svg>`;
 const IC_LINK = `<svg class="tic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 7l-10 10"/><path d="M8 7l9 0l0 9"/></svg>`;
 
-function abrirPieza(idx) {
+async function abrirPieza(idx, tab) {
+  if (EDITORES === null) await cargaEditores();
   piezaIdx = idx;
+  if (tab) fichaTab = tab;
   const p = $("piezaPanel");
   renderPiezaPanel();
   if (!p.classList.contains("show")) {
     void p.offsetWidth; // fija el estado inicial para que la entrada anime
     p.classList.add("show");
   }
-  refrescaMetricasPanel(idx); // si es YouTube, trae views/likes/comments frescos
 }
 
 async function refrescaMetricasPanel(idx) {
@@ -2505,7 +2615,7 @@ function cerrarPieza() {
 }
 
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape" && piezaIdx !== null && !document.querySelector(".osui-ov")) cerrarPieza();
+  if (e.key === "Escape" && piezaIdx !== null && !document.querySelector(".osui-ov") && !document.querySelector(".tp-ov")) cerrarPieza();
 });
 
 function guardaPiezaQuiet() {
@@ -2609,131 +2719,213 @@ function initPizarra(c, panel, onSave) {
   });
 }
 
+/* Ficha de pieza (15 oct 2026): propiedades arriba y cinco pestañas. Lo que escribe el editor
+   (entregas, mensajes) llega en c.edicion y solo se cambia por /api/edicion/*: nunca va en el guardado normal. */
+let fichaTab = "guion", briefTimer = null;
+const FICHA_TABS = [["guion", "Guion"], ["publicacion", "Publicación"], ["produccion", "Producción"], ["edicion", "Edición"], ["notas", "Notas"]];
+const palabrasDe = (c) => [c.gancho, c.cuerpo, c.cierre, c.cta].map((t) => String(t || "").trim()).filter(Boolean).join(" ").split(/\s+/).filter(Boolean).length;
+const duracionTxt = (n) => (n ? `Unos ${Math.max(1, Math.round(n / 2.5))} segundos hablados · ${n} palabras` : "Sin guion todavía");
+const CLASES = ["soft", "hard", "meme"];
+
+function htmlEdicionFicha(c) {
+  const ed = c.edicion;
+  const entregas = ed.entregas || [];
+  const msgs = ed.mensajes || [];
+  return `<div class="sp-props">
+      <div class="sp-prop"><label>Editor</label><div class="static">${esc(ed.editor_nombre || "Editor")}</div></div>
+      <div class="sp-prop"><label>Estado</label><select id="edEstado">${ED_ESTADOS.map((e) => `<option value="${e.id}" ${ed.estado === e.id ? "selected" : ""}>${e.l}</option>`).join("")}</select></div>
+      <div class="sp-prop"><label>Entrega antes del</label><div class="osui-dw"><input class="osui-date" id="edLimite" type="text" readonly data-opt="1" data-iso="${ed.fecha_limite || ""}" value="${ed.fecha_limite ? ed.fecha_limite.split("-").reverse().join("/") : ""}" placeholder="sin fecha"></div></div>
+    </div>
+    <div class="sp-campo"><label>Indicaciones para el editor</label><textarea id="edBrief" rows="4" placeholder="Ritmo, música, textos en pantalla, referencias, duración…">${esc(ed.brief)}</textarea></div>
+    <div class="ft-sub">Entregas</div>
+    ${entregas.length ? entregas.slice().reverse().map((e) => `<div class="ed-entrega"><b>v${e.v}</b><a href="${escA(e.url)}" target="_blank" rel="noopener">Ver el vídeo</a><span>${fechaHora(e.fecha)}</span>${e.nota ? `<div class="nota">${esc(e.nota)}</div>` : ""}</div>`).join("") : `<div class="empty-note">Todavía no ha entregado nada.</div>`}
+    ${ed.estado === "entregada" ? `<div class="ed-btns"><button class="btn-mini primary" id="edAprobar">Aprobar</button><button class="btn-mini" id="edCambios">Pedir cambios</button></div>` : ""}
+    <div class="ft-sub">Conversación</div>
+    <div class="ed-msgs">${msgs.length ? msgs.map((m) => `<div class="ed-msg ${m.de === ed.editor ? "" : "mio"}"><div class="ed-msg-h">${esc(m.nombre || "")} · ${fechaHora(m.fecha)}</div>${esc(m.texto)}</div>`).join("") : `<div class="empty-note">Sin mensajes.</div>`}</div>
+    <div class="ed-enviar"><input id="edMsg" placeholder="Escribe al editor" autocomplete="off"><button class="btn-mini primary" id="edMsgBtn">Enviar</button></div>`;
+}
+
 function renderPiezaPanel() {
   const c = (STATE.contenido || [])[piezaIdx];
   if (!c) return;
   const p = $("piezaPanel");
-  const yid = ytIdDe(c.url), igc = igCodeDe(c.url);
-  let player = "";
-  if (yid) player = `<div class="device tv"><div class="dev-screen"><div class="sp-player horiz"><iframe src="https://www.youtube-nocookie.com/embed/${yid}" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></div></div><div class="dev-neck"></div><div class="dev-base"></div></div>`;
-  else if (igc && c.video_url) player = `<div class="device phone"><div class="sp-player reel"><video src="${escA(c.video_url)}" controls playsinline preload="metadata"></video></div></div>`;
-  else if (igc) player = `<div class="device phone"><div class="sp-player reel cargando">${OSIcons.contenido}<span>Cargando el vídeo del reel…</span></div></div>`;
+  const est = estadoPieza(c), ed = c.edicion;
+  if (fichaTab === "edicion" && !ed) fichaTab = "guion";
+  const eds = (EDITORES || []).filter((u) => u.active || (ed && u.id === ed.editor));
+  const fPub = est === "publicado" ? c.fecha_pub : c.fecha_plan;
+  const ts = tomasDe(c);
+  const area = active === "instagram" ? "Instagram" : active === "agenda" ? "Agenda" : "Contenido";
+  const clases = CLASES.includes(c.clase || "soft") ? CLASES : CLASES.concat([c.clase]);
+  const campo = (id, label, rows, ph = "") => `<div class="sp-campo"><label>${label}</label><textarea id="sp_${id}" rows="${rows}" placeholder="${escA(ph)}">${esc(c[id])}</textarea></div>`;
+  const input = (id, label, ph = "", tipo = "text") => `<div class="sp-campo"><label>${label}</label><input id="sp_${id}" type="${tipo}" value="${escA(c[id])}" placeholder="${escA(ph)}"></div>`;
+  const legado = c.editor && (c.editor.enviada || c.editor.recibida || c.editor.aprobada)
+    ? `<div class="ft-nota" style="margin-top:8px">Antes del panel: ${[c.editor.enviada && "enviada " + c.editor.enviada, c.editor.recibida && "recibida " + c.editor.recibida, c.editor.aprobada && "aprobada " + c.editor.aprobada].filter(Boolean).join(" · ")}</div>` : "";
 
   p.innerHTML = `
     <div class="sp-top">
-      <div class="sp-ruta">
-        <span class="rlink" onclick="cerrarPieza();location.hash='${active}/piezas'">${active === "instagram" ? "Instagram" : "Contenido"}</span><span class="sep">/</span>
-        <span class="rlink" onclick="cerrarPieza();location.hash='${active}/piezas'">Piezas</span><span class="sep">/</span>
-        <span class="act">${esc(c.titulo || "Sin título")}</span>
-      </div>
+      <div class="sp-ruta"><span class="rlink" onclick="cerrarPieza()">${area}</span><span class="sep">/</span><span class="act">${esc(c.titulo || "Sin título")}</span></div>
       <button id="spFull" title="Pantalla completa">${IC_EXPAND}</button>
-      ${c.url ? `<a href="${escA(c.url)}" target="_blank" rel="noopener" title="Abrir original">${IC_LINK}</a>` : ""}
+      ${c.url ? `<a href="${escA(c.url)}" target="_blank" rel="noopener" title="Abrir el reel">${IC_LINK}</a>` : ""}
       <span style="flex:1"></span>
       <button id="spBorrar" title="Borrar pieza">${OSIcons.borrar}</button>
       <button id="spCerrar" title="Cerrar">${OSIcons.cerrar}</button>
     </div>
-    <div class="sp-body">
+    <div class="sp-body"><div class="sp-body-inner">
       <input class="sp-title" id="spTitulo" value="${escA(c.titulo)}" placeholder="Sin título">
-      <div class="sp-cols"><div class="sp-body-inner">
       <div class="sp-props">
-        <div class="sp-prop"><label>Estado</label><select id="spEstado">
-          ${ESTADOS_PIEZA.map((e) => `<option value="${e.id}" ${estadoPieza(c) === e.id ? "selected" : ""}>${e.l}</option>`).join("")}
-        </select></div>
-        <div class="sp-prop"><label>Clase</label><input id="sp_clase" value="${escA(c.clase)}" placeholder="soft · hard · meme"></div>
-        <div class="sp-prop"><label>Hora</label><input id="sp_hora" value="${escA(c.hora)}" placeholder="18:00"></div>
-        <div class="sp-prop"><label>Tipo</label><select id="spTipo">
-          <option value="reel" ${tipoPieza(c) !== "yt" ? "selected" : ""}>Reel</option>
-          <option value="youtube" ${tipoPieza(c) === "yt" ? "selected" : ""}>YouTube</option>
-        </select></div>
-        <div class="sp-prop"><label>Publicación${c.estado === "publicado" ? "" : " (plan)"}</label><div class="osui-dw"><input class="osui-date" id="spPub" type="text" readonly data-iso="${(c.estado === "publicado" ? c.fecha_pub : c.fecha_plan) || ""}" value="${(() => { const f = c.estado === "publicado" ? c.fecha_pub : c.fecha_plan; return f ? f.split("-").reverse().join("/") : ""; })()}" placeholder="sin fecha — ponla y sale en el calendario"></div></div>
-        <div class="sp-prop"><label>Link</label><input id="spUrl" value="${escA(c.url)}" placeholder="https://…"></div>
-        <div class="sp-prop"><label>Views</label><input id="spViews" type="number" value="${c.views ?? ""}" placeholder="—"></div>
-        <div class="sp-prop"><label>Likes</label><input id="spLikes" type="number" value="${c.likes ?? ""}" placeholder="—"></div>
-        <div class="sp-prop"><label>Comentarios</label><input id="spComments" type="number" value="${c.comments ?? ""}" placeholder="—"></div>
-        <div class="sp-prop"><label>Creada</label><div class="osui-dw"><input class="osui-date" id="spCreada" type="text" readonly data-iso="${c.fecha || ""}" value="${c.fecha ? c.fecha.split("-").reverse().join("/") : ""}" placeholder="—"></div></div>
+        <div class="sp-prop"><label>Estado</label><select id="spEstado">${ESTADOS_PIEZA.map((e) => `<option value="${e.id}" ${est === e.id ? "selected" : ""}>${e.l}</option>`).join("")}</select></div>
+        <div class="sp-prop"><label>${est === "publicado" ? "Publicada el" : "Se publica"}</label><div class="osui-dw"><input class="osui-date" id="spPub" type="text" readonly data-opt="1" data-iso="${fPub || ""}" value="${fPub ? fPub.split("-").reverse().join("/") : ""}" placeholder="sin fecha"></div></div>
+        <div class="sp-prop"><label>Hora</label><input id="sp_hora" class="osui-time" inputmode="numeric" maxlength="5" value="${escA(c.hora)}" placeholder="18:00"></div>
+        <div class="sp-prop"><label>Tipo</label><select id="sp_clase">${clases.map((k) => `<option value="${escA(k)}" ${(c.clase || "soft") === k ? "selected" : ""}>${esc(k)}</option>`).join("")}</select></div>
+        <div class="sp-prop"><label>Edita</label><select id="spEdita"><option value="">Yo</option>${eds.map((u) => `<option value="${esc(u.id)}" ${ed && ed.editor === u.id ? "selected" : ""}>${esc(u.display_name || u.username)}</option>`).join("")}</select></div>
       </div>
-      <div class="sp-sec">Guion</div>
-      <div class="sp-campo"><label>Gancho</label><textarea id="sp_gancho" rows="2">${esc(c.gancho)}</textarea></div>
-      <div class="sp-campo"><label>Cuerpo</label><textarea id="sp_cuerpo" rows="5">${esc(c.cuerpo)}</textarea></div>
-      <div class="sp-grid2">
-        <div class="sp-campo"><label>Cierre</label><textarea id="sp_cierre" rows="3">${esc(c.cierre)}</textarea></div>
-        <div class="sp-campo"><label>Llamada a la acción</label><textarea id="sp_cta" rows="3">${esc(c.cta)}</textarea></div>
+      <div class="ft-tabs">${FICHA_TABS.filter(([id]) => id !== "edicion" || ed).map(([id, l]) => `<button class="${fichaTab === id ? "on" : ""}" data-tab="${id}">${l}${id === "edicion" && ed.estado === "entregada" ? " · revisar" : ""}</button>`).join("")}</div>
+
+      <div class="ft-sec" data-sec="guion">
+        ${campo("gancho", "Gancho", 2, "La primera frase: lo que hace que se queden")}
+        ${campo("cuerpo", "Cuerpo", 8)}
+        <div class="sp-grid2">${campo("cierre", "Cierre", 3)}${campo("cta", "Llamada a la acción", 3, "Comenta CLAUDE y te lo mando")}</div>
+        <div class="ft-dur"><span id="spDur">${duracionTxt(palabrasDe(c))}</span><button class="btn-mini" id="spTele">Teleprompter</button></div>
       </div>
-      <div class="sp-sec">Publicación</div>
-      <div class="sp-campo"><label>Caption</label><textarea id="sp_caption" rows="4">${esc(c.caption)}</textarea></div>
-      <div class="sp-campo"><label>Hashtags</label><input id="sp_hashtags" value="${escA(c.hashtags)}" placeholder="#claudecode #ia"></div>
-      <div class="sp-sec">Producción</div>
-      <div class="sp-grid2">
-        <div class="sp-campo"><label>Fuente</label><input id="sp_fuente" value="${escA(c.fuente)}"></div>
-        <div class="sp-campo"><label>Formato</label><input id="sp_formato" value="${escA(c.formato)}"></div>
+
+      <div class="ft-sec" data-sec="publicacion">
+        <div class="sp-campo"><label>Caption <span class="ft-cnt" id="spCapN">${String(c.caption || "").length} / 2.200</span></label><textarea id="sp_caption" rows="7">${esc(c.caption)}</textarea></div>
+        <div class="sp-grid2">${input("hashtags", "Hashtags", "#claudecode #ia")}${input("palabra", "Palabra clave de la llamada a la acción", "CLAUDE")}</div>
+        ${input("url", "Enlace del reel publicado", "https://www.instagram.com/reel/…")}
+        <div class="sp-grid3">${input("views", "Visualizaciones", "—", "number")}${input("likes", "Likes", "—", "number")}${input("comments", "Comentarios", "—", "number")}</div>
+        <div class="ft-nota">Los números se rellenarán solos cuando conectemos Instagram.</div>
       </div>
-      <div class="sp-campo"><label>Recursos y B-roll</label><textarea id="sp_broll" rows="3">${esc(c.broll)}</textarea></div>
-      <div class="sp-campo"><label>Pantalla</label><textarea id="sp_pantalla" rows="2">${esc(c.pantalla)}</textarea></div>
-      <div class="sp-grid2">
-        <div class="sp-campo"><label>Carpeta</label><input id="sp_carpeta" value="${escA(c.carpeta)}" placeholder="Drive · 01_piezas/…"></div>
-        <div class="sp-campo"><label>Archivo final</label><input id="sp_archivo" value="${escA(c.archivo)}" placeholder="final/… .mp4"></div>
+
+      <div class="ft-sec" data-sec="produccion">
+        <div class="sp-grid2">${input("formato", "Formato", "a cámara · voz en off · mudo")}${input("fuente", "De dónde sale la idea")}</div>
+        ${input("carpeta", "Material para editar", "Enlace de la carpeta de Drive")}
+        ${campo("broll", "Recursos y B-roll", 3)}
+        ${campo("pantalla", "Pantalla", 2)}
+        ${input("archivo", "Vídeo final", "Enlace o ruta del vídeo final")}
+        <div class="ft-sub"><span>Tomas</span><button class="btn-mini" id="spToma">${OSIcons.nueva} Toma</button></div>
+        ${ts.length ? ts.map((t) => `<label class="ft-toma"><input type="checkbox" data-k="${(STATE.tomas || []).indexOf(t)}" ${t.estado === "grabada" ? "checked" : ""}><span>${esc(t.descripcion || "")}${t.lugar ? ` <i>· ${esc(t.lugar)}</i>` : ""}</span></label>`).join("") : `<div class="empty-note">Sin tomas apuntadas.</div>`}
+        ${campo("produccion", "Notas de producción", 2)}
+        <div class="sp-grid2">${input("nota", "Nota del 1 al 10", "", "number")}${input("porque_no_10", "Por qué no es un 10")}</div>
+        ${legado}
       </div>
-      <div class="sp-grid2">
-        <div class="sp-campo"><label>Editor · enviada</label><input id="sp_ed_enviada" value="${escA(c.editor?.enviada)}" placeholder="2026-10-08"></div>
-        <div class="sp-campo"><label>Editor · recibida</label><input id="sp_ed_recibida" value="${escA(c.editor?.recibida)}" placeholder="2026-10-12"></div>
+
+      ${ed ? `<div class="ft-sec" data-sec="edicion" id="spEdicion">${htmlEdicionFicha(c)}</div>` : ""}
+
+      <div class="ft-sec" data-sec="notas">
+        <div class="sp-sec">Notas libres
+          <span class="pz-tools">
+            <button data-f="h2" title="Título (# + espacio)">T</button>
+            <button data-f="h3" title="Subtítulo (## + espacio)">T·</button>
+            <button data-f="bold" title="Negrita (⌘B)"><b>B</b></button>
+            <button data-f="underline" title="Subrayado (⌘U)"><u>U</u></button>
+          </span>
+        </div>
+        <div class="sp-pizarra" id="spNotas" contenteditable="true" data-placeholder="Lo que sea: ideas sueltas, referencias, cambios… «# » para título, ⌘B negrita"></div>
       </div>
-      <div class="sp-campo"><label>Editor · cambios pedidos</label><textarea id="sp_ed_cambios" rows="2">${esc(c.editor?.cambios)}</textarea></div>
-      <div class="sp-campo"><label>Notas de producción</label><textarea id="sp_produccion" rows="2">${esc(c.produccion)}</textarea></div>
-      <div class="sp-grid2">
-        <div class="sp-campo"><label>Nota (1-10)</label><input id="sp_nota" type="number" min="1" max="10" value="${c.nota ?? ""}"></div>
-        <div class="sp-campo"><label>Por qué no es un 10</label><input id="sp_porque_no_10" value="${escA(c.porque_no_10)}"></div>
-      </div>
-      <div class="sp-sec">Pizarra
-        <span class="pz-tools">
-          <button data-f="h2" title="Título (# + espacio)">T</button>
-          <button data-f="h3" title="Subtítulo (## + espacio)">T·</button>
-          <button data-f="bold" title="Negrita (⌘B)"><b>B</b></button>
-          <button data-f="underline" title="Subrayado (⌘U)"><u>U</u></button>
-        </span>
-      </div>
-      <div class="sp-pizarra" id="spNotas" contenteditable="true" data-placeholder="Escribe lo que sea — guion, hooks, ideas… «# » para título, ⌘B negrita, ⌘U subrayado"></div>
-      </div>${player ? `<div class="sp-player-wrap">${player}</div>` : ""}</div>
-    </div>`;
+    </div></div>`;
+
+  const muestra = (id) => {
+    fichaTab = id;
+    p.querySelectorAll(".ft-tabs button").forEach((b) => b.classList.toggle("on", b.dataset.tab === id));
+    p.querySelectorAll(".ft-sec").forEach((s) => s.classList.toggle("on", s.dataset.sec === id));
+  };
+  p.querySelectorAll(".ft-tabs button").forEach((b) => { b.onclick = () => muestra(b.dataset.tab); });
+  muestra(fichaTab);
 
   $("spFull").onclick = () => p.classList.toggle("full");
   $("spCerrar").onclick = cerrarPieza;
   $("spTitulo").oninput = () => { c.titulo = $("spTitulo").value.trim(); guardaPiezaQuiet(); };
-  $("spEstado").onchange = () => {
-    c.estado = $("spEstado").value;
-    if (c.estado === "publicado" && !c.fecha_pub) c.fecha_pub = c.fecha_plan || isoLocal(new Date());
-    if (c.estado !== "publicado") delete c.fecha_pub;
-    guardaPiezaQuiet();
-    renderPiezaPanel(); // refresca la fila de publicación con el binding que toque
-  };
-  $("spTipo").onchange = () => { c.tipo = $("spTipo").value; guardaPiezaQuiet(); };
+  $("spEstado").onchange = () => { muevePieza(c, $("spEstado").value); guardaPiezaQuiet(); renderPiezaPanel(); };
   OSUI.initDate($("spPub"));
-  OSUI.initDate($("spCreada"));
-  // "Publicación" es la misma fecha que pinta el calendario: plan si no está publicada, real si lo está
   $("spPub").addEventListener("change", () => {
     const v = $("spPub").dataset.iso;
-    if (c.estado === "publicado") { if (v) c.fecha_pub = v; else delete c.fecha_pub; }
+    if (estadoPieza(c) === "publicado") { if (v) c.fecha_pub = v; else delete c.fecha_pub; }
     else { if (v) c.fecha_plan = v; else delete c.fecha_plan; }
     guardaPiezaQuiet();
   });
-  $("spCreada").addEventListener("change", () => { const v = $("spCreada").dataset.iso; if (v) c.fecha = v; guardaPiezaQuiet(); });
-  $("spUrl").onchange = () => {
-    const v = $("spUrl").value.trim();
-    if (v) c.url = v; else delete c.url;
+  $("sp_clase").onchange = () => { c.clase = $("sp_clase").value; guardaPiezaQuiet(); };
+  const hora = $("sp_hora");
+  hora.oninput = () => { let v = hora.value.replace(/[^\d]/g, "").slice(0, 4); if (v.length > 2) v = v.slice(0, 2) + ":" + v.slice(2); hora.value = v; };
+  hora.onblur = () => {
+    const m = hora.value.match(/^(\d{1,2}):?(\d{0,2})$/);
+    if (!m) { if (!hora.value) { delete c.hora; guardaPiezaQuiet(); } return; }
+    hora.value = `${String(Math.min(23, Number(m[1]) || 0)).padStart(2, "0")}:${String(Math.min(59, Number(m[2] || 0))).padStart(2, "0")}`;
+    c.hora = hora.value;
     guardaPiezaQuiet();
-    renderPiezaPanel(); // refresca el player
   };
-  $("spViews").oninput = () => { const n = Number($("spViews").value); if ($("spViews").value !== "" && Number.isFinite(n)) c.views = n; else delete c.views; guardaPiezaQuiet(); };
-  $("spLikes").oninput = () => { const n = Number($("spLikes").value); if ($("spLikes").value !== "" && Number.isFinite(n)) c.likes = n; else delete c.likes; guardaPiezaQuiet(); };
-  $("spComments").oninput = () => { const n = Number($("spComments").value); if ($("spComments").value !== "" && Number.isFinite(n)) c.comments = n; else delete c.comments; guardaPiezaQuiet(); };
-  for (const k of ["clase", "hora", "gancho", "cuerpo", "cierre", "cta", "caption", "hashtags", "fuente", "formato", "broll", "pantalla", "carpeta", "archivo", "produccion", "porque_no_10"]) {
+
+  const texto = ["gancho", "cuerpo", "cierre", "cta", "caption", "hashtags", "palabra", "url", "formato", "fuente", "carpeta", "broll", "pantalla", "archivo", "produccion", "porque_no_10"];
+  for (const k of texto) {
     const el = $("sp_" + k);
-    if (el) el.oninput = () => { const v = el.value.trim(); if (v) c[k] = v; else delete c[k]; guardaPiezaQuiet(); };
+    if (!el) continue;
+    el.oninput = () => {
+      const v = el.value.trim();
+      if (v) c[k] = v; else delete c[k];
+      if (["gancho", "cuerpo", "cierre", "cta"].includes(k)) $("spDur").textContent = duracionTxt(palabrasDe(c));
+      if (k === "caption") $("spCapN").textContent = `${el.value.length} / 2.200`;
+      guardaPiezaQuiet();
+    };
   }
-  for (const k of ["enviada", "recibida", "cambios"]) {
-    const el = $("sp_ed_" + k);
-    if (el) el.oninput = () => { c.editor = c.editor || {}; const v = el.value.trim(); if (v) c.editor[k] = v; else delete c.editor[k]; if (!Object.keys(c.editor).length) delete c.editor; guardaPiezaQuiet(); };
+  for (const k of ["views", "likes", "comments", "nota"]) {
+    const el = $("sp_" + k);
+    el.oninput = () => { const n = Number(el.value); if (el.value !== "" && Number.isFinite(n)) c[k] = n; else delete c[k]; guardaPiezaQuiet(); };
   }
-  $("sp_nota").oninput = () => { const n = Number($("sp_nota").value); if ($("sp_nota").value !== "" && Number.isFinite(n)) c.nota = n; else delete c.nota; guardaPiezaQuiet(); };
+  $("spTele").onclick = () => abrirTeleprompter(c);
+
+  p.querySelectorAll(".ft-toma input").forEach((cb) => {
+    cb.onchange = async () => {
+      const t = (STATE.tomas || [])[Number(cb.dataset.k)];
+      if (!t) return;
+      if (cb.checked) { t.estado = "grabada"; t.grabada_el = isoLocal(new Date()); } else { t.estado = "pendiente"; delete t.grabada_el; }
+      await postClaves({ tomas: STATE.tomas });
+    };
+  });
+  $("spToma").onclick = async () => { if (await nuevaToma(c.cid)) { fichaTab = "produccion"; renderPiezaPanel(); } };
+
+  $("spEdita").onchange = async () => {
+    const editor_id = $("spEdita").value || null;
+    try {
+      const r = await apiPost(`/api/edicion/${encodeURIComponent(c.cid)}/asignar`, { editor_id });
+      if (r.edicion) { c.edicion = r.edicion; fichaTab = "edicion"; } else delete c.edicion;
+      renderPiezaPanel();
+    } catch (e) { alert("No se pudo asignar: " + e.message); renderPiezaPanel(); }
+  };
+  if (ed) {
+    const actualiza = async (body) => {
+      const r = await apiPost(`/api/edicion/${encodeURIComponent(c.cid)}`, body);
+      c.edicion = r.edicion;
+      if (body.estado === "aprobada") {
+        if (RANGO_PIEZA[estadoPieza(c)] < 4) c.estado = "lista";
+        const ult = (r.edicion.entregas || []).slice(-1)[0];
+        if (ult?.url) c.archivo = ult.url;
+      }
+      renderPiezaPanel();
+    };
+    $("edEstado").onchange = () => actualiza({ estado: $("edEstado").value }).catch((e) => alert(e.message));
+    OSUI.initDate($("edLimite"));
+    $("edLimite").addEventListener("change", () => actualiza({ fecha_limite: $("edLimite").dataset.iso || null }).catch((e) => alert(e.message)));
+    $("edBrief").oninput = () => {
+      clearTimeout(briefTimer);
+      const v = $("edBrief").value;
+      briefTimer = setTimeout(() => apiPost(`/api/edicion/${encodeURIComponent(c.cid)}`, { brief: v }).then((r) => { c.edicion = r.edicion; }).catch((e) => alert("No se guardaron las indicaciones: " + e.message)), 700);
+    };
+    const ap = $("edAprobar"), cb = $("edCambios");
+    if (ap) ap.onclick = () => actualiza({ estado: "aprobada" }).catch((e) => alert(e.message));
+    if (cb) cb.onclick = async () => {
+      const nota = await OSUI.prompt("Pedir cambios", "", { label: "Qué hay que cambiar", placeholder: "Quita el corte del segundo 12 y sube la música", ok: "Enviar" });
+      if (nota === null) return;
+      actualiza({ estado: "cambios", nota }).catch((e) => alert(e.message));
+    };
+    const enviar = async () => {
+      const t = $("edMsg").value.trim();
+      if (!t) return;
+      try { const r = await apiPost(`/api/edicion/${encodeURIComponent(c.cid)}/mensaje`, { texto: t }); c.edicion = r.edicion; renderPiezaPanel(); }
+      catch (e) { alert("No se envió: " + e.message); }
+    };
+    $("edMsgBtn").onclick = enviar;
+    $("edMsg").onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); enviar(); } };
+  }
+
   initPizarra(c, p, guardaPiezaQuiet);
   $("spBorrar").onclick = async () => {
     if (!(await OSUI.confirm("Borrar pieza", `«${esc(c.titulo || "(sin título)")}» se elimina del todo.`, { ok: "Sí, borrar" }))) return;
@@ -3352,9 +3544,10 @@ const VIEWS = {
     return nav + (contSub === "piezas" ? vistaPiezas() : contSub === "calendario" ? vistaCalendario() : vistaReto());
   },
   instagram() {
-    // 15 oct 2026: Alex vacía el área para rediseñarla parte por parte. Los datos (contenido, tomas) siguen intactos
-    // y las funciones de piezas siguen vivas porque las usan la Agenda y el Panel.
-    return `<div class="card"><div class="empty-note">En rediseño. Tus piezas y tus tomas siguen guardadas; vuelven aquí cuando elijamos qué entra.</div></div>`;
+    const nRev = (STATE.contenido || []).filter((c) => c.edicion?.estado === "entregada").length;
+    const nav = `<div class="subnav">${IG_TABS.map((t) => `<button class="${contSub === t.id ? "active" : ""}" onclick="location.hash='instagram/${t.id}'">${t.l}${t.id === "edicion" && nRev ? ` · ${nRev}` : ""}</button>`).join("")}</div>`;
+    const vista = contSub === "edicion" ? vistaEdicionIG() : contSub === "cola" ? vistaColaIG() : contSub === "grabacion" ? vistaGrabacionIG() : contSub === "referencias" ? vistaReferenciasIG() : vistaTableroIG();
+    return nav + vista;
   },
   agenda() { return vistaAgendaCal() + VIEWS.tareas(); },
   skool() { return pendiente("Skool", "Miembros frente al objetivo de 1.000, de qué pieza viene cada alta y el embudo: visitas al perfil, clics al enlace, altas. Se monta cuando abra la comunidad.", 4); },
@@ -4077,6 +4270,417 @@ function vistaAgendaCal() {
   </div>`;
 }
 
+/* ======================== INSTAGRAM · rediseño 15 oct 2026 ========================
+   Tablero (pipeline + archivo de publicadas) · Edición (editores y lo que tienen entre manos) ·
+   Cola (qué sale cada día y colchón) · Grabación (tomas pendientes por sitio) · Referencias (cuentas modelo y ganchos).
+   La ficha de cada pieza (renderPiezaPanel) va en pestañas: Guion · Publicación · Producción · Edición · Notas. */
+const IG_TABS = [
+  { id: "tablero", l: "Tablero" }, { id: "edicion", l: "Edición" }, { id: "cola", l: "Cola" },
+  { id: "grabacion", l: "Grabación" }, { id: "referencias", l: "Referencias" },
+];
+const RANGO_PIEZA = { idea: 0, guion: 1, grabar: 2, editar: 3, lista: 4, publicado: 5 };
+const ED_ESTADOS = [
+  { id: "por_editar", l: "Por editar" }, { id: "en_edicion", l: "En edición" }, { id: "entregada", l: "Entregada" },
+  { id: "cambios", l: "Cambios pedidos" }, { id: "aprobada", l: "Aprobada" },
+];
+const edLabel = (id) => (ED_ESTADOS.find((e) => e.id === id) || { l: id || "" }).l;
+const TIPOS_GANCHO = ["Pregunta incómoda", "Dato o cifra", "Historia", "Contraste", "Lista", "Frase ajena", "Otro"];
+let igBusca = "", igVerTodo = {}, EDITORES = null, grabFiltro = "pronto", refFiltro = "todo";
+const DIAS_CORTOS = ["dom", "lun", "mar", "mié", "jue", "vie", "sáb"];
+function fmtDiaCorto(f) {
+  if (!f) return "";
+  if (f === isoLocal(new Date())) return "hoy";
+  if (f === isoLocal(new Date(Date.now() + 86400000))) return "mañana";
+  if (f === isoLocal(new Date(Date.now() - 86400000))) return "ayer";
+  const d = new Date(f + "T12:00");
+  return `${DIAS_CORTOS[d.getDay()]} ${d.getDate()}`;
+}
+const fechaHora = (ms) => new Date(Number(ms)).toLocaleString("es", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+async function apiPost(url, body) {
+  const r = await fetch(url, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || "HTTP " + r.status);
+  return j;
+}
+async function cargaEditores(forzar) {
+  if (EDITORES && !forzar) return EDITORES;
+  try {
+    const r = await fetch("/api/editores", { credentials: "include" });
+    EDITORES = r.ok ? (await r.json()).editores || [] : [];
+  } catch (e) { EDITORES = EDITORES || []; }
+  return EDITORES;
+}
+async function guardaContenido() { await postClaves({ contenido: STATE.contenido }); load(); }
+function muevePieza(c, estado) {
+  const hoy = isoLocal(new Date());
+  c.estado = estado;
+  if (estado === "publicado") { if (!c.fecha_pub) c.fecha_pub = c.fecha_plan && c.fecha_plan <= hoy ? c.fecha_plan : hoy; }
+  else delete c.fecha_pub;
+}
+function generaPass() {
+  const a = "abcdefghjkmnpqrstuvwxyz23456789";
+  return Array.from(crypto.getRandomValues(new Uint32Array(12)), (x) => a[x % a.length]).join("");
+}
+
+/* ---------- Tablero ---------- */
+function vistaTableroIG() {
+  return `<div class="kb-bar">
+      <input id="kbBusca" type="search" placeholder="Buscar en todas las piezas, también en las publicadas" value="${escA(igBusca)}" oninput="igBusca=this.value;pintaTablero()">
+      <button class="btn-mini primary" onclick="nuevaPiezaIG()">${OSIcons.nueva} Pieza</button>
+    </div><div id="kbWrap">${htmlTablero()}</div>`;
+}
+function pintaTablero() { const w = $("kbWrap"); if (w) w.innerHTML = htmlTablero(); }
+function htmlTablero() {
+  const todas = (STATE.contenido || []).map((c, i) => ({ c, i }));
+  const q = igBusca.trim().toLowerCase();
+  const pasa = ({ c }) => !q || [c.titulo, c.gancho, c.caption, c.formato].some((t) => String(t || "").toLowerCase().includes(q));
+  const hoy = isoLocal(new Date());
+  const cols = ESTADOS_PIEZA.map((col) => {
+    const items = todas.filter((x) => estadoPieza(x.c) === col.id && pasa(x));
+    if (col.id === "publicado") items.sort((a, b) => ((b.c.fecha_pub || b.c.fecha || "") > (a.c.fecha_pub || a.c.fecha || "") ? 1 : -1));
+    else items.sort((a, b) => { const fa = a.c.fecha_plan || "9999", fb = b.c.fecha_plan || "9999"; return fa < fb ? -1 : fa > fb ? 1 : (a.c.num || 0) - (b.c.num || 0); });
+    const corte = col.id === "publicado" ? 6 : col.id === "idea" ? 10 : Infinity;
+    const ver = q || igVerTodo[col.id] ? items : items.slice(0, corte);
+    const titulo = col.id === "publicado" ? "Publicadas" : col.id === "editar" ? "Edición" : col.l;
+    const mas = items.length > ver.length
+      ? `<button class="kb-mas" onclick="igVerTodo['${col.id}']=true;pintaTablero()">${col.id === "publicado" ? "Ver el archivo" : "Ver todas"} · ${items.length}</button>`
+      : igVerTodo[col.id] && !q && items.length > corte ? `<button class="kb-mas" onclick="igVerTodo['${col.id}']=false;pintaTablero()">Ver menos</button>` : "";
+    return `<section class="kb-col" ondragover="igSobre(event)" ondragleave="igFuera(event)" ondrop="igSoltar(event,'${col.id}')">
+      <div class="kb-head"><span>${titulo}</span><span class="kb-n">${items.length}</span></div>
+      <div class="kb-list">${ver.map((x) => cardIG(x, hoy)).join("") || `<div class="kb-vacio">Nada aquí</div>`}${mas}</div></section>`;
+  });
+  return `<div class="kb">${cols.join("")}</div>`;
+}
+function cardIG({ c, i }, hoy) {
+  const est = estadoPieza(c), pub = est === "publicado";
+  const f = pub ? (c.fecha_pub || c.fecha) : c.fecha_plan;
+  const atras = !pub && c.fecha_plan && c.fecha_plan < hoy;
+  const ts = tomasDe(c), tp = ts.filter((t) => t.estado !== "grabada").length;
+  const ed = c.edicion;
+  const meta = [
+    f ? `<span class="${atras ? "kb-atras" : ""}">${fmtDiaCorto(f)}${!pub && c.hora ? " · " + esc(c.hora) : ""}</span>` : "",
+    c.clase && !/^soft/.test(c.clase) ? `<span class="kb-tag">${esc(c.clase)}</span>` : "",
+    ed ? `<span class="kb-ed ${esc(ed.estado)}">${esc(ed.editor_nombre || "Editor")} · ${ed.estado === "entregada" ? "revisar" : edLabel(ed.estado).toLowerCase()}</span>` : "",
+    est === "grabar" && ts.length ? `<span>${ts.length - tp}/${ts.length} tomas</span>` : "",
+    pub && c.views ? `<span>${fmtN(c.views)} vistas</span>` : "",
+  ].filter(Boolean).join("");
+  return `<div class="kb-card" draggable="true" ondragstart="igArrastra(event,${i})" onclick="abrirPieza(${i})">
+    <div class="kb-t">${esc(c.titulo || "(sin título)")}</div>${meta ? `<div class="kb-meta">${meta}</div>` : ""}</div>`;
+}
+function igArrastra(e, i) { e.dataTransfer.setData("text/plain", String(i)); e.dataTransfer.effectAllowed = "move"; }
+function igSobre(e) { e.preventDefault(); e.currentTarget.classList.add("over"); }
+function igFuera(e) { if (!e.currentTarget.contains(e.relatedTarget)) e.currentTarget.classList.remove("over"); }
+async function igSoltar(e, estado) {
+  e.preventDefault();
+  e.currentTarget.classList.remove("over");
+  const c = (STATE.contenido || [])[Number(e.dataTransfer.getData("text/plain"))];
+  if (!c || estadoPieza(c) === estado) return;
+  muevePieza(c, estado);
+  pintaTablero();
+  await guardaContenido();
+}
+async function nuevaPiezaIG() {
+  const titulo = await OSUI.prompt("Nueva pieza", "", { label: "Título", placeholder: "De qué va el reel", ok: "Crear" });
+  if (!titulo || !titulo.trim()) return;
+  const c = { cid: uidL("p"), fecha: isoLocal(new Date()), tipo: "reel", titulo: titulo.trim(), estado: "idea" };
+  (STATE.contenido = STATE.contenido || []).push(c);
+  pintaTablero();
+  await postClaves({ contenido: STATE.contenido });
+  abrirPieza(STATE.contenido.indexOf(c), "guion");
+}
+
+/* ---------- Edición: editores y lo que tienen entre manos ---------- */
+function vistaEdicionIG() {
+  if (EDITORES === null) cargaEditores().then(() => { if (active === "instagram" && contSub === "edicion") renderContent(); });
+  const eds = EDITORES || [];
+  const asignadas = (STATE.contenido || []).map((c, i) => ({ c, i })).filter((x) => x.c.edicion);
+  const filasEd = eds.length ? eds.map((u) => `<div class="ed-row">
+      <div class="ed-main"><b>${esc(u.display_name || u.username)}</b><span>Usuario ${esc(u.username)}${u.last_login ? " · entró el " + fechaHora(u.last_login) : " · aún no ha entrado"}${u.active ? "" : " · sin acceso"}</span></div>
+      <span class="ed-acts"><button class="btn-mini" onclick="editorPassword('${esc(u.id)}')">Nueva contraseña</button>
+      <button class="btn-mini" onclick="editorActivo('${esc(u.id)}',${u.active ? "false" : "true"})">${u.active ? "Quitar acceso" : "Devolver acceso"}</button></span>
+    </div>`).join("") : `<div class="empty-note">Todavía no hay ningún editor con acceso.</div>`;
+  const cols = ED_ESTADOS.map((st) => {
+    const items = asignadas.filter((x) => x.c.edicion.estado === st.id);
+    const cards = items.map(({ c, i }) => {
+      const ed = c.edicion, nV = (ed.entregas || []).length;
+      const meta = [`<span>${esc(ed.editor_nombre || "Editor")}</span>`,
+        ed.fecha_limite ? `<span class="${ed.fecha_limite < isoLocal(new Date()) && st.id !== "aprobada" ? "kb-atras" : ""}">entrega ${fmtDiaCorto(ed.fecha_limite)}</span>` : "",
+        c.fecha_plan ? `<span>sale ${fmtDiaCorto(c.fecha_plan)}</span>` : "",
+        nV ? `<span>v${nV}</span>` : "",
+        st.id === "entregada" ? `<span class="kb-ed entregada">revisar</span>` : ""].filter(Boolean).join("");
+      return `<div class="kb-card" onclick="abrirPieza(${i},'edicion')"><div class="kb-t">${esc(c.titulo || "(sin título)")}</div><div class="kb-meta">${meta}</div></div>`;
+    }).join("");
+    return `<section class="kb-col"><div class="kb-head"><span>${st.l}</span><span class="kb-n">${items.length}</span></div><div class="kb-list">${cards || `<div class="kb-vacio">Nada aquí</div>`}</div></section>`;
+  }).join("");
+  return `<div class="card"><div class="row-h"><h2>Editores</h2><button class="btn-mini primary" onclick="nuevoEditor()">${OSIcons.nueva} Dar acceso</button></div>
+      <div class="sub" style="margin-top:6px">Cada editor entra con su usuario en esta misma web y solo ve las piezas que le asignes. Nada más de Daily System.</div>${filasEd}</div>
+    <div class="card"><h2>Con el editor</h2><div class="sub">${asignadas.length ? "Toca una pieza para ver sus entregas, aprobarla o pedir cambios." : "Asigna una pieza al editor desde su ficha, en «Edita»."}</div><div class="kb kb-5">${cols}</div></div>`;
+}
+async function nuevoEditor() {
+  const r = await OSUI.form({ titulo: "Dar acceso a un editor", texto: "Solo verá las piezas que le asignes.", campos: [
+    { id: "nombre", label: "Nombre", placeholder: "Nombre del editor" },
+    { id: "usuario", label: "Usuario para entrar", placeholder: "en minúsculas, sin espacios" },
+    { id: "pass", label: "Contraseña", valor: generaPass() },
+  ], ok: "Crear acceso" });
+  if (!r) return;
+  try {
+    const b = await apiPost("/api/editores", { display_name: r.nombre, username: r.usuario, password: r.pass });
+    await cargaEditores(true);
+    renderContent();
+    await OSUI.confirm("Acceso creado", `Pásale estos datos:<br><br>Web: <b>${esc(location.origin)}</b><br>Usuario: <b>${esc(b.editor.username)}</b><br>Contraseña: <b>${esc(r.pass)}</b><br><br>La contraseña no se vuelve a enseñar. Si la pierde, le pones una nueva aquí.`, { ok: "Hecho", danger: false });
+  } catch (e) { alert("No se creó el acceso: " + e.message); }
+}
+async function editorPassword(id) {
+  const u = (EDITORES || []).find((x) => x.id === id);
+  if (!u) return;
+  const p = await OSUI.prompt(`Nueva contraseña para ${u.display_name || u.username}`, generaPass(), { label: "Mínimo 8 caracteres", ok: "Cambiar" });
+  if (!p) return;
+  try {
+    await apiPost(`/api/editores/${encodeURIComponent(id)}`, { password: p });
+    await OSUI.confirm("Contraseña cambiada", `Usuario: <b>${esc(u.username)}</b><br>Contraseña nueva: <b>${esc(p)}</b><br><br>Sus sesiones abiertas se han cerrado.`, { ok: "Hecho", danger: false });
+  } catch (e) { alert("No se cambió: " + e.message); }
+}
+async function editorActivo(id, activo) {
+  const u = (EDITORES || []).find((x) => x.id === id);
+  if (!u) return;
+  if (!activo && !(await OSUI.confirm("Quitar acceso", `${esc(u.display_name || u.username)} deja de poder entrar. Sus piezas, entregas y mensajes se quedan.`, { ok: "Quitar acceso" }))) return;
+  try { await apiPost(`/api/editores/${encodeURIComponent(id)}`, { active: activo }); await cargaEditores(true); renderContent(); }
+  catch (e) { alert("No se pudo: " + e.message); }
+}
+
+/* ---------- Cola y colchón ---------- */
+function faltaDe(c) {
+  const r = RANGO_PIEZA[estadoPieza(c)] ?? 0, f = [];
+  if (r < 2) f.push("guion");
+  if (r < 3) f.push("grabar");
+  if (r < 4) f.push(c.edicion ? "edición: " + edLabel(c.edicion.estado).toLowerCase() : "editar");
+  if (!String(c.caption || "").trim()) f.push("caption");
+  return f;
+}
+function vistaColaIG() {
+  const hoy = isoLocal(new Date());
+  const todas = (STATE.contenido || []).map((c, i) => ({ c, i }));
+  const esPub = (x) => estadoPieza(x.c) === "publicado";
+  const pend = todas.filter((x) => !esPub(x));
+  const listas = pend.filter((x) => estadoPieza(x.c) === "lista");
+  const d0 = new Date(hoy + "T12:00");
+  const lunes = isoLocal(new Date(d0.getTime() - ((d0.getDay() + 6) % 7) * 86400000));
+  const domingo = isoLocal(new Date(new Date(lunes + "T12:00").getTime() + 6 * 86400000));
+  const pubSemana = todas.filter((x) => esPub(x) && (x.c.fecha_pub || "") >= lunes && (x.c.fecha_pub || "") <= domingo).length;
+  const objetivo = Number(STATE.config_contenido?.por_semana) || 7;
+  const dias = Array.from({ length: 14 }, (_, k) => isoLocal(new Date(d0.getTime() + k * 86400000)));
+  const ocupado = (f) => pend.some((x) => x.c.fecha_plan === f) || todas.some((x) => esPub(x) && x.c.fecha_pub === f);
+  const huecos7 = dias.slice(0, 7).filter((f) => !ocupado(f)).length;
+  const atrasadas = pend.filter((x) => x.c.fecha_plan && x.c.fecha_plan < hoy);
+  const fila = ({ c, i }) => {
+    const f = faltaDe(c);
+    return `<div class="cola-p" onclick="abrirPieza(${i})"><span class="badge ${estadoPieza(c)}">${labelEstado(c)}</span><span class="t">${esc(c.titulo || "(sin título)")}</span>${c.hora ? `<span class="m">${esc(c.hora)}</span>` : ""}<span class="cola-falta">${f.length ? f.map((x) => `<i>falta ${esc(x)}</i>`).join("") : `<i class="ok">lista para publicar</i>`}</span></div>`;
+  };
+  const filasDias = dias.map((f) => {
+    const delDia = pend.filter((x) => x.c.fecha_plan === f);
+    const pubDia = todas.filter((x) => esPub(x) && x.c.fecha_pub === f);
+    const d = new Date(f + "T12:00");
+    return `<div class="cola-dia${f === hoy ? " hoy" : ""}"><div class="cola-f"><b>${f === hoy ? "Hoy" : fmtDiaCorto(f)}</b><span>${d.toLocaleDateString("es", { day: "numeric", month: "short" })}</span></div>
+      <div class="cola-items">${pubDia.map(({ c, i }) => `<div class="cola-p pub" onclick="abrirPieza(${i})"><span class="badge publicado">Publicada</span><span class="t">${esc(c.titulo || "")}</span></div>`).join("")}${delDia.map(fila).join("")}${!delDia.length && !pubDia.length ? `<button class="cola-hueco" onclick="asignaHueco('${f}')">Sin pieza · asignar una</button>` : ""}</div></div>`;
+  }).join("");
+  const sinFecha = listas.filter((x) => !x.c.fecha_plan);
+  return `<div class="mini-kpis">
+      <div class="mkpi"><div class="n">${listas.length}</div><div class="l">${listas.length === 1 ? "Pieza lista · un día de margen" : `Piezas listas · ${listas.length} días de margen`}</div></div>
+      <div class="mkpi"><div class="n">${pubSemana}<small>/${objetivo}</small></div><div class="l">Publicadas esta semana</div></div>
+      <div class="mkpi"><div class="n">${huecos7}</div><div class="l">Días sin pieza en la próxima semana</div></div>
+    </div>` +
+    (atrasadas.length ? `<div class="card"><h2>Atrasadas</h2><div class="sub">Tenían fecha y no constan como publicadas. Márcalas como publicadas en el tablero o cámbiales la fecha.</div>${atrasadas.map((x) => `<div class="cola-dia"><div class="cola-f"><b>${fmtDiaCorto(x.c.fecha_plan)}</b></div><div class="cola-items">${fila(x)}</div></div>`).join("")}</div>` : "") +
+    `<div class="card"><h2>Próximos 14 días</h2>${filasDias}</div>` +
+    (sinFecha.length ? `<div class="card"><h2>Listas sin fecha</h2>${sinFecha.map(fila).join("")}</div>` : "");
+}
+async function asignaHueco(f) {
+  const cands = (STATE.contenido || []).map((c, i) => ({ c, i })).filter((x) => estadoPieza(x.c) !== "publicado" && !x.c.fecha_plan);
+  if (!cands.length) { await OSUI.confirm("No hay piezas sin fecha", "Todas las piezas pendientes ya tienen día. Crea una en el tablero o cambia la fecha de otra.", { ok: "Vale", danger: false }); return; }
+  cands.sort((a, b) => RANGO_PIEZA[estadoPieza(b.c)] - RANGO_PIEZA[estadoPieza(a.c)]);
+  const r = await OSUI.form({ titulo: `Publicar el ${fmtDiaCorto(f)}`, campos: [
+    { id: "i", label: "Pieza", tipo: "select", opciones: cands.map((x) => ({ v: String(x.i), l: `${labelEstado(x.c)} · ${x.c.titulo || "(sin título)"}` })) },
+    { id: "hora", label: "Hora (opcional)", tipo: "time", valor: "" },
+  ], ok: "Asignar" });
+  if (!r) return;
+  const c = STATE.contenido[Number(r.i)];
+  if (!c) return;
+  c.fecha_plan = f;
+  if (r.hora) c.hora = r.hora;
+  renderContent();
+  await guardaContenido();
+}
+
+/* ---------- Plan de grabación ---------- */
+function vistaGrabacionIG() {
+  const en14 = isoLocal(new Date(Date.now() + 14 * 86400000));
+  const porCid = new Map((STATE.contenido || []).map((c, i) => [c.cid, { c, i }]));
+  const tomas = (STATE.tomas || []).map((t, k) => ({ t, k }));
+  const vivas = (t) => (t.piezas || []).map((cid) => porCid.get(cid)).filter((x) => x && estadoPieza(x.c) !== "publicado");
+  const pronto = (t) => vivas(t).some(({ c }) => estadoPieza(c) === "grabar" || (c.fecha_plan && c.fecha_plan <= en14));
+  const pend = tomas.filter(({ t }) => t.estado !== "grabada" && vivas(t).length && (grabFiltro === "todas" || pronto(t)));
+  const grupos = new Map();
+  for (const x of pend) { const l = String(x.t.lugar || "Sin sitio").trim() || "Sin sitio"; if (!grupos.has(l)) grupos.set(l, []); grupos.get(l).push(x); }
+  const primera = (arr) => arr.flatMap(({ t }) => vivas(t).map(({ c }) => c.fecha_plan || "9999")).sort()[0] || "9999";
+  const orden = [...grupos.entries()].sort((a, b) => (primera(a[1]) < primera(b[1]) ? -1 : 1));
+  const chip = ({ c, i }) => `<button class="gr-pieza" onclick="abrirPieza(${i},'produccion')">${esc((c.titulo || "").slice(0, 40))}${(c.titulo || "").length > 40 ? "…" : ""}${c.fecha_plan ? " · " + fmtDiaCorto(c.fecha_plan) : ""}</button>`;
+  const html = orden.map(([lugar, arr]) => `<div class="card"><div class="row-h"><h2>${esc(lugar)}</h2><span class="kb-n">${arr.length} toma${arr.length === 1 ? "" : "s"}</span></div>
+    ${arr.map(({ t, k }) => `<div class="gr-toma"><button class="t-check" title="Marcar como grabada" onclick="tomaGrabada(${k})">${OSIcons.check}</button>
+      <div class="gr-main"><div class="gr-d">${esc(t.descripcion || "")}</div>${t.como ? `<div class="gr-como">${esc(t.como)}</div>` : ""}<div class="gr-ps">${vivas(t).map(chip).join("")}</div></div></div>`).join("")}</div>`).join("");
+  const nGrab = tomas.filter(({ t }) => t.estado === "grabada").length;
+  return `<div class="kb-bar"><div class="filtros" style="margin:0">
+      <button class="${grabFiltro === "pronto" ? "on" : ""}" onclick="grabFiltro='pronto';renderContent()">Próximas dos semanas</button>
+      <button class="${grabFiltro === "todas" ? "on" : ""}" onclick="grabFiltro='todas';renderContent()">Todas</button></div>
+      <span style="flex:1"></span><button class="btn-mini primary" onclick="nuevaToma()">${OSIcons.nueva} Toma</button></div>
+    ${html || `<div class="card"><div class="empty-note">No hay tomas pendientes${grabFiltro === "pronto" ? " para las piezas de las próximas dos semanas" : ""}.</div></div>`}
+    <div class="empty-note" style="margin-top:6px">Agrupadas por sitio, empezando por el que tiene la pieza más cercana. Llevas ${nGrab} tomas grabadas.</div>`;
+}
+async function tomaGrabada(k) {
+  const t = (STATE.tomas || [])[k];
+  if (!t) return;
+  t.estado = "grabada";
+  t.grabada_el = isoLocal(new Date());
+  renderContent();
+  await postClaves({ tomas: STATE.tomas });
+  load();
+}
+async function nuevaToma(cidFijo) {
+  const lugares = [...new Set((STATE.tomas || []).map((t) => String(t.lugar || "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, "es"));
+  const piezas = (STATE.contenido || []).filter((c) => estadoPieza(c) !== "publicado");
+  const campos = [
+    { id: "descripcion", label: "Qué hay que grabar", placeholder: "Plano cenital del portátil" },
+    { id: "lugar", label: "Sitio", tipo: "select", opciones: lugares.concat(["Otro sitio"]) },
+    { id: "otro", label: "Si es otro sitio, cuál", placeholder: "Gimnasio" },
+    { id: "como", label: "Cómo (opcional)", placeholder: "De espaldas, luz de mañana" },
+  ];
+  if (!cidFijo) campos.push({ id: "pieza", label: "Pieza", tipo: "select", opciones: piezas.map((c) => ({ v: c.cid, l: c.titulo || "(sin título)" })) });
+  const r = await OSUI.form({ titulo: "Nueva toma", campos, ok: "Añadir" });
+  if (!r || !r.descripcion.trim()) return false;
+  const lugar = r.lugar === "Otro sitio" ? r.otro.trim() : r.lugar;
+  const t = { cid: uidL("t"), descripcion: r.descripcion.trim(), lugar: lugar || "", tipo: "broll", piezas: [cidFijo || r.pieza].filter(Boolean), estado: "pendiente", orden: (STATE.tomas || []).length };
+  if (r.como.trim()) t.como = r.como.trim();
+  (STATE.tomas = STATE.tomas || []).push(t);
+  await postClaves({ tomas: STATE.tomas });
+  if (!cidFijo) load();
+  return true;
+}
+
+/* ---------- Referencias y ganchos ---------- */
+function vistaReferenciasIG() {
+  const refs = (STATE.referencias || []).slice().reverse();
+  const propios = (STATE.contenido || []).map((c, i) => ({ c, i })).filter((x) => String(x.c.gancho || "").trim());
+  const guardados = (STATE.ganchos || []).slice().reverse();
+  const refHtml = refs.length ? refs.map((r) => `<div class="ref-row" onclick="editarReferencia('${esc(r.id)}')">
+      <div class="ref-h"><b>${esc(r.cuenta || r.titulo || "Referencia")}</b>${r.formato ? `<span class="kb-tag">${esc(r.formato)}</span>` : ""}${r.url ? `<a class="ref-link" href="${escA(r.url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Abrir</a>` : ""}</div>
+      ${r.titulo && r.cuenta ? `<div class="ref-t">${esc(r.titulo)}</div>` : ""}${r.nota ? `<div class="ref-nota">${esc(r.nota)}</div>` : ""}</div>`).join("")
+    : `<div class="empty-note">Guarda aquí los reels y las cuentas que te sirven de modelo, con lo que te llevas de cada uno.</div>`;
+  const lista = [
+    ...(refFiltro !== "mios" ? guardados.map((g) => ({ g })) : []),
+    ...(refFiltro !== "guardados" ? propios.map((x) => ({ x })) : []),
+  ];
+  const gHtml = lista.length ? lista.map((it) => it.g
+      ? `<div class="gancho" onclick="editarGancho('${esc(it.g.id)}')"><div class="g-t">${esc(it.g.texto)}</div><div class="g-m">${[it.g.tipo, it.g.fuente].filter(Boolean).map(esc).join(" · ") || "Guardado"}</div></div>`
+      : `<div class="gancho" onclick="abrirPieza(${it.x.i},'guion')"><div class="g-t">${esc(it.x.c.gancho)}</div><div class="g-m">Tu pieza · ${esc((it.x.c.titulo || "").slice(0, 48))}${estadoPieza(it.x.c) === "publicado" && it.x.c.views ? ` · ${fmtN(it.x.c.views)} vistas` : ` · ${labelEstado(it.x.c).toLowerCase()}`}</div></div>`).join("")
+    : `<div class="empty-note">Sin ganchos todavía.</div>`;
+  return `<div class="card"><div class="row-h"><h2>Referencias</h2><button class="btn-mini primary" onclick="nuevaReferencia()">${OSIcons.nueva} Referencia</button></div>${refHtml}</div>
+    <div class="card"><div class="row-h"><h2>Ganchos</h2><button class="btn-mini primary" onclick="nuevoGancho()">${OSIcons.nueva} Gancho</button></div>
+      <div class="filtros" style="margin-top:8px">${[["todo", "Todos"], ["guardados", "Guardados"], ["mios", "De tus piezas"]].map(([id, l]) => `<button class="${refFiltro === id ? "on" : ""}" onclick="refFiltro='${id}';renderContent()">${l}</button>`).join("")}</div>${gHtml}</div>`;
+}
+const REF_CAMPOS = (r = {}) => [
+  { id: "cuenta", label: "Cuenta", valor: r.cuenta || "", placeholder: "@cuenta" },
+  { id: "url", label: "Enlace (opcional)", valor: r.url || "", placeholder: "https://www.instagram.com/reel/…" },
+  { id: "titulo", label: "Qué reel o formato (opcional)", valor: r.titulo || "", placeholder: "Reel mudo de 9 s con frase en pantalla" },
+  { id: "nota", label: "Qué me llevo", valor: r.nota || "", placeholder: "Gancho sostenido 3 s y corte con la música" },
+  { id: "formato", label: "Formato (opcional)", valor: r.formato || "", placeholder: "mudo · voz en off · a cámara" },
+];
+const limpiaRef = (r, f) => { for (const k of ["cuenta", "url", "titulo", "nota", "formato"]) { const v = String(f[k] || "").trim(); if (v) r[k] = v; else delete r[k]; } return r; };
+async function nuevaReferencia() {
+  const f = await OSUI.form({ titulo: "Nueva referencia", campos: REF_CAMPOS(), ok: "Guardar" });
+  if (!f || !(f.cuenta.trim() || f.titulo.trim() || f.url.trim())) return;
+  (STATE.referencias = STATE.referencias || []).push(limpiaRef({ id: uidL("rf"), creada: isoLocal(new Date()) }, f));
+  await guardaYPinta({ referencias: STATE.referencias });
+}
+async function editarReferencia(id) {
+  const r = (STATE.referencias || []).find((x) => x.id === id);
+  if (!r) return;
+  const f = await OSUI.form({ titulo: "Referencia", campos: REF_CAMPOS(r), ok: "Guardar", borrar: true });
+  if (!f) return;
+  if (f === "borrar") STATE.referencias.splice(STATE.referencias.indexOf(r), 1);
+  else limpiaRef(r, f);
+  await guardaYPinta({ referencias: STATE.referencias });
+}
+const GANCHO_CAMPOS = (g = {}) => [
+  { id: "texto", label: "Gancho", valor: g.texto || "", placeholder: "La frase con la que empieza el reel" },
+  { id: "tipo", label: "Tipo", tipo: "select", valor: g.tipo || TIPOS_GANCHO[0], opciones: TIPOS_GANCHO },
+  { id: "fuente", label: "De dónde sale (opcional)", valor: g.fuente || "", placeholder: "@cuenta · reel del 3 oct" },
+];
+async function nuevoGancho() {
+  const f = await OSUI.form({ titulo: "Nuevo gancho", campos: GANCHO_CAMPOS(), ok: "Guardar" });
+  if (!f || !f.texto.trim()) return;
+  const g = { id: uidL("g"), texto: f.texto.trim(), tipo: f.tipo, creada: isoLocal(new Date()) };
+  if (f.fuente.trim()) g.fuente = f.fuente.trim();
+  (STATE.ganchos = STATE.ganchos || []).push(g);
+  await guardaYPinta({ ganchos: STATE.ganchos });
+}
+async function editarGancho(id) {
+  const g = (STATE.ganchos || []).find((x) => x.id === id);
+  if (!g) return;
+  const f = await OSUI.form({ titulo: "Gancho", campos: GANCHO_CAMPOS(g), ok: "Guardar", borrar: true });
+  if (!f) return;
+  if (f === "borrar") STATE.ganchos.splice(STATE.ganchos.indexOf(g), 1);
+  else { if (!f.texto.trim()) return; g.texto = f.texto.trim(); g.tipo = f.tipo; if (f.fuente.trim()) g.fuente = f.fuente.trim(); else delete g.fuente; }
+  await guardaYPinta({ ganchos: STATE.ganchos });
+}
+
+/* ---------- Teleprompter ---------- */
+function abrirTeleprompter(c) {
+  const texto = [c.gancho, c.cuerpo, c.cierre, c.cta].map((t) => String(t || "").trim()).filter(Boolean).join("\n\n");
+  if (!texto) { OSUI.confirm("Sin guion", "Escribe el guion en la pestaña Guion y vuelve.", { ok: "Vale", danger: false }); return; }
+  const ov = document.createElement("div");
+  ov.className = "tp-ov";
+  ov.innerHTML = `<div class="tp-scroll"><div class="tp-pad"></div><div class="tp-txt">${esc(texto).replace(/\n/g, "<br>")}</div><div class="tp-pad"></div></div>
+    <div class="tp-guia"></div>
+    <div class="tp-bar"><button data-a="play">Empezar</button><button data-a="lento" title="Más lento">−</button><span data-v="vel"></span><button data-a="rapido" title="Más rápido">+</button>
+      <button data-a="menos" title="Letra más pequeña">A−</button><button data-a="mas" title="Letra más grande">A+</button><button data-a="espejo">Espejo</button><button data-a="cerrar">Cerrar</button></div>`;
+  document.body.appendChild(ov);
+  const sc = ov.querySelector(".tp-scroll"), txt = ov.querySelector(".tp-txt");
+  let vel = 1, tam = window.innerWidth < 600 ? 32 : 46, espejo = false, corre = false, raf = 0, ultimo = 0, acum = 0, empezado = false;
+  const pinta = () => {
+    txt.style.fontSize = tam + "px";
+    txt.style.transform = espejo ? "scaleX(-1)" : "";
+    ov.querySelector('[data-v="vel"]').textContent = (Math.round(vel * 100) / 100).toString().replace(".", ",") + "×";
+    ov.querySelector('[data-a="play"]').textContent = corre ? "Pausa" : empezado ? "Seguir" : "Empezar";
+  };
+  const paso = (t) => {
+    if (!corre) return;
+    if (ultimo) { acum += (t - ultimo) * 0.026 * vel; const px = Math.floor(acum); if (px) { sc.scrollTop += px; acum -= px; } }
+    ultimo = t;
+    raf = requestAnimationFrame(paso);
+  };
+  const play = () => { corre = !corre; empezado = true; ultimo = 0; if (corre) raf = requestAnimationFrame(paso); else cancelAnimationFrame(raf); pinta(); };
+  const cerrar = () => { corre = false; cancelAnimationFrame(raf); document.removeEventListener("keydown", tecla); ov.remove(); };
+  const tecla = (e) => {
+    if (e.key === "Escape") cerrar();
+    else if (e.key === " ") { e.preventDefault(); play(); }
+    else if (e.key === "ArrowUp") { vel = Math.min(4, vel + 0.25); pinta(); }
+    else if (e.key === "ArrowDown") { vel = Math.max(0.25, vel - 0.25); pinta(); }
+  };
+  document.addEventListener("keydown", tecla);
+  ov.querySelector(".tp-bar").onclick = (e) => {
+    const a = e.target.closest("button")?.dataset.a;
+    if (!a) return;
+    if (a === "play") return play();
+    if (a === "cerrar") return cerrar();
+    if (a === "lento") vel = Math.max(0.25, vel - 0.25);
+    if (a === "rapido") vel = Math.min(4, vel + 0.25);
+    if (a === "menos") tam = Math.max(22, tam - 6);
+    if (a === "mas") tam = Math.min(96, tam + 6);
+    if (a === "espejo") espejo = !espejo;
+    pinta();
+  };
+  sc.onclick = play;
+  pinta();
+}
+
 function pendiente(nombre, texto, fase) {
   return `<div class="card"><h2>${nombre}</h2><div class="note">${texto}</div><div class="empty-note" style="margin-top:10px">Pendiente de construir · fase ${fase}.</div></div>`;
 }
@@ -4084,6 +4688,7 @@ function pendiente(nombre, texto, fase) {
 function renderContent() {
   renderTitle();
   if (!STATE || !DASH) return;
+  document.querySelector(".wrap")?.classList.toggle("ancho", active === "instagram" && ["tablero", "edicion"].includes(contSub));
   $("content").innerHTML = VIEWS[active]();
   initHeatmaps(); // dimensiona los heatmaps y los deja en lo más reciente
   initProyPizarra(); // pizarra editable de la página de proyecto

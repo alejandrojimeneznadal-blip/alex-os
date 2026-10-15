@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f6f7f9">
+<title>Edición · Daily System</title>
+<style>
+  /* Pantalla del editor: solo las piezas que tiene asignadas. Colores y tipografía vienen de theme.js. */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: var(--bg); color: var(--ink); line-height: 1.45; }
+  .top { position: sticky; top: 0; z-index: 20; background: var(--bg); border-bottom: 1px solid var(--border); padding: 12px 20px; padding-top: max(12px, env(safe-area-inset-top)); display: flex; align-items: center; gap: 12px; }
+  .top .marca { width: 28px; height: 28px; border-radius: 6px; background: var(--ink); color: var(--surface); font-size: 11px; font-weight: 600; display: grid; place-items: center; letter-spacing: -0.03em; flex-shrink: 0; }
+  .top h1 { font-size: 16px; font-weight: 650; }
+  .top .sub { font-size: 12.5px; color: var(--ink-3); }
+  .top .esp { flex: 1; }
+  .btn-mini { display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; font-family: inherit; font-size: 13px; cursor: pointer; white-space: nowrap; }
+  .btn-mini .tic { width: 14px; height: 14px; }
+  .wrap { max-width: 1320px; margin: 0 auto; padding: 20px; }
+  .intro { color: var(--ink-3); font-size: 13px; margin-bottom: 14px; max-width: 70ch; }
+  .board { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; align-items: start; }
+  .col { min-width: 0; }
+  .col-h { display: flex; justify-content: space-between; font-size: 12.5px; font-weight: 600; color: var(--ink-2); padding: 2px 4px 8px; }
+  .col-h span:last-child { color: var(--ink-3); font-weight: 500; }
+  .lista { display: grid; gap: 8px; }
+  .card2 { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px 11px; cursor: pointer; text-align: left; font-family: inherit; color: inherit; width: 100%; }
+  .card2:hover { border-color: var(--border-strong); }
+  .card2 .t { font-size: 13.5px; font-weight: 550; line-height: 1.35; }
+  .meta { display: flex; flex-wrap: wrap; gap: 4px 8px; margin-top: 7px; font-size: 11.5px; color: var(--ink-3); }
+  .tag { border: 1px solid var(--border); border-radius: 4px; padding: 0 5px; }
+  .tarde { color: var(--bad); }
+  .vacio { color: var(--ink-3); font-size: 12px; padding: 4px; }
+  .nada { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 28px 20px; text-align: center; color: var(--ink-3); }
+  @media (max-width: 900px) { .board { grid-template-columns: 1fr; gap: 18px; } .wrap { padding: 16px; } }
+  /* panel de la pieza */
+  .velo { position: fixed; inset: 0; background: rgba(17,19,24,0.35); z-index: 40; display: none; }
+  .velo.on { display: block; }
+  .panel { position: fixed; top: 0; right: 0; bottom: 0; width: min(620px, 100%); background: var(--surface); border-left: 1px solid var(--border); z-index: 50; transform: translateX(100%); transition: transform 0.22s ease; display: flex; flex-direction: column; }
+  .panel.on { transform: none; }
+  .p-top { display: flex; align-items: center; gap: 8px; padding: 12px 16px; padding-top: max(12px, env(safe-area-inset-top)); border-bottom: 1px solid var(--hairline); }
+  .p-top b { flex: 1; min-width: 0; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .p-top button { background: none; border: 0; color: var(--ink-3); cursor: pointer; width: 32px; height: 32px; border-radius: 6px; display: grid; place-items: center; }
+  .p-top button:hover { background: var(--surface-2); color: var(--ink); }
+  .p-top .tic { width: 18px; height: 18px; }
+  .p-body { flex: 1; overflow-y: auto; padding: 18px 20px 40px; padding-bottom: calc(40px + env(safe-area-inset-bottom)); }
+  .fechas { font-size: 13px; color: var(--ink-2); }
+  .estado { display: inline-block; margin-top: 8px; font-size: 12px; font-weight: 600; border-radius: 4px; padding: 2px 8px; background: var(--surface-2); color: var(--ink-2); }
+  .estado.entregada { background: var(--accent-soft); color: var(--accent); }
+  .estado.cambios { background: var(--warn-bg); color: var(--warn); }
+  .estado.aprobada { background: var(--good-bg); color: var(--good); }
+  .acciones { display: flex; gap: 8px; flex-wrap: wrap; margin: 14px 0 4px; }
+  .sec { font-size: 11.5px; font-weight: 650; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.07em; margin: 22px 0 8px; }
+  .bloque { background: var(--bg); border: 1px solid var(--hairline); border-radius: 8px; padding: 10px 12px; font-size: 13.5px; white-space: pre-wrap; line-height: 1.5; }
+  .kv { display: grid; grid-template-columns: 130px minmax(0, 1fr); gap: 6px 12px; font-size: 13.5px; }
+  .kv dt { color: var(--ink-3); }
+  .kv dd { white-space: pre-wrap; word-break: break-word; }
+  .kv a, .entrega a { color: var(--ink); font-weight: 550; }
+  .g-l { font-size: 12px; color: var(--ink-3); margin: 10px 0 4px; }
+  .entrega { padding: 8px 0; border-bottom: 1px solid var(--hairline); font-size: 13.5px; display: flex; gap: 10px; flex-wrap: wrap; align-items: baseline; }
+  .entrega span { color: var(--ink-3); font-size: 12px; }
+  .entrega .nota { flex-basis: 100%; color: var(--ink-2); font-size: 13px; white-space: pre-wrap; }
+  .msgs { display: grid; gap: 8px; margin-bottom: 10px; }
+  .msg { background: var(--surface-2); border-radius: 8px; padding: 8px 10px; font-size: 13.5px; max-width: 88%; white-space: pre-wrap; justify-self: start; }
+  .msg.mio { justify-self: end; background: var(--accent-soft); }
+  .msg .h { font-size: 11.5px; color: var(--ink-3); margin-bottom: 3px; }
+  .enviar { display: flex; gap: 8px; }
+  .enviar input { flex: 1; min-width: 0; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--ink); font-family: inherit; font-size: 13.5px; padding: 8px 10px; }
+  .enviar input:focus { outline: none; border-color: var(--accent); }
+  .err { color: var(--bad); font-size: 13px; margin-top: 8px; }
+</style>
+</head>
+<body>
+<script>window.OS_SIN_BARRA = true;</script>
+<script src="/theme.js"></script>
+<script src="/icons.js"></script>
+<script src="/ui.js"></script>
+
+<header class="top">
+  <span class="marca">DS</span>
+  <div><h1>Edición</h1><div class="sub" id="sub">Cargando…</div></div>
+  <span class="esp"></span>
+  <button class="btn-mini" id="salir">Salir</button>
+</header>
+<main class="wrap">
+  <p class="intro">Aquí tienes las piezas que te han asignado. Toca una para ver el guion, el material y las indicaciones, y entrega la versión pegando el enlace del vídeo.</p>
+  <div id="board"></div>
+</main>
+<div class="velo" id="velo"></div>
+<aside class="panel" id="panel" aria-label="Pieza"></aside>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const COLS = [
+  { id: "por_editar", l: "Por editar" }, { id: "en_edicion", l: "En edición" }, { id: "entregada", l: "Entregada" },
+  { id: "cambios", l: "Cambios pedidos" }, { id: "aprobada", l: "Aprobada" },
+];
+const label = (id) => (COLS.find((c) => c.id === id) || { l: id }).l;
+const hoyISO = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
+const fCorta = (f) => f ? new Date(f + "T12:00").toLocaleDateString("es", { weekday: "short", day: "numeric", month: "short" }) : "";
+const fLarga = (f) => f ? new Date(f + "T12:00").toLocaleDateString("es", { weekday: "long", day: "numeric", month: "long" }) : "";
+const fHora = (ms) => new Date(Number(ms)).toLocaleString("es", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+const sinGrabar = (p) => ["idea", "guion", "grabar"].includes(p.estado_pieza);
+let DATA = null, SEL = null;
+
+async function api(path, body) {
+  const r = await fetch(path, body ? { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : { credentials: "include" });
+  if (r.status === 401) { location.href = "/login.html"; throw new Error("sesión caducada"); }
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || "HTTP " + r.status);
+  return j;
+}
+
+async function cargar() {
+  try {
+    DATA = await api("/api/editor/piezas");
+    $("sub").textContent = `${DATA.editor.display_name}${DATA.owner.display_name ? " · piezas de " + DATA.owner.display_name : ""}`;
+    pinta();
+    if (SEL) pintaPanel();
+  } catch (e) {
+    $("board").innerHTML = `<div class="nada">No se pudieron cargar tus piezas: ${esc(e.message)}</div>`;
+  }
+}
+
+function pinta() {
+  const ps = DATA.piezas || [];
+  if (!ps.length) { $("board").innerHTML = `<div class="nada">Todavía no tienes ninguna pieza asignada. Cuando te asignen una, aparecerá aquí.</div>`; return; }
+  const hoy = hoyISO();
+  $("board").innerHTML = `<div class="board">` + COLS.map((col) => {
+    let items = ps.filter((p) => p.edicion.estado === col.id);
+    items.sort((a, b) => ((a.edicion.fecha_limite || a.fecha_plan || "9999") < (b.edicion.fecha_limite || b.fecha_plan || "9999") ? -1 : 1));
+    if (col.id === "aprobada") items = items.slice(-8).reverse();
+    return `<section class="col"><div class="col-h"><span>${col.l}</span><span>${items.length}</span></div><div class="lista">${items.map((p) => {
+      const e = p.edicion, tarde = e.fecha_limite && e.fecha_limite < hoy && !["entregada", "aprobada"].includes(e.estado);
+      const meta = [
+        e.fecha_limite ? `<span class="${tarde ? "tarde" : ""}">entrega ${fCorta(e.fecha_limite)}</span>` : "",
+        p.fecha_plan ? `<span>sale ${fCorta(p.fecha_plan)}${p.hora ? " · " + esc(p.hora) : ""}</span>` : "",
+        sinGrabar(p) ? `<span class="tag">aún sin grabar</span>` : "",
+        e.entregas.length ? `<span>v${e.entregas.length}</span>` : "",
+      ].filter(Boolean).join("");
+      return `<button class="card2" onclick="abrir('${esc(p.cid)}')"><div class="t">${esc(p.titulo || "(sin título)")}</div>${meta ? `<div class="meta">${meta}</div>` : ""}</button>`;
+    }).join("") || `<div class="vacio">Nada aquí</div>`}</div></section>`;
+  }).join("") + `</div>`;
+}
+
+function abrir(cid) { SEL = cid; pintaPanel(); $("panel").classList.add("on"); $("velo").classList.add("on"); }
+function cerrar() { SEL = null; $("panel").classList.remove("on"); $("velo").classList.remove("on"); }
+$("velo").onclick = cerrar;
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && SEL) cerrar(); });
+
+function pintaPanel() {
+  const p = (DATA.piezas || []).find((x) => x.cid === SEL);
+  if (!p) { cerrar(); return; }
+  const e = p.edicion, yo = DATA.editor.id;
+  const enlace = (v) => /^https?:\/\//i.test(v) ? `<a href="${esc(v)}" target="_blank" rel="noopener">${esc(v)}</a>` : esc(v);
+  const material = [["Material", p.carpeta ? enlace(p.carpeta) : ""], ["Formato", esc(p.formato)], ["Recursos y B-roll", esc(p.broll)], ["Pantalla", esc(p.pantalla)]].filter(([, v]) => v);
+  const guion = [["Gancho", p.gancho], ["Cuerpo", p.cuerpo], ["Cierre", p.cierre], ["Llamada a la acción", p.cta]].filter(([, v]) => String(v || "").trim());
+  $("panel").innerHTML = `
+    <div class="p-top"><b>${esc(p.titulo || "(sin título)")}</b><button id="pCerrar" title="Cerrar">${OSIcons.cerrar || "×"}</button></div>
+    <div class="p-body">
+      <div class="fechas">${p.fecha_plan ? `Sale el ${fLarga(p.fecha_plan)}${p.hora ? " a las " + esc(p.hora) : ""}.` : "Sin fecha de publicación."}${e.fecha_limite ? ` Entrega antes del ${fLarga(e.fecha_limite)}.` : ""}</div>
+      <span class="estado ${esc(e.estado)}">${label(e.estado)}</span>${sinGrabar(p) ? ` <span class="estado">Aún sin grabar</span>` : ""}
+      <div class="acciones">
+        ${["por_editar", "cambios"].includes(e.estado) ? `<button class="btn-mini primary" id="pEmpezar">Empezar a editar</button>` : ""}
+        ${e.estado !== "aprobada" ? `<button class="btn-mini ${["en_edicion"].includes(e.estado) ? "primary" : ""}" id="pEntregar">Entregar versión</button>` : ""}
+      </div>
+      <div class="err" id="pErr"></div>
+      ${e.brief ? `<div class="sec">Indicaciones</div><div class="bloque">${esc(e.brief)}</div>` : ""}
+      ${material.length ? `<div class="sec">Material</div><dl class="kv">${material.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("")}</dl>` : ""}
+      <div class="sec">Guion</div>
+      ${guion.length ? guion.map(([k, v]) => `<div class="g-l">${k}</div><div class="bloque">${esc(v)}</div>`).join("") : `<div class="vacio">Sin guion escrito todavía.</div>`}
+      <div class="sec">Tus entregas</div>
+      ${e.entregas.length ? e.entregas.slice().reverse().map((x) => `<div class="entrega"><b>v${x.v}</b><a href="${esc(x.url)}" target="_blank" rel="noopener">Ver el vídeo</a><span>${fHora(x.fecha)}</span>${x.nota ? `<div class="nota">${esc(x.nota)}</div>` : ""}</div>`).join("") : `<div class="vacio">Todavía no has entregado ninguna versión.</div>`}
+      <div class="sec">Conversación</div>
+      <div class="msgs">${e.mensajes.length ? e.mensajes.map((m) => `<div class="msg ${m.de === yo ? "mio" : ""}"><div class="h">${esc(m.nombre || "")} · ${fHora(m.fecha)}</div>${esc(m.texto)}</div>`).join("") : `<div class="vacio">Sin mensajes.</div>`}</div>
+      <div class="enviar"><input id="pMsg" placeholder="Escribe un mensaje" autocomplete="off"><button class="btn-mini primary" id="pEnviar">Enviar</button></div>
+    </div>`;
+  $("pCerrar").onclick = cerrar;
+  const fallo = (err) => { $("pErr").textContent = err.message; };
+  const emp = $("pEmpezar");
+  if (emp) emp.onclick = () => api(`/api/editor/piezas/${encodeURIComponent(p.cid)}/estado`, { estado: "en_edicion" }).then(cargar).catch(fallo);
+  const ent = $("pEntregar");
+  if (ent) ent.onclick = async () => {
+    const r = await OSUI.form({ titulo: `Entregar v${e.entregas.length + 1}`, texto: "Pega el enlace del vídeo (Drive, WeTransfer, Frame.io…).", campos: [
+      { id: "url", label: "Enlace del vídeo", placeholder: "https://…" },
+      { id: "nota", label: "Nota (opcional)", placeholder: "Qué has cambiado o qué quieres que revise" },
+    ], ok: "Entregar" });
+    if (!r) return;
+    api(`/api/editor/piezas/${encodeURIComponent(p.cid)}/entrega`, { url: r.url, nota: r.nota }).then(cargar).catch(fallo);
+  };
+  const enviar = () => {
+    const t = $("pMsg").value.trim();
+    if (!t) return;
+    api(`/api/editor/piezas/${encodeURIComponent(p.cid)}/mensaje`, { texto: t }).then(cargar).catch(fallo);
+  };
+  $("pEnviar").onclick = enviar;
+  $("pMsg").onkeydown = (ev) => { if (ev.key === "Enter") { ev.preventDefault(); enviar(); } };
+}
+
+$("salir").onclick = async () => {
+  try { await fetch("/api/logout", { method: "POST", credentials: "include" }); } catch (e) {}
+  try { sessionStorage.clear(); } catch (e) {}
+  location.href = "/login.html";
+};
+
+cargar();
+// refresco cada minuto, salvo mientras escribe
+setInterval(() => { const a = document.activeElement; if (!(a && (a.tagName === "INPUT" || a.tagName === "TEXTAREA"))) cargar(); }, 60000);
+</script>
+</body>
+</html>

@@ -24,6 +24,8 @@
         me = fresh;
         try { sessionStorage.setItem(KEY, JSON.stringify(me)); } catch (e) {}
         if (changed) { listeners.forEach((fn) => fn(me)); document.dispatchEvent(new CustomEvent("os:me", { detail: me })); }
+        // cuentas de editor: solo su pantalla (el servidor también lo impone)
+        if (me?.user?.role === "editor" && location.pathname !== "/editor.html") { location.replace("/editor.html"); return me; }
         // cuenta nueva sin configurar → bienvenida (nunca cuando un admin está viendo otra cuenta)
         if (me?.user && me.user.onboarded === false && !me.viewing_as && location.pathname !== "/bienvenida.html") {
           location.replace("/bienvenida.html");
@@ -36,6 +38,7 @@
 })();
 
 (function () {
+  if (window.OS_SIN_BARRA) return; // páginas sin barra lateral (la del editor)
   const SBW = 228;
 
   // iconos Tabler inlineados en /icons.js (debe cargarse antes que ui.js)

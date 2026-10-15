@@ -126,6 +126,25 @@ async function initSchema() {
     );
   `);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS workspace_id TEXT;`);
+  /* editores (15 oct 2026): cuentas con rol 'editor' ligadas a la cuenta dueña de las piezas */
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS owner_id TEXT;`);
+  /* edición de piezas en tabla propia: lo que escribe el editor y lo que guarda el dueño
+     (que reescribe su estado entero en cada guardado) nunca se pisan */
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS ediciones (
+      owner_id TEXT NOT NULL REFERENCES users(id),
+      cid TEXT NOT NULL,
+      editor_id TEXT REFERENCES users(id),
+      estado TEXT NOT NULL DEFAULT 'por_editar',
+      fecha_limite TEXT,
+      brief TEXT,
+      entregas JSONB NOT NULL DEFAULT '[]'::jsonb,
+      mensajes JSONB NOT NULL DEFAULT '[]'::jsonb,
+      asignada BIGINT,
+      updated BIGINT,
+      PRIMARY KEY (owner_id, cid)
+    );
+  `);
   /* alcance del token: 'mcp' = IA con lectura y escritura · 'widget' = solo lee /api/widget */
   await pool.query(`ALTER TABLE mcp_tokens ADD COLUMN IF NOT EXISTS scope TEXT NOT NULL DEFAULT 'mcp';`);
   /* onboarding: las cuentas nuevas pasan por /bienvenida.html la primera vez. Al añadir la columna,
@@ -169,6 +188,8 @@ function seedDefaults(data) {
     contenido: [],   // piezas de Instagram: { cid?, num?, fecha, tipo, clase?, titulo, estado: idea|guion|grabar|editar|lista|publicado, fecha_plan?, hora?, fecha_pub?, url?, views?, likes?, comments?, gancho?, cuerpo?, cierre?, cta?, caption?, hashtags?, fuente?, formato?, broll?, pantalla?, carpeta?, archivo?, editor?, produccion?, nota?, notas? }
     bandeja: [],     // Cerebro · captura sin clasificar: { id, texto, creada, origen?: mano|voz } — se vacía convirtiendo cada entrada en idea/tarea/nota/pieza
     ideas: [],       // Cerebro: { id, texto, tipo: contenido|negocio, estado: nueva|en_guion|descartada, creada, notas?, pieza_cid? }
+    referencias: [], // Instagram · referencias: { id, cuenta, url?, titulo?, nota (qué me llevo), formato?, creada }
+    ganchos: [],     // Instagram · banco de ganchos: { id, texto, tipo?, fuente?, nota?, creada }
     notas: [],       // Cerebro: { id, titulo, tipo: nota|decision|aprendizaje|revision, area?, fecha, creada, notas? (cuerpo, HTML sencillo), archivada? }
     tomas: [],       // tomas de grabación (de Claqueta): { cid, descripcion, como?, lugar?, tipo, piezas: [cid de pieza], estado: pendiente|grabada, plan?, grabada_el?, archivo?, notas? }
     finanzas: [],    // { fecha, concepto, importe, tipo: ingreso|gasto, categoria?, cuenta? }
@@ -242,7 +263,7 @@ const ESTADOS_TAREA = ["pendiente", "por_definir", "en_ejecucion", "en_espera", 
 const PRIORIDADES_TAREA = ["urgente", "alta", "normal", "baja"];
 function normalizarTareas(data) {
   // repara ids duplicados o ausentes (tareas/recordatorios/memoria no son referenciados por nadie: seguro)
-  for (const [lista, pref] of [["tareas", "t"], ["recordatorios", "r"], ["memoria", "m"], ["bandeja", "b"], ["ideas", "i"], ["notas", "n"]]) {
+  for (const [lista, pref] of [["tareas", "t"], ["recordatorios", "r"], ["memoria", "m"], ["bandeja", "b"], ["ideas", "i"], ["notas", "n"], ["referencias", "rf"], ["ganchos", "g"]]) {
     const vistos = new Set();
     for (const x of data?.[lista] || []) {
       if (!x || typeof x !== "object") continue;
@@ -260,9 +281,45 @@ function normalizarTareas(data) {
   return data;
 }
 
+/* piezas: cid estable (determinista hasta que se guarda) y la edición nunca vive en el documento:
+   está en la tabla ediciones y se adjunta al leer */
+function normalizarPiezas(data) {
+  const vistos = new Set();
+  for (const c of data?.contenido || []) {
+    if (!c || typeof c !== "object") continue;
+    if (!c.cid || vistos.has(c.cid)) {
+      const base = "p" + crypto.createHash("sha1").update(`${c.fecha || ""}|${c.titulo || ""}|${c.url || ""}`).digest("hex").slice(0, 12);
+      let cid = base, n = 1;
+      while (vistos.has(cid)) cid = `${base}-${++n}`;
+      c.cid = cid;
+    }
+    vistos.add(c.cid);
+    delete c.edicion;
+  }
+  return data;
+}
+
 function normalizar(data) {
   if (data.widget !== undefined) data.widget = normalizarWidget(data.widget);
-  return normalizarTareas(normalizarSubs(derivarNutricion(data)));
+  return normalizarPiezas(normalizarTareas(normalizarSubs(derivarNutricion(data))));
+}
+
+function edicionPublica(e) {
+  return {
+    editor: e.editor_id, editor_nombre: e.editor_nombre || null, estado: e.estado,
+    fecha_limite: e.fecha_limite || null, brief: e.brief || "", entregas: e.entregas || [], mensajes: e.mensajes || [],
+    asignada: Number(e.asignada) || null, updated: Number(e.updated) || null,
+  };
+}
+async function adjuntaEdiciones(ownerId, data) {
+  if (!Array.isArray(data?.contenido) || !data.contenido.length) return data;
+  const r = await pool.query(
+    `SELECT e.*, u.display_name AS editor_nombre FROM ediciones e LEFT JOIN users u ON u.id = e.editor_id
+     WHERE e.owner_id = $1 AND e.editor_id IS NOT NULL`, [ownerId]);
+  if (!r.rows.length) return data;
+  const porCid = new Map(r.rows.map((x) => [x.cid, x]));
+  for (const c of data.contenido) { const e = c && porCid.get(c.cid); if (e) c.edicion = edicionPublica(e); }
+  return data;
 }
 
 async function readData(userId) {
@@ -272,6 +329,7 @@ async function readData(userId) {
   const seeded = seedDefaults(data);
   const out = normalizar(data);
   if (seeded || !rows.length) await writeData(userId, out);
+  await adjuntaEdiciones(userId, out);
   return out;
 }
 
@@ -305,7 +363,7 @@ function verifyPassword(pass, stored) {
     });
   });
 }
-const USER_COLS = "id, username, display_name, context, role, active, pw_version, created, last_login, workspace_id, onboarded";
+const USER_COLS = "id, username, display_name, context, role, active, pw_version, created, last_login, workspace_id, onboarded, owner_id";
 async function getUser(id) {
   const r = await pool.query(`SELECT ${USER_COLS} FROM users WHERE id = $1`, [id]);
   return r.rows[0] || null;
@@ -920,6 +978,19 @@ app.use(async (req, res, next) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+/* Cuentas de editor: solo su pantalla (/editor.html) y su API (/api/editor/*). Nada más de Daily System:
+   ni el panel, ni el estado, ni Configuración, ni el MCP. El filtro vive aquí, en el servidor. */
+const EDITOR_PERMITIDO = new Set([
+  "/editor.html", "/api/me", "/api/logout", "/ui.js", "/icons.js", "/theme.js",
+  "/favicon.ico", "/manifest.json", "/sw.js", "/icon-180.png", "/icon-192.png", "/icon-512.png",
+]);
+app.use((req, res, next) => {
+  if (req.actor?.role !== "editor") return next();
+  if (EDITOR_PERMITIDO.has(req.path) || req.path.startsWith("/api/editor/") || req.path.startsWith("/fonts/")) return next();
+  if (req.path.startsWith("/api/") || req.path.startsWith("/mcp")) return res.status(403).json({ error: "esta cuenta solo tiene acceso a la edición de piezas" });
+  return res.redirect("/editor.html");
+});
+
 const isAdmin = (req) => req.actor?.role === "admin";
 function requireAdmin(req, res, next) {
   if (!isAdmin(req)) return res.status(403).json({ error: "solo administradores" });
@@ -1051,6 +1122,7 @@ app.post("/api/admin/users/:id", requireAdmin, async (req, res) => {
     const display_name = b.display_name === undefined ? u.display_name : String(b.display_name || "").trim().slice(0, 60) || u.display_name;
     const context = b.context === undefined ? u.context : String(b.context || "").trim().slice(0, 2000) || null;
     let role = b.role === undefined ? u.role : (b.role === "admin" ? "admin" : "user");
+    if (u.role === "editor" && b.role !== "admin") role = "editor";
     let active = b.active === undefined ? u.active : Boolean(b.active);
     if (u.id === req.actor.id) { role = "admin"; active = true; } // nunca te bloqueas a ti mismo
     let workspace_id = u.workspace_id;
@@ -1207,6 +1279,221 @@ app.post("/api/day", async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
+});
+
+/* ======================================================================
+   EDITORES Y EDICIÓN DE PIEZAS (15 oct 2026)
+   El dueño crea cuentas de editor ligadas a la suya y les asigna piezas. El editor solo ve las piezas
+   asignadas, con los campos que necesita para editar, y solo puede: empezar, entregar versiones y
+   escribir mensajes. Aprobar o pedir cambios es cosa del dueño.
+   ====================================================================== */
+const ESTADOS_EDICION = ["por_editar", "en_edicion", "entregada", "cambios", "aprobada"];
+const esDueno = (req) => req.actor?.role !== "editor";
+const msgNuevo = (u, texto) => ({ id: uid("msg"), de: u.id, nombre: u.display_name || u.username, texto: String(texto).trim().slice(0, 2000), fecha: Date.now() });
+async function filaEdicion(ownerId, cid) {
+  const r = await pool.query(
+    `SELECT e.*, u.display_name AS editor_nombre FROM ediciones e LEFT JOIN users u ON u.id = e.editor_id WHERE e.owner_id = $1 AND e.cid = $2`,
+    [ownerId, cid]);
+  return r.rows[0] || null;
+}
+
+app.get("/api/editores", async (req, res) => {
+  try {
+    if (!esDueno(req)) return res.status(403).json({ error: "solo el dueño" });
+    const r = await pool.query(
+      "SELECT id, username, display_name, active, created, last_login FROM users WHERE role = 'editor' AND owner_id = $1 ORDER BY created ASC",
+      [req.user.id]);
+    res.json({ editores: r.rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post("/api/editores", async (req, res) => {
+  try {
+    if (!esDueno(req)) return res.status(403).json({ error: "solo el dueño" });
+    if (req.viewingAs) return res.status(400).json({ error: "estás viendo otra cuenta: los editores se crean desde la suya" });
+    const username = String(req.body?.username || "").toLowerCase().trim();
+    const password = String(req.body?.password || "");
+    const display_name = String(req.body?.display_name || "").trim().slice(0, 60) || capital(username);
+    if (!USERNAME_RE.test(username)) return res.status(400).json({ error: "usuario: 2-32 caracteres, minúsculas, números, . _ -" });
+    if (password.length < 8) return res.status(400).json({ error: "la contraseña necesita al menos 8 caracteres" });
+    if (await getUserByName(username)) return res.status(409).json({ error: "ese usuario ya existe" });
+    const id = uid("u");
+    await pool.query(
+      "INSERT INTO users (id, username, password_hash, display_name, role, created, onboarded, owner_id) VALUES ($1, $2, $3, $4, 'editor', $5, true, $6)",
+      [id, username, await hashPassword(password), display_name, Date.now(), req.user.id]);
+    res.json({ ok: true, editor: publicUser(await getUser(id)) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post("/api/editores/:id", async (req, res) => {
+  try {
+    if (!esDueno(req)) return res.status(403).json({ error: "solo el dueño" });
+    const u = await getUser(req.params.id);
+    if (!u || u.role !== "editor" || u.owner_id !== req.user.id) return res.status(404).json({ error: "editor no encontrado" });
+    const b = req.body || {};
+    if (b.password !== undefined) {
+      if (String(b.password).length < 8) return res.status(400).json({ error: "la contraseña necesita al menos 8 caracteres" });
+      await pool.query("UPDATE users SET password_hash = $2, pw_version = pw_version + 1 WHERE id = $1", [u.id, await hashPassword(String(b.password))]);
+      basicCache.clear();
+    }
+    if (b.active !== undefined) {
+      // quitar el acceso también cierra sus sesiones abiertas
+      await pool.query("UPDATE users SET active = $2, pw_version = pw_version + 1 WHERE id = $1", [u.id, Boolean(b.active)]);
+      basicCache.clear();
+    }
+    if (b.display_name !== undefined) {
+      const n = String(b.display_name || "").trim().slice(0, 60);
+      if (n) await pool.query("UPDATE users SET display_name = $2 WHERE id = $1", [u.id, n]);
+    }
+    res.json({ ok: true, editor: publicUser(await getUser(u.id)) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/* ---- lado del dueño ---- */
+app.post("/api/edicion/:cid/asignar", async (req, res) => {
+  try {
+    if (!esDueno(req)) return res.status(403).json({ error: "solo el dueño de la pieza" });
+    const ownerId = req.user.id, cid = req.params.cid;
+    const data = await readData(ownerId);
+    if (!(data.contenido || []).some((c) => c.cid === cid)) return res.status(404).json({ error: "pieza no encontrada" });
+    const editorId = req.body?.editor_id || null;
+    if (editorId) {
+      const ed = await getUser(editorId);
+      if (!ed || ed.role !== "editor" || ed.owner_id !== ownerId) return res.status(400).json({ error: "ese editor no es tuyo" });
+    }
+    const now = Date.now();
+    await pool.query(
+      `INSERT INTO ediciones (owner_id, cid, editor_id, estado, asignada, updated) VALUES ($1, $2, $3, 'por_editar', $4, $4)
+       ON CONFLICT (owner_id, cid) DO UPDATE SET editor_id = EXCLUDED.editor_id,
+         estado = CASE WHEN ediciones.editor_id IS DISTINCT FROM EXCLUDED.editor_id THEN 'por_editar' ELSE ediciones.estado END,
+         asignada = CASE WHEN ediciones.editor_id IS DISTINCT FROM EXCLUDED.editor_id THEN EXCLUDED.asignada ELSE ediciones.asignada END,
+         updated = EXCLUDED.updated`,
+      [ownerId, cid, editorId, now]);
+    const fila = await filaEdicion(ownerId, cid);
+    res.json({ ok: true, edicion: fila?.editor_id ? edicionPublica(fila) : null });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post("/api/edicion/:cid", async (req, res) => {
+  try {
+    if (!esDueno(req)) return res.status(403).json({ error: "solo el dueño de la pieza" });
+    const ownerId = req.user.id, cid = req.params.cid;
+    const fila = await filaEdicion(ownerId, cid);
+    if (!fila?.editor_id) return res.status(404).json({ error: "la pieza no está asignada a ningún editor" });
+    const b = req.body || {};
+    const sets = [], vals = [ownerId, cid];
+    const pon = (col, v) => { vals.push(v); sets.push(`${col} = $${vals.length}`); };
+    if (b.estado !== undefined) {
+      if (!ESTADOS_EDICION.includes(b.estado)) return res.status(400).json({ error: "estado no válido" });
+      pon("estado", b.estado);
+    }
+    if (b.fecha_limite !== undefined) pon("fecha_limite", b.fecha_limite && /^\d{4}-\d{2}-\d{2}$/.test(b.fecha_limite) ? b.fecha_limite : null);
+    if (b.brief !== undefined) pon("brief", String(b.brief || "").slice(0, 5000));
+    if (b.nota && String(b.nota).trim()) {
+      vals.push(JSON.stringify([msgNuevo(req.user, b.nota)]));
+      sets.push(`mensajes = mensajes || $${vals.length}::jsonb`);
+    }
+    pon("updated", Date.now());
+    await pool.query(`UPDATE ediciones SET ${sets.join(", ")} WHERE owner_id = $1 AND cid = $2`, vals);
+    // aprobar: la pieza pasa a «lista» y su archivo final es la última entrega
+    if (b.estado === "aprobada") {
+      const data = await readData(ownerId);
+      const c = (data.contenido || []).find((x) => x.cid === cid);
+      if (c) {
+        if (["idea", "guion", "grabar", "editar", "grabado", "editando"].includes(c.estado || "idea")) c.estado = "lista";
+        const ult = (fila.entregas || []).slice(-1)[0];
+        if (ult?.url) c.archivo = ult.url;
+        await writeData(ownerId, data);
+      }
+    }
+    res.json({ ok: true, edicion: edicionPublica(await filaEdicion(ownerId, cid)) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post("/api/edicion/:cid/mensaje", async (req, res) => {
+  try {
+    if (!esDueno(req)) return res.status(403).json({ error: "solo el dueño de la pieza" });
+    const texto = String(req.body?.texto || "").trim();
+    if (!texto) return res.status(400).json({ error: "mensaje vacío" });
+    const r = await pool.query(
+      "UPDATE ediciones SET mensajes = mensajes || $3::jsonb, updated = $4 WHERE owner_id = $1 AND cid = $2 AND editor_id IS NOT NULL",
+      [req.user.id, req.params.cid, JSON.stringify([msgNuevo(req.user, texto)]), Date.now()]);
+    if (!r.rowCount) return res.status(404).json({ error: "la pieza no está asignada a ningún editor" });
+    res.json({ ok: true, edicion: edicionPublica(await filaEdicion(req.user.id, req.params.cid)) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/* ---- lado del editor ---- */
+function requireEditor(req, res, next) {
+  if (req.actor?.role !== "editor" || !req.actor.owner_id) return res.status(403).json({ error: "solo cuentas de editor" });
+  next();
+}
+/* lo único que ve el editor de cada pieza: lo necesario para editarla */
+function piezaParaEditor(c, f) {
+  const est = c.estado === "grabado" || c.estado === "editando" ? "editar" : (c.estado || "idea");
+  return {
+    cid: c.cid, titulo: c.titulo || "", estado_pieza: est, fecha_plan: c.fecha_plan || null, hora: c.hora || null,
+    formato: c.formato || "", carpeta: c.carpeta || "", broll: c.broll || "", pantalla: c.pantalla || "",
+    gancho: c.gancho || "", cuerpo: c.cuerpo || "", cierre: c.cierre || "", cta: c.cta || "",
+    edicion: { estado: f.estado, fecha_limite: f.fecha_limite || null, brief: f.brief || "", entregas: f.entregas || [], mensajes: f.mensajes || [], asignada: Number(f.asignada) || null },
+  };
+}
+async function filaDelEditor(req) {
+  const r = await pool.query("SELECT * FROM ediciones WHERE owner_id = $1 AND cid = $2 AND editor_id = $3", [req.actor.owner_id, req.params.cid, req.actor.id]);
+  return r.rows[0] || null;
+}
+
+app.get("/api/editor/piezas", requireEditor, async (req, res) => {
+  try {
+    const me = req.actor, ownerId = me.owner_id;
+    const owner = await getUser(ownerId);
+    const r = await pool.query("SELECT * FROM ediciones WHERE owner_id = $1 AND editor_id = $2", [ownerId, me.id]);
+    const data = r.rows.length ? await readData(ownerId) : { contenido: [] };
+    const porCid = new Map((data.contenido || []).map((c) => [c.cid, c]));
+    const piezas = r.rows.map((f) => (porCid.get(f.cid) ? piezaParaEditor(porCid.get(f.cid), f) : null)).filter(Boolean);
+    res.set("Cache-Control", "no-store");
+    res.json({ editor: { id: me.id, display_name: me.display_name || me.username }, owner: { display_name: owner?.display_name || "" }, piezas });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post("/api/editor/piezas/:cid/estado", requireEditor, async (req, res) => {
+  try {
+    const f = await filaDelEditor(req);
+    if (!f) return res.status(404).json({ error: "pieza no encontrada" });
+    const estado = req.body?.estado;
+    if (!["por_editar", "en_edicion"].includes(estado)) return res.status(400).json({ error: "para entregar, sube una versión" });
+    if (f.estado === "aprobada") return res.status(400).json({ error: "la pieza ya está aprobada" });
+    await pool.query("UPDATE ediciones SET estado = $4, updated = $5 WHERE owner_id = $1 AND cid = $2 AND editor_id = $3",
+      [req.actor.owner_id, req.params.cid, req.actor.id, estado, Date.now()]);
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post("/api/editor/piezas/:cid/entrega", requireEditor, async (req, res) => {
+  try {
+    const f = await filaDelEditor(req);
+    if (!f) return res.status(404).json({ error: "pieza no encontrada" });
+    if (f.estado === "aprobada") return res.status(400).json({ error: "la pieza ya está aprobada" });
+    const url = String(req.body?.url || "").trim();
+    if (!/^https?:\/\/\S+$/i.test(url)) return res.status(400).json({ error: "pega el enlace del vídeo (https://…)" });
+    const entrega = { v: (f.entregas || []).length + 1, url: url.slice(0, 1000), nota: String(req.body?.nota || "").trim().slice(0, 2000), fecha: Date.now(), por: req.actor.id };
+    await pool.query(
+      "UPDATE ediciones SET entregas = entregas || $4::jsonb, estado = 'entregada', updated = $5 WHERE owner_id = $1 AND cid = $2 AND editor_id = $3",
+      [req.actor.owner_id, req.params.cid, req.actor.id, JSON.stringify([entrega]), Date.now()]);
+    res.json({ ok: true, entrega });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post("/api/editor/piezas/:cid/mensaje", requireEditor, async (req, res) => {
+  try {
+    const texto = String(req.body?.texto || "").trim();
+    if (!texto) return res.status(400).json({ error: "mensaje vacío" });
+    const r = await pool.query(
+      "UPDATE ediciones SET mensajes = mensajes || $4::jsonb, updated = $5 WHERE owner_id = $1 AND cid = $2 AND editor_id = $3",
+      [req.actor.owner_id, req.params.cid, req.actor.id, JSON.stringify([msgNuevo(req.actor, texto)]), Date.now()]);
+    if (!r.rowCount) return res.status(404).json({ error: "pieza no encontrada" });
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 /* ======================================================================
@@ -1483,7 +1770,9 @@ Estructura del estado:
 - entrenos: { "<fecha>": { dia, sets: { "<nombre ejercicio>": [{ kg, reps }, ...una entrada por serie] } } } — lo que ${N} levanta cada día (Gym → Tracker). Si dice «hoy press inclinado 3×10 con 40kg», regístralo aquí con set_value y marca la señal entreno. REGLAS AL ESCRIBIR AQUÍ, el historial se indexa por nombre y se rompe si te desvías: (1) el campo "dia" = el id del día de la semana de ESA fecha (lunes|martes|miercoles|jueves|viernes|sabado|domingo), nunca el título del día ("Push", "Pierna 1"…). (2) El nombre del ejercicio debe coincidir LETRA POR LETRA con el de rutina_gym[dia].ejercicios[].nombre; léelo antes con read_state si no lo tienes delante. (3) Si el ejercicio no está en la rutina de ese día, usa el nombre tal cual aparece en otro día de la rutina. (4) Si no existe en ningún día, pregunta antes de inventarte un nombre nuevo: cada variante crea un historial separado.
 - days.<fecha>.sueno_horario: { acostar: "23:00", levantar: "06:00" } — opcional. Si ${N} dice a qué hora se acostó y se levantó, calcula las horas dormidas (si se acostó antes de medianoche, suma las 24h), regístralas como señal sueno con log_day y guarda el horario con set_value en days.<fecha>.sueno_horario.
 - proyectos: [{ id, nombre, icono (rocket|briefcase|code|video|mic|school|presentation|tienda|coin|chart|users|robot|server|camera|pencil|book|world|tool|flask|gamepad|palette|home|bolt|bulb), tipo: normal|periodico, estado: activo|en_cola|pausado|entregado|cerrado, desc?, siguiente?, subs, notas? (pizarra HTML sencillo, como contenido.notas), archivos? (NO tocar: se gestionan desde la página), updated }]. Un proyecto es una CARPETA: dentro viven sus tareas (campo proyecto en tareas), subproyectos, archivos y pizarra. Cada sub de subs es un SUBPROYECTO con vida propia: { id, nombre, estado: en_curso|en_cola|pausado|hecho, done (derivado: true solo si estado=hecho — para cambiarlo cambia SIEMPRE estado, nunca done), fecha? (día en que se completó, ponla al pasar a hecho), notas? (pizarra HTML sencillo, como la de contenido), archivos?: [{id, nombre, mime, size}] — NO toques archivos, se gestionan desde el panel }. Las tareas pueden colgar de un subproyecto vía su campo sub (id del sub). Si añades un sub nuevo no le pongas id (se genera solo) y usa estado en_curso o en_cola.
-- contenido: las PIEZAS del área Instagram (${N} publica solo en Instagram): [{ cid?, num?, fecha (creada), tipo: reel|youtube, clase?: soft|hard, titulo, estado: idea|guion|grabar|editar|lista|publicado (pipeline en ese orden: idea → guion escrito → por grabar → en edición → lista para publicar → publicada), fecha_plan? (día en que se publica), hora?, fecha_pub?, url?, views?, likes?, comments?, gancho?, cuerpo?, cierre?, cta?, caption?, hashtags?, fuente?, formato?, broll?, pantalla?, carpeta?, archivo?, editor?: {enviada, recibida, aprobada, cambios}, produccion?, nota? (1-10), porque_no_10?, notas? }]. «Ya grabé la 3» → estado editar (o lista si no hay editor); «la 1 está lista» → lista; «publiqué la 1» → publicado + fecha_pub. Las tomas pendientes de cada pieza están en tomas (por cid). — las métricas de piezas con link (YouTube e Instagram) se actualizan solas desde sus APIs; no hace falta que ${N} las dicte salvo que quiera corregirlas. video_url es interno (mp4 del reel para el player del panel, lo rellena la API — no lo toques). notas es la "pizarra" de la pieza y puede llevar HTML sencillo (h2/h3, b, u, div, br); si escribes tú, texto plano o ese HTML simple. — al marcar publicado, pon fecha_pub con el día real de publicación (cuenta para el reto). fecha_plan = día en que ${N} planea publicarla (calendario de publicación; «el reel del Excel sale el jueves» → fecha_plan). Si ${N} pasa el link («publiqué un reel: <link>»), guárdalo en url (sirve para la miniatura y el player del panel). Si menciona métricas («el reel lleva 4k views»), actualiza views/likes de esa pieza.
+- contenido: las PIEZAS del área Instagram (${N} publica solo en Instagram): [{ cid?, num?, fecha (creada), tipo: reel|youtube, clase?: soft|hard, titulo, estado: idea|guion|grabar|editar|lista|publicado (pipeline en ese orden: idea → guion escrito → por grabar → en edición → lista para publicar → publicada), fecha_plan? (día en que se publica), hora?, fecha_pub?, url?, views?, likes?, comments?, gancho?, cuerpo?, cierre?, cta?, caption?, hashtags?, fuente?, formato?, broll?, pantalla?, carpeta?, archivo?, editor?: {enviada, recibida, aprobada, cambios}, produccion?, nota? (1-10), porque_no_10?, notas? }]. «Ya grabé la 3» → estado editar (o lista si no hay editor); «la 1 está lista» → lista; «publiqué la 1» → publicado + fecha_pub. palabra? = palabra clave del CTA («comenta CLAUDE» → CLAUDE). edicion = SOLO LECTURA, la añade el servidor cuando la pieza está asignada a un editor ({ editor_nombre, estado: por_editar|en_edicion|entregada|cambios|aprobada, fecha_limite, brief, entregas, mensajes }); no la escribas: la gestionan ${N} y el editor desde el panel. Las tomas pendientes de cada pieza están en tomas (por cid). — las métricas de piezas con link (YouTube e Instagram) se actualizan solas desde sus APIs; no hace falta que ${N} las dicte salvo que quiera corregirlas. video_url es interno (mp4 del reel para el player del panel, lo rellena la API — no lo toques). notas es la "pizarra" de la pieza y puede llevar HTML sencillo (h2/h3, b, u, div, br); si escribes tú, texto plano o ese HTML simple. — al marcar publicado, pon fecha_pub con el día real de publicación (cuenta para el reto). fecha_plan = día en que ${N} planea publicarla (calendario de publicación; «el reel del Excel sale el jueves» → fecha_plan). Si ${N} pasa el link («publiqué un reel: <link>»), guárdalo en url (sirve para la miniatura y el player del panel). Si menciona métricas («el reel lleva 4k views»), actualiza views/likes de esa pieza.
+- referencias: [{ id, cuenta, url?, titulo?, nota (qué se lleva de ella), formato?, creada }] — reels y cuentas modelo (Instagram → Referencias). «Guárdame este reel de X como referencia: me gusta cómo…» → add_item referencias.
+- ganchos: [{ id, texto, tipo?, fuente?, nota?, creada }] — banco de ganchos reutilizables. Los ganchos de sus propias piezas ya salen solos del campo gancho de contenido; aquí van los ajenos o sueltos.
 - tomas: [{ cid, descripcion, como?, lugar?, tipo: broll|galeria|pantalla|camara|voz, piezas: [cid], estado: pendiente|grabada, plan?, grabada_el?, archivo?, notas? }] — qué hay que grabar para cada pieza. «Grabé las tomas de la cafetería» → set_value en tomas.<índice>.estado = grabada + grabada_el.
 - bandeja: [{ id, texto, creada, origen }] — la BANDEJA de captura (Cerebro). Todo lo que ${N} suelte sin clasificar («apunta: …», una idea a medias, un enlace, algo que no sabe dónde va) entra aquí con add_item SIN pensar dónde encaja. Se vacía al cerrar el día: cada entrada se convierte en idea (add_item ideas), tarea (add_item tareas), nota (add_item notas) o pieza (add_item contenido con estado idea) y se borra de la bandeja (set_value bandeja.<i> con delete, de mayor a menor índice). Cuando ${N} diga «cierro el día» o «vacía la bandeja»: lee bandeja con read_state, propón el destino de cada entrada en una línea y hazlo.
 - ideas: [{ id, texto, tipo: contenido|negocio, estado: nueva|en_guion|descartada, creada, notas?, pieza_cid? }] — ideas sueltas (Cerebro). «Idea: …» → add_item ideas (tipo contenido salvo que sea de negocio). Convertir una idea en pieza = add_item contenido { titulo, estado: idea } y poner la idea en en_guion.
@@ -1539,7 +1828,7 @@ const TOOLS = [
       properties: {
         keys: {
           type: "array",
-          items: { type: "string", enum: ["config", "days", "journal", "memoria", "tareas", "recordatorios", "proyectos", "contenido", "tomas", "bandeja", "ideas", "notas", "finanzas", "cuentas", "suscripciones", "config_finanzas", "config_contenido", "config_nutricion", "peso", "rutina_gym", "entrenos", "widget"] },
+          items: { type: "string", enum: ["config", "days", "journal", "memoria", "tareas", "recordatorios", "proyectos", "contenido", "tomas", "bandeja", "ideas", "notas", "referencias", "ganchos", "finanzas", "cuentas", "suscripciones", "config_finanzas", "config_contenido", "config_nutricion", "peso", "rutina_gym", "entrenos", "widget"] },
         },
       },
     },
@@ -1576,7 +1865,7 @@ const TOOLS = [
     input_schema: {
       type: "object",
       properties: {
-        lista: { type: "string", enum: ["memoria", "tareas", "recordatorios", "proyectos", "contenido", "finanzas", "cuentas", "suscripciones", "peso", "bandeja", "ideas", "notas"] },
+        lista: { type: "string", enum: ["memoria", "tareas", "recordatorios", "proyectos", "contenido", "finanzas", "cuentas", "suscripciones", "peso", "bandeja", "ideas", "notas", "referencias", "ganchos"] },
         item: { type: "object" },
       },
       required: ["lista", "item"],
@@ -1662,7 +1951,7 @@ function getPath(obj, dottedPath) {
 
 /* claves que read_state puede devolver: nunca integraciones (credenciales bancarias) ni chats */
 const KEYS_LEIBLES = new Set([
-  "config", "days", "journal", "memoria", "tareas", "recordatorios", "proyectos", "contenido", "tomas", "bandeja", "ideas", "notas",
+  "config", "days", "journal", "memoria", "tareas", "recordatorios", "proyectos", "contenido", "tomas", "bandeja", "ideas", "notas", "referencias", "ganchos",
   "finanzas", "cuentas", "suscripciones", "config_finanzas", "config_contenido", "config_nutricion",
   "peso", "rutina_gym", "entrenos", "widget",
 ]);
@@ -1735,7 +2024,7 @@ function runTool(name, input, data, actions) {
 
   if (name === "add_item") {
     const lista = input?.lista;
-    if (!["memoria", "tareas", "recordatorios", "proyectos", "contenido", "finanzas", "cuentas", "suscripciones", "peso", "bandeja", "ideas", "notas"].includes(lista)) throw new Error("lista inválida");
+    if (!["memoria", "tareas", "recordatorios", "proyectos", "contenido", "finanzas", "cuentas", "suscripciones", "peso", "bandeja", "ideas", "notas", "referencias", "ganchos"].includes(lista)) throw new Error("lista inválida");
     if (!input?.item || typeof input.item !== "object") throw new Error("item requerido");
     if (!Array.isArray(data[lista])) data[lista] = [];
     const item = { ...input.item };
@@ -1762,6 +2051,9 @@ function runTool(name, input, data, actions) {
       item.creada = item.creada || todayISO();
       if (!["contenido", "negocio"].includes(item.tipo)) item.tipo = "contenido";
       if (!["nueva", "en_guion", "descartada"].includes(item.estado)) item.estado = "nueva";
+    } else if (lista === "referencias" || lista === "ganchos") {
+      item.id = item.id || uid(lista === "referencias" ? "rf" : "g");
+      item.creada = item.creada || todayISO();
     } else if (lista === "notas") {
       item.id = item.id || uid("n");
       item.creada = item.creada || todayISO();
