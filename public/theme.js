@@ -37,6 +37,7 @@
     --ok: #111318; --sb-active: transparent;
     --warn: #8a5a00; --warn-bg: #fbf1d6; --warn-border: #eedfae;
     --radius: 8px; --shadow: none;
+    --lane: #eef0f3; /* carril de cada estado en los tableros */
   }
   @font-face { font-family: 'Inter'; font-style: normal; font-weight: 400 700; font-display: swap; src: url(/fonts/inter-latin-ext.woff2) format('woff2'); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF; }
   @font-face { font-family: 'Inter'; font-style: normal; font-weight: 400 700; font-display: swap; src: url(/fonts/inter-latin.woff2) format('woff2'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
@@ -96,6 +97,7 @@
     --warn-bg: #f6ecc8;
     --warn-border: #e8d9a4;
     --shadow: 0 1px 2px rgba(70,58,35,0.05), 0 8px 24px rgba(70,58,35,0.07);
+    --lane: #ece5d6;
   }
   /* azul: navy profundo — tema azul FUERTE, hermano azulado del negro */
   :root[data-theme="azul"] {
@@ -126,6 +128,7 @@
     --warn-bg: #2e2916;
     --warn-border: #4a3f1e;
     --shadow: 0 1px 2px rgba(0,10,30,0.4), 0 8px 24px rgba(0,10,30,0.45);
+    --lane: #101c37;
   }
   :root[data-theme="negro"] {
     --bg: #0e0e12;
@@ -155,6 +158,7 @@
     --warn-bg: #2e2713;
     --warn-border: #4a3f1e;
     --shadow: 0 1px 2px rgba(0,0,0,0.4), 0 8px 24px rgba(0,0,0,0.45);
+    --lane: #131318;
   }`;
 
   /* inputs numéricos: sin cambiar valor con rueda/trackpad y sin negativos */

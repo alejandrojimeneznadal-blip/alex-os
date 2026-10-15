@@ -17,21 +17,34 @@
   .btn-mini { display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; font-family: inherit; font-size: 13px; cursor: pointer; white-space: nowrap; }
   .btn-mini .tic { width: 14px; height: 14px; }
   .wrap { max-width: 1320px; margin: 0 auto; padding: 20px; }
-  .intro { color: var(--ink-3); font-size: 13px; margin-bottom: 14px; max-width: 70ch; }
-  .board { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; align-items: start; }
-  .col { min-width: 0; }
-  .col-h { display: flex; justify-content: space-between; font-size: 12.5px; font-weight: 600; color: var(--ink-2); padding: 2px 4px 8px; }
-  .col-h span:last-child { color: var(--ink-3); font-weight: 500; }
-  .lista { display: grid; gap: 8px; }
-  .card2 { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px 11px; cursor: pointer; text-align: left; font-family: inherit; color: inherit; width: 100%; }
+  .intro { color: var(--ink-3); font-size: 13px; margin-bottom: 14px; max-width: 78ch; }
+  /* tablero: cada estado es un carril propio, separado de los demás */
+  .board { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; align-items: stretch; }
+  .col { min-width: 0; min-height: 220px; background: var(--lane); border: 1px solid var(--hairline); border-radius: 10px; padding: 8px; display: flex; flex-direction: column; transition: background 0.12s, box-shadow 0.12s, opacity 0.12s; }
+  .col-h { display: flex; justify-content: space-between; align-items: baseline; font-size: 12.5px; font-weight: 600; color: var(--ink-2); padding: 2px 4px 8px; }
+  .col-h .n { color: var(--ink-3); font-weight: 500; font-variant-numeric: tabular-nums; }
+  .col-nota { display: none; font-size: 11.5px; color: var(--ink-3); padding: 0 4px 8px; }
+  .lista { display: grid; gap: 8px; align-content: start; flex: 1; }
+  /* mientras arrastra: dónde puede soltar y dónde no */
+  .board.arrastrando .col.puede { box-shadow: inset 0 0 0 1px var(--border-strong); }
+  .board.arrastrando .col.bloq { opacity: 0.5; }
+  .board.arrastrando .col.bloq .col-nota { display: block; }
+  .board .col.over { background: color-mix(in srgb, var(--ink) 6%, var(--lane)); box-shadow: inset 0 0 0 1.5px var(--ink-3); }
+  .card2 { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px 11px; cursor: grab; text-align: left; color: inherit; width: 100%; user-select: none; -webkit-user-select: none; transition: border-color 0.12s, opacity 0.12s; }
   .card2:hover { border-color: var(--border-strong); }
+  .card2:focus-visible { outline: 2px solid var(--ink-3); outline-offset: 1px; }
+  .card2.fija { cursor: pointer; }
+  .card2.fantasma { opacity: 0.35; }
   .card2 .t { font-size: 13.5px; font-weight: 550; line-height: 1.35; }
   .meta { display: flex; flex-wrap: wrap; gap: 4px 8px; margin-top: 7px; font-size: 11.5px; color: var(--ink-3); }
   .tag { border: 1px solid var(--border); border-radius: 4px; padding: 0 5px; }
   .tarde { color: var(--bad); }
   .vacio { color: var(--ink-3); font-size: 12px; padding: 4px; }
   .nada { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 28px 20px; text-align: center; color: var(--ink-3); }
-  @media (max-width: 900px) { .board { grid-template-columns: 1fr; gap: 18px; } .wrap { padding: 16px; } }
+  .toast { position: fixed; left: 50%; bottom: max(24px, env(safe-area-inset-bottom)); transform: translate(-50%, 8px); background: var(--ink); color: var(--surface); padding: 9px 14px; border-radius: 8px; font-size: 13px; z-index: 70; opacity: 0; transition: opacity 0.18s, transform 0.18s; pointer-events: none; max-width: calc(100% - 32px); }
+  .toast.on { opacity: 0.96; transform: translate(-50%, 0); }
+  .toast.mal { background: var(--bad); }
+  @media (max-width: 900px) { .board { grid-template-columns: 1fr; gap: 12px; } .col { min-height: 0; } .wrap { padding: 16px; } }
   /* panel de la pieza */
   .velo { position: fixed; inset: 0; background: rgba(17,19,24,0.35); z-index: 40; display: none; }
   .velo.on { display: block; }
@@ -82,11 +95,12 @@
   <button class="btn-mini" id="salir">Salir</button>
 </header>
 <main class="wrap">
-  <p class="intro">Aquí tienes las piezas que te han asignado. Toca una para ver el guion, el material y las indicaciones, y entrega la versión pegando el enlace del vídeo.</p>
+  <p class="intro" id="intro">Aquí tienes las piezas que te han asignado.</p>
   <div id="board"></div>
 </main>
 <div class="velo" id="velo"></div>
 <aside class="panel" id="panel" aria-label="Pieza"></aside>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script>
 const $ = (id) => document.getElementById(id);
@@ -95,13 +109,17 @@ const COLS = [
   { id: "por_editar", l: "Por editar" }, { id: "en_edicion", l: "En edición" }, { id: "entregada", l: "Entregada" },
   { id: "cambios", l: "Cambios pedidos" }, { id: "aprobada", l: "Aprobada" },
 ];
+/* lo que el editor puede mover; «cambios pedidos» y «aprobada» las decide el dueño (el servidor lo exige igual) */
+const MUEVE = ["por_editar", "en_edicion", "entregada"];
 const label = (id) => (COLS.find((c) => c.id === id) || { l: id }).l;
 const hoyISO = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
 const fCorta = (f) => f ? new Date(f + "T12:00").toLocaleDateString("es", { weekday: "short", day: "numeric", month: "short" }) : "";
 const fLarga = (f) => f ? new Date(f + "T12:00").toLocaleDateString("es", { weekday: "long", day: "numeric", month: "long" }) : "";
 const fHora = (ms) => new Date(Number(ms)).toLocaleString("es", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 const sinGrabar = (p) => ["idea", "guion", "grabar"].includes(p.estado_pieza);
-let DATA = null, SEL = null;
+let DATA = null, SEL = null, ARRASTRA = null;
+const dueno = () => DATA?.owner?.display_name || "quien te asigna las piezas";
+const pieza = (cid) => (DATA?.piezas || []).find((x) => x.cid === cid);
 
 async function api(path, body) {
   const r = await fetch(path, body ? { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : { credentials: "include" });
@@ -111,11 +129,21 @@ async function api(path, body) {
   return j;
 }
 
+function aviso(texto, mal) {
+  const t = $("toast");
+  t.textContent = texto;
+  t.classList.toggle("mal", !!mal);
+  t.classList.add("on");
+  clearTimeout(aviso.t);
+  aviso.t = setTimeout(() => t.classList.remove("on"), mal ? 4500 : 2400);
+}
+
 async function cargar() {
   try {
     DATA = await api("/api/editor/piezas");
     $("sub").textContent = `${DATA.editor.display_name}${DATA.owner.display_name ? " · piezas de " + DATA.owner.display_name : ""}`;
-    pinta();
+    $("intro").textContent = `Arrastra cada pieza a su columna, o ábrela para ver el guion, el material y las indicaciones. Al soltarla en «Entregada» te pide el enlace del vídeo. «Cambios pedidos» y «Aprobada» las mueve ${dueno()}.`;
+    if (!ARRASTRA) pinta();
     if (SEL) pintaPanel();
   } catch (e) {
     $("board").innerHTML = `<div class="nada">No se pudieron cargar tus piezas: ${esc(e.message)}</div>`;
@@ -126,30 +154,141 @@ function pinta() {
   const ps = DATA.piezas || [];
   if (!ps.length) { $("board").innerHTML = `<div class="nada">Todavía no tienes ninguna pieza asignada. Cuando te asignen una, aparecerá aquí.</div>`; return; }
   const hoy = hoyISO();
-  $("board").innerHTML = `<div class="board">` + COLS.map((col) => {
+  $("board").innerHTML = `<div class="board" id="tablero">` + COLS.map((col) => {
     let items = ps.filter((p) => p.edicion.estado === col.id);
     items.sort((a, b) => ((a.edicion.fecha_limite || a.fecha_plan || "9999") < (b.edicion.fecha_limite || b.fecha_plan || "9999") ? -1 : 1));
     if (col.id === "aprobada") items = items.slice(-8).reverse();
-    return `<section class="col"><div class="col-h"><span>${col.l}</span><span>${items.length}</span></div><div class="lista">${items.map((p) => {
-      const e = p.edicion, tarde = e.fecha_limite && e.fecha_limite < hoy && !["entregada", "aprobada"].includes(e.estado);
-      const meta = [
-        e.fecha_limite ? `<span class="${tarde ? "tarde" : ""}">entrega ${fCorta(e.fecha_limite)}</span>` : "",
-        p.fecha_plan ? `<span>sale ${fCorta(p.fecha_plan)}${p.hora ? " · " + esc(p.hora) : ""}</span>` : "",
-        sinGrabar(p) ? `<span class="tag">aún sin grabar</span>` : "",
-        e.entregas.length ? `<span>v${e.entregas.length}</span>` : "",
-      ].filter(Boolean).join("");
-      return `<button class="card2" onclick="abrir('${esc(p.cid)}')"><div class="t">${esc(p.titulo || "(sin título)")}</div>${meta ? `<div class="meta">${meta}</div>` : ""}</button>`;
-    }).join("") || `<div class="vacio">Nada aquí</div>`}</div></section>`;
+    return `<section class="col" data-col="${col.id}">
+      <div class="col-h"><span>${col.l}</span><span class="n">${items.length}</span></div>
+      ${MUEVE.includes(col.id) ? "" : `<div class="col-nota">La mueve ${esc(dueno())}</div>`}
+      <div class="lista">${items.map((p) => tarjeta(p, hoy)).join("") || `<div class="vacio">Nada aquí</div>`}</div></section>`;
   }).join("") + `</div>`;
+}
+
+function tarjeta(p, hoy) {
+  const e = p.edicion, tarde = e.fecha_limite && e.fecha_limite < hoy && !["entregada", "aprobada"].includes(e.estado);
+  const meta = [
+    e.fecha_limite ? `<span class="${tarde ? "tarde" : ""}">entrega ${fCorta(e.fecha_limite)}</span>` : "",
+    p.fecha_plan ? `<span>sale ${fCorta(p.fecha_plan)}${p.hora ? " · " + esc(p.hora) : ""}</span>` : "",
+    sinGrabar(p) ? `<span class="tag">aún sin grabar</span>` : "",
+    e.entregas.length ? `<span>v${e.entregas.length}</span>` : "",
+  ].filter(Boolean).join("");
+  const fija = e.estado === "aprobada";
+  return `<div class="card2${fija ? " fija" : ""}" role="button" tabindex="0" data-cid="${esc(p.cid)}"${fija ? "" : ` draggable="true" title="Arrastra para cambiarla de columna"`}>
+    <div class="t">${esc(p.titulo || "(sin título)")}</div>${meta ? `<div class="meta">${meta}</div>` : ""}</div>`;
+}
+
+/* ---- tablero: abrir y arrastrar (delegado en #board, que no se repinta) ---- */
+const board = $("board");
+board.addEventListener("click", (ev) => { const c = ev.target.closest(".card2"); if (c) abrir(c.dataset.cid); });
+board.addEventListener("keydown", (ev) => {
+  const c = ev.target.closest(".card2");
+  if (c && (ev.key === "Enter" || ev.key === " ")) { ev.preventDefault(); abrir(c.dataset.cid); }
+});
+board.addEventListener("dragstart", (ev) => {
+  const c = ev.target.closest(".card2[draggable]");
+  const p = c && pieza(c.dataset.cid);
+  if (!p) { ev.preventDefault(); return; }
+  ARRASTRA = p.cid;
+  ev.dataTransfer.effectAllowed = "move";
+  ev.dataTransfer.setData("text/plain", p.cid);
+  // los estilos van en el siguiente frame para que la imagen que arrastra el navegador salga con la tarjeta normal
+  requestAnimationFrame(() => {
+    const t = $("tablero");
+    if (ARRASTRA !== p.cid || !t) return;
+    c.classList.add("fantasma");
+    t.classList.add("arrastrando");
+    t.querySelectorAll(".col").forEach((col) => {
+      const id = col.dataset.col;
+      col.classList.toggle("puede", MUEVE.includes(id) && id !== p.edicion.estado);
+      col.classList.toggle("bloq", !MUEVE.includes(id));
+    });
+  });
+});
+function finArrastre() {
+  ARRASTRA = null;
+  document.querySelectorAll(".card2.fantasma").forEach((c) => c.classList.remove("fantasma"));
+  const t = $("tablero");
+  if (t) { t.classList.remove("arrastrando"); t.querySelectorAll(".col").forEach((c) => c.classList.remove("puede", "bloq", "over")); }
+}
+document.addEventListener("dragend", finArrastre);
+board.addEventListener("dragover", (ev) => {
+  const col = ev.target.closest(".col");
+  const p = ARRASTRA && pieza(ARRASTRA);
+  if (!col || !p) return;
+  // sin preventDefault el navegador no deja soltar: columnas del dueño y la propia
+  if (!MUEVE.includes(col.dataset.col) || p.edicion.estado === col.dataset.col) return;
+  ev.preventDefault();
+  ev.dataTransfer.dropEffect = "move";
+  col.classList.add("over");
+});
+board.addEventListener("dragleave", (ev) => {
+  const col = ev.target.closest(".col");
+  if (col && !col.contains(ev.relatedTarget)) col.classList.remove("over");
+});
+board.addEventListener("drop", async (ev) => {
+  const col = ev.target.closest(".col");
+  if (!col) return;
+  ev.preventDefault();
+  const p = pieza(ARRASTRA || ev.dataTransfer.getData("text/plain")), destino = col.dataset.col;
+  finArrastre();
+  if (!p || p.edicion.estado === destino || !MUEVE.includes(destino)) return;
+  if (destino === "entregada") { await entregar(p); return; }
+  const antes = p.edicion.estado;
+  p.edicion.estado = destino;
+  pinta();
+  if (SEL === p.cid) pintaPanel();
+  try {
+    await api(`/api/editor/piezas/${encodeURIComponent(p.cid)}/estado`, { estado: destino });
+    aviso(destino === "en_edicion" ? "Pasada a «En edición»" : "Devuelta a «Por editar»");
+    cargar();
+  } catch (e) {
+    p.edicion.estado = antes;
+    pinta();
+    if (SEL === p.cid) pintaPanel();
+    aviso(e.message, true);
+  }
+});
+
+/* entregar una versión: desde el botón del panel o soltando la tarjeta en «Entregada» */
+async function entregar(p) {
+  const n = p.edicion.entregas.length + 1;
+  let url = "", nota = "", repetir = false;
+  for (;;) {
+    const r = await OSUI.form({
+      titulo: `Entregar v${n}`,
+      texto: repetir ? "Falta el enlace: tiene que empezar por https://" : "Pega el enlace del vídeo (Frame.io, Drive, WeTransfer…).",
+      campos: [
+        { id: "url", label: "Enlace del vídeo", placeholder: "https://…", valor: url },
+        { id: "nota", label: "Nota (opcional)", placeholder: "Qué has cambiado o qué quieres que revise", valor: nota },
+      ],
+      ok: "Entregar",
+    });
+    if (!r) return false;
+    url = String(r.url || "").trim();
+    nota = String(r.nota || "");
+    if (/^https?:\/\/\S+$/i.test(url)) break;
+    repetir = true;
+  }
+  try {
+    await api(`/api/editor/piezas/${encodeURIComponent(p.cid)}/entrega`, { url, nota });
+    aviso(`Entregada la v${n}`);
+    await cargar();
+    return true;
+  } catch (e) {
+    aviso(e.message, true);
+    return false;
+  }
 }
 
 function abrir(cid) { SEL = cid; pintaPanel(); $("panel").classList.add("on"); $("velo").classList.add("on"); }
 function cerrar() { SEL = null; $("panel").classList.remove("on"); $("velo").classList.remove("on"); }
 $("velo").onclick = cerrar;
-document.addEventListener("keydown", (e) => { if (e.key === "Escape" && SEL) cerrar(); });
+// Esc dentro de un formulario solo cierra el formulario (cuando llega aquí ya lo ha quitado del DOM)
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && SEL && !e.target.closest?.(".osui-ov")) cerrar(); });
 
 function pintaPanel() {
-  const p = (DATA.piezas || []).find((x) => x.cid === SEL);
+  const p = pieza(SEL);
   if (!p) { cerrar(); return; }
   const e = p.edicion, yo = DATA.editor.id;
   const enlace = (v) => /^https?:\/\//i.test(v) ? `<a href="${esc(v)}" target="_blank" rel="noopener">${esc(v)}</a>` : esc(v);
@@ -180,14 +319,7 @@ function pintaPanel() {
   const emp = $("pEmpezar");
   if (emp) emp.onclick = () => api(`/api/editor/piezas/${encodeURIComponent(p.cid)}/estado`, { estado: "en_edicion" }).then(cargar).catch(fallo);
   const ent = $("pEntregar");
-  if (ent) ent.onclick = async () => {
-    const r = await OSUI.form({ titulo: `Entregar v${e.entregas.length + 1}`, texto: "Pega el enlace del vídeo (Drive, WeTransfer, Frame.io…).", campos: [
-      { id: "url", label: "Enlace del vídeo", placeholder: "https://…" },
-      { id: "nota", label: "Nota (opcional)", placeholder: "Qué has cambiado o qué quieres que revise" },
-    ], ok: "Entregar" });
-    if (!r) return;
-    api(`/api/editor/piezas/${encodeURIComponent(p.cid)}/entrega`, { url: r.url, nota: r.nota }).then(cargar).catch(fallo);
-  };
+  if (ent) ent.onclick = () => entregar(p);
   const enviar = () => {
     const t = $("pMsg").value.trim();
     if (!t) return;
@@ -204,8 +336,12 @@ $("salir").onclick = async () => {
 };
 
 cargar();
-// refresco cada minuto, salvo mientras escribe
-setInterval(() => { const a = document.activeElement; if (!(a && (a.tagName === "INPUT" || a.tagName === "TEXTAREA"))) cargar(); }, 60000);
+// refresco cada minuto, salvo mientras arrastra, escribe o tiene un formulario abierto
+setInterval(() => {
+  const a = document.activeElement;
+  if (ARRASTRA || document.querySelector(".osui-ov") || (a && (a.tagName === "INPUT" || a.tagName === "TEXTAREA"))) return;
+  cargar();
+}, 60000);
 </script>
 </body>
 </html>
