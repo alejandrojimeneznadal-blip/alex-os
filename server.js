@@ -325,7 +325,7 @@ function normalizarPiezas(data) {
 
 function normalizar(data) {
   if (data.widget !== undefined) data.widget = normalizarWidget(data.widget);
-  return normalizarPiezas(normalizarTareas(normalizarSubs(derivarNutricion(data))));
+  return normalizarPiezas(normalizarTareas(normalizarSubs(derivarNutricion(promueveEtapa(data)))));
 }
 
 function edicionPublica(e) {
@@ -350,9 +350,11 @@ async function readData(userId) {
   if (!userId) throw new Error("readData sin usuario");
   const { rows } = await pool.query("SELECT data FROM user_state WHERE user_id = $1", [userId]);
   const data = rows[0]?.data ?? {};
+  const teniaProxima = !!data?.config?.proxima;
   const seeded = seedDefaults(data);
   const out = normalizar(data);
-  if (seeded || !rows.length) await writeData(userId, out);
+  // si hoy ha empezado una etapa programada, se guarda ya (el cambio se hace una sola vez)
+  if (seeded || !rows.length || (teniaProxima && !out.config?.proxima)) await writeData(userId, out);
   await adjuntaEdiciones(userId, out);
   return out;
 }
@@ -444,6 +446,64 @@ function computeScore(senalesValues, config) {
   return Math.round((got / total) * 100);
 }
 
+/* ======================================================================
+   ETAPAS — cuando cambia el sistema de medida (hábitos nuevos, otro objetivo) la curva vuelve
+   a empezar en 100 y la etapa anterior queda cerrada con SUS hábitos: los días pasados siguen
+   puntuando como puntuaban. Regla pactada: se cambia de etapa solo si cambia el sistema, nunca
+   porque la curva vaya mal.
+     config.etapa    { n, nombre?, desde }                                 la etapa en curso (sin ella: la 1, desde el primer día)
+     config.etapas   [{ n, nombre?, desde, hasta, senales, equilibrio }]   las cerradas, con sus hábitos
+     config.proxima  { desde, nombre?, senales, equilibrio? }              programada: el primer día ≥ desde en que se lee
+                     el estado, sus hábitos pasan a ser los vigentes y la etapa en curso se cierra.
+   ====================================================================== */
+const esFecha = (k) => /^\d{4}-\d{2}-\d{2}$/.test(String(k || ""));
+function etapaDeFecha(config, fecha) {
+  return (Array.isArray(config?.etapas) ? config.etapas : []).find((e) => e && fecha >= (e.desde || "") && fecha <= (e.hasta || "")) || null;
+}
+/* la config con la que puntúa un día: la de su etapa si ya está cerrada; si no, la vigente */
+function configDeFecha(config, fecha) {
+  const e = etapaDeFecha(config, fecha);
+  return e && Array.isArray(e.senales) ? { ...config, senales: e.senales, equilibrio: e.equilibrio ?? config?.equilibrio } : config;
+}
+function scoreDeFecha(data, fecha) {
+  const d = data?.days?.[fecha];
+  return d ? computeScore(d.senales, configDeFecha(data.config || DEFAULT_CONFIG, fecha)) : null;
+}
+function promueveEtapa(data) {
+  const c = data?.config;
+  const p = c?.proxima;
+  if (!c || !p || !esFecha(p.desde) || !Array.isArray(p.senales) || !p.senales.length || todayISO() < p.desde) return data;
+  const dias = Object.keys(data.days || {}).filter((k) => esFecha(k) && k < p.desde).sort();
+  const n = Number(c.etapa?.n) || 1;
+  const desde = c.etapa?.desde || dias[0];
+  if (desde && desde < p.desde) {
+    c.etapas = [...(Array.isArray(c.etapas) ? c.etapas : []), {
+      n, ...(c.etapa?.nombre ? { nombre: c.etapa.nombre } : {}), desde, hasta: addDays(p.desde, -1),
+      senales: c.senales || [], equilibrio: Number(c.equilibrio) || 35,
+    }];
+  }
+  c.senales = p.senales;
+  if (Number(p.equilibrio) > 0) c.equilibrio = Number(p.equilibrio);
+  c.etapa = { n: n + 1, desde: p.desde, ...(p.nombre ? { nombre: p.nombre } : {}) };
+  delete c.proxima;
+  return data;
+}
+/* cómo cerró una etapa: su curva entera con sus hábitos y su equilibrio */
+function resumenEtapa(e, days) {
+  const eq = Math.min(99, Math.max(1, Number(e.equilibrio) || 35));
+  let cap = 100, pico = 100, suma = 0, reg = 0, blanco = 0, total = 0;
+  for (let f = e.desde; f <= e.hasta; f = addDays(f, 1)) {
+    total++;
+    const d = days[f];
+    const sc = d ? computeScore(d.senales, { senales: e.senales }) : null;
+    if (sc === null) blanco++; else { suma += sc; reg++; }
+    cap *= 1 + ((sc ?? 0) - eq) / (100 - eq) / 100;
+    if (cap > pico) pico = cap;
+  }
+  const r2 = (x) => Math.round(x * 100) / 100;
+  return { n: e.n, nombre: e.nombre || null, desde: e.desde, hasta: e.hasta, capital: r2(cap), pico: r2(pico), caida_pct: Math.round((cap / pico - 1) * 1000) / 10, media: reg ? Math.round(suma / reg) : null, dias: total, dias_registrados: reg, dias_blanco: blanco };
+}
+
 function todayISO() {
   const d = new Date();
   const tz = d.getTimezoneOffset() * 60000;
@@ -465,6 +525,9 @@ function buildDashboard(data) {
   const first = logged[0] || today;
   // serie desde el primer día registrado (mínimo 14 días de ventana)
   let start = first < addDays(today, -13) ? first : addDays(today, -13);
+  // cada día puntúa con los hábitos de su etapa; la curva de la etapa en curso arranca en 100 el día que empezó
+  const scoreOf = (fecha) => (days[fecha] ? computeScore(days[fecha].senales, configDeFecha(config, fecha)) : null);
+  const inicio = config.etapa?.desde && config.etapa.desde > first ? config.etapa.desde : first;
 
   /* CURVA DE CAPITAL: el score del día es un tipo de interés, no una cantidad.
      Arranca en 100 el primer día registrado. Un día de 100 rinde +1 %, un día en el
@@ -474,22 +537,23 @@ function buildDashboard(data) {
   const eq = Math.min(99, Math.max(1, Number(config.equilibrio) || 35));
   const rendimiento = (score) => (score - eq) / (100 - eq); // en tanto por ciento (+1 = +1 %)
   const serie = [];
-  let acumulado = 0, capital = 100, pico = { valor: 100, fecha: first };
+  let acumulado = 0, capital = 100, pico = { valor: 100, fecha: inicio };
   for (let f = start; f <= today; f = addDays(f, 1)) {
     const d = days[f];
-    const score = d ? computeScore(d.senales, config) : null;
+    const score = scoreOf(f);
     acumulado += score || 0;
     let rend = null;
-    if (f >= first && !(f === today && score === null)) {
+    const enEtapa = f >= inicio;
+    if (enEtapa && !(f === today && score === null)) {
       rend = rendimiento(score ?? 0);
       capital *= 1 + rend / 100;
       if (capital > pico.valor) pico = { valor: capital, fecha: f };
     }
-    serie.push({ fecha: f, score, acumulado, capital: Math.round(capital * 100) / 100, rend: rend === null ? null : Math.round(rend * 100) / 100, resumen: d?.resumen || null });
+    serie.push({ fecha: f, score, acumulado, capital: enEtapa ? Math.round(capital * 100) / 100 : null, rend: rend === null ? null : Math.round(rend * 100) / 100, resumen: d?.resumen || null });
   }
   // ritmo: tasa diaria media de los últimos 30 días (geométrica) y qué multiplicador anual implica
   const capDe = (fecha) => serie.find((p) => p.fecha === fecha)?.capital;
-  const refFecha = addDays(today, -30) >= start ? addDays(today, -30) : start;
+  const refFecha = addDays(today, -30) >= inicio ? addDays(today, -30) : inicio;
   const capRef = capDe(refFecha) ?? 100;
   const nDias = Math.max(1, Math.round((new Date(today) - new Date(refFecha)) / 86400000));
   const ritmo = capRef > 0 ? Math.pow(capital / capRef, 1 / nDias) - 1 : 0;
@@ -502,14 +566,19 @@ function buildDashboard(data) {
     ritmo_dia_pct: Math.round(ritmo * 10000) / 100,
     anual: Math.round(Math.pow(1 + ritmo, 365) * 100) / 100,
     dias_ritmo: nDias,
-    desde: first,
+    desde: inicio,
+    etapa: { n: Number(config.etapa?.n) || 1, nombre: config.etapa?.nombre || null, desde: inicio },
+    etapas: (Array.isArray(config.etapas) ? config.etapas : []).filter((e) => e && esFecha(e.desde) && esFecha(e.hasta)).map((e) => resumenEtapa(e, days)),
+    proxima: config.proxima && esFecha(config.proxima.desde) ? {
+      desde: config.proxima.desde, nombre: config.proxima.nombre || null,
+      senales: (config.proxima.senales || []).map((x) => ({ id: x.id, label: x.label, tipo: x.tipo, peso: x.peso, ...(x.umbral ? { umbral: x.umbral } : {}) })),
+    } : null,
   };
 
   // racha: días consecutivos con score >= racha_min, terminando hoy o ayer
   const min = Number(config.racha_min) || 50;
   let racha = 0;
   let f = today;
-  const scoreOf = (fecha) => (days[fecha] ? computeScore(days[fecha].senales, config) : null);
   if (scoreOf(f) === null || scoreOf(f) < min) f = addDays(f, -1); // hoy aún sin cerrar no rompe la racha
   while (scoreOf(f) !== null && scoreOf(f) >= min) { racha++; f = addDays(f, -1); }
 
@@ -1370,7 +1439,7 @@ app.post("/api/day", async (req, res) => {
     data.days[f] = day;
     derivarNutricion(data); // el score de la respuesta ya cuenta la nutrición derivada
     await writeData(req.user.id, data);
-    res.json({ ok: true, fecha: f, score: computeScore(day.senales, data.config || DEFAULT_CONFIG) });
+    res.json({ ok: true, fecha: f, score: scoreDeFecha(data, f) });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -2037,6 +2106,7 @@ Estructura del estado:
 - config.equilibrio (35 por defecto): el score que deja plana la CURVA DE CAPITAL. La curva trata el score del día como un tipo de interés: un día de 100 rinde +1 %, un día en el equilibrio no mueve nada y un día en blanco ya pasado resta como un 0; el capital arranca en 100 el primer día registrado, no tiene techo y puede caer. Es su medida de crecimiento a largo plazo ("ser un 1 % mejor cada día"): cuando pregunte cómo va, léela en get_dashboard.curva (capital, pico, caída, rend_hoy, anual = multiplicador si sostiene el ritmo de los últimos 30 días) y cuéntasela sin maquillar. Solo él cambia el equilibrio.
 - config.senales: [{ id, label, tipo: "bool"|"horas"|"kcal", peso, umbral? }] — los HÁBITOS que puntúan (${N} los llama "hábitos": dile siempre hábito, nunca señal — la clave interna sigue siendo senales). Actuales: ${HAB}
 - config.modulos: [ids] — las PARTES del panel que ${N} usa (la barra lateral solo enseña esas). Catálogo: agenda (calendario + tareas + recordatorios), instagram (piezas de contenido: tablero, cola, grabación, edición con editor, referencias, visión), gym (rutina, series y peso), sueno, nutricion (kcal frente a objetivo), finanzas (cuentas, bancos, movimientos, suscripciones, ahorro), proyectos (carpetas con subproyectos, tareas y archivos), bandeja, ideas, notas (las tres del Cerebro) y skool (reservado, sin construir). El Panel siempre está. Si no existe la clave se ven las de siempre. Cámbiala solo con su OK, con set_value config.modulos y la lista entera.
+- config.etapa / config.etapas / config.proxima — ETAPAS de la curva. Cuando cambia el sistema de medida (hábitos nuevos, otro objetivo) la curva vuelve a empezar en 100 y la etapa anterior queda cerrada con SUS hábitos: los días pasados no se vuelven a puntuar con la vara nueva. Para cambiar los hábitos a partir de una fecha NO toques config.senales: programa set_value config.proxima = { desde: "YYYY-MM-DD", nombre?, senales: [...] } (mismo formato que config.senales; conserva los ids de los hábitos que sigan) y el servidor hace el cambio solo ese día. Cambiar config.senales a mano vuelve a puntuar toda la etapa en curso: solo para retoques pequeños y con su OK. Regla de ${N}: se cambia de etapa solo cuando cambia el sistema, nunca porque la curva vaya mal. get_dashboard.curva trae la etapa en curso, el cierre de las anteriores y la programada.
 - days: por fecha { senales: {id: valor}, resumen } — el registro diario.
 - journal: [{ fecha, area, texto }] — apuntes de contexto por área: general|sueno|gym|nutricion|proyectos|contenido|finanzas.
 - memoria: [{ id, texto, fecha }] — TU memoria durable entre conversaciones. Va entera al final de estas instrucciones, así que la tienes delante desde el primer mensaje sin leerla: guarda ahí con add_item lo que deba sobrevivir a esta conversación.
@@ -2101,7 +2171,12 @@ function instruccionesMcp(data, user) {
     `${s.id} "${s.label}" (${s.tipo === "horas" ? `horas, umbral ${s.umbral}` : s.tipo === "kcal" ? "tipo kcal: DERIVADO, ver abajo" : "bool"}, ${s.peso} pts)`
   ).join(", ") || "ninguno configurado todavía";
   const N = user?.display_name || capital(user?.username) || "ti";
-  const SYSTEM_PROMPT = systemPromptFor(N, user?.context || "", hab + ".");
+  const prox = data?.config?.proxima;
+  const habProx = prox && Array.isArray(prox.senales) && prox.senales.length
+    ? ` PROGRAMADO: desde el ${prox.desde} empieza otra etapa${prox.nombre ? ` («${prox.nombre}»)` : ""} y los hábitos pasan a ser: ` + prox.senales.map((s) =>
+        `${s.id} "${s.label}" (${s.tipo === "horas" ? `horas, umbral ${s.umbral}` : s.tipo === "kcal" ? "kcal, derivado" : "bool"}, ${s.peso} pts)`).join(", ") + ". Hasta ese día puntúan los actuales."
+    : "";
+  const SYSTEM_PROMPT = systemPromptFor(N, user?.context || "", hab + "." + habProx);
   const nueva = !data?.config?.onboarding && Object.keys(data?.days || {}).length < 3;
   const onb = nueva
     ? "\n\nESTA CUENTA ESTÁ RECIÉN CREADA: antes de nada, ofrécele hacer el onboarding (unos 20 minutos de conversación) para dejar el panel a su medida.\n" + ONBOARDING(N)
@@ -2266,7 +2341,7 @@ function runTool(name, input, data, actions) {
         out.days = fechas.map((f) => ({
           fecha: f,
           ...data.days[f],
-          score: computeScore(data.days[f]?.senales, config),
+          score: computeScore(data.days[f]?.senales, configDeFecha(config, f)),
         }));
       } else if (k === "journal") {
         out.journal = (data.journal || []).slice(-25);
@@ -2282,7 +2357,7 @@ function runTool(name, input, data, actions) {
     if (!data.days || typeof data.days !== "object") data.days = {};
     const day = data.days[f] || { senales: {} };
     if (!day.senales) day.senales = {};
-    const validIds = new Set((config.senales || []).map((s) => s.id));
+    const validIds = new Set((configDeFecha(config, f).senales || []).map((s) => s.id)); // los hábitos de la etapa de ese día
     const applied = {};
     if (input?.senales && typeof input.senales === "object") {
       for (const [id, v] of Object.entries(input.senales)) {
@@ -2298,7 +2373,7 @@ function runTool(name, input, data, actions) {
     if (typeof input?.resumen === "string" && input.resumen) day.resumen = input.resumen;
     data.days[f] = day;
     derivarNutricion(data);
-    const score = computeScore(day.senales, config);
+    const score = computeScore(day.senales, configDeFecha(config, f));
     const parts = Object.entries(applied).map(([k, v]) => `${k}=${v}`).join(" · ");
     actions.push(`📅 ${f}: ${parts || "resumen"} → score ${score}`);
     return JSON.stringify({ ok: true, fecha: f, senales: day.senales, score });

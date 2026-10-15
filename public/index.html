@@ -269,6 +269,10 @@
   .chart-head { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 4px; flex-wrap: wrap; }
   .chart-head .big { font-size: 30px; font-weight: 700; letter-spacing: -0.02em; }
   .chart-head .big small { font-size: 15px; color: var(--ink-3); font-weight: 500; }
+  /* etapas: aviso del cambio programado (en hábitos) y cierre de las anteriores (en la curva) */
+  .etapa-aviso { margin-top: 12px; padding: 10px 12px; border: 1px dashed var(--border-strong); border-radius: 8px; font-size: 13px; color: var(--ink-2); line-height: 1.55; }
+  .etapa-aviso b { color: var(--ink); font-weight: 600; }
+  .etapas-cerradas { margin-top: 4px; font-size: 12.5px; color: var(--ink-3); }
   .curva-datos { margin-left: auto; display: flex; gap: 18px; flex-wrap: wrap; align-items: flex-end; }
   .curva-datos div { text-align: right; }
   .curva-datos .v { font-size: 15px; font-weight: 650; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
@@ -361,6 +365,7 @@
     </div>
     <div class="senales" id="senales"></div>
     <div class="senales-hint">Toca un hábito para marcarlo · o cuéntale el día a Claude y lo registra por ti</div>
+    <div class="etapa-aviso" id="etapaAviso" hidden></div>
   </div>
 
   <div class="card">
@@ -390,6 +395,7 @@
       <div class="curva-datos" id="curvaDatos"></div>
     </div>
     <div class="sub" id="subCurva"></div>
+    <div class="etapas-cerradas" id="etapasCerradas" hidden></div>
     <div class="chart-box" id="chartCurva"></div>
   </div>
 
@@ -1199,8 +1205,22 @@ function renderScoreChart() {
 const fmtMult = (m) => "×" + (m >= 10 ? Math.round(m) : m >= 1 ? m.toFixed(1) : m.toFixed(2)).toString().replace(".", ",");
 const fmtPct = (p, dec = 2) => (p > 0 ? "+" : "") + p.toFixed(dec).replace(".", ",") + " %";
 
+function renderEtapaAviso() {
+  const box = $("etapaAviso"), p = DASH?.curva?.proxima;
+  if (!box) return;
+  box.hidden = !p;
+  if (!p) return;
+  const e = (t) => String(t ?? "").replace(/[&<>"]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[ch]));
+  const dia = new Date(p.desde + "T12:00").toLocaleDateString("es", { weekday: "long", day: "numeric", month: "short" }).replace(",", "");
+  const n = (DASH.curva.etapa?.n || 1) + 1;
+  const habs = (p.senales || []).map((s) => `${e(s.label)}${s.tipo === "horas" ? ` (${String(s.umbral).replace(".", ",")} h)` : ""} ${s.peso}`).join(" · ");
+  box.innerHTML = `<b>El ${e(dia)} empieza la etapa ${n}${p.nombre ? ` «${e(p.nombre)}»` : ""}.</b> Desde ese día puntúan estos hábitos: ${habs}. ` +
+    `La curva vuelve a empezar en 100 y la etapa actual queda guardada tal cual, con sus hábitos.`;
+}
+
 function renderCurvaChart() {
   const d = DASH, c = d.curva, serie = d.serie;
+  renderEtapaAviso();
   if (!c) return;
   $("curvaBig").childNodes[0].nodeValue = Math.round(c.capital) + " ";
   const pill = $("curvaPill");
@@ -1218,11 +1238,20 @@ function renderCurvaChart() {
     `<div><div class="v">${Math.round(c.pico.valor)}</div><div class="k">pico · ${fmtFecha(c.pico.fecha)}</div></div>` +
     `<div><div class="v ${caidaCls}">${c.caida_pct === 0 ? "en máximos" : fmtPct(c.caida_pct, 0)}</div><div class="k">desde el pico</div></div>` +
     `<div><div class="v ${c.anual >= 1.02 ? "ok" : c.anual <= 0.98 ? "bad" : ""}">${fmtMult(c.anual)}</div><div class="k">al año a este ritmo</div></div>`;
+  const et = c.etapa || { n: 1 }, cerradas = c.etapas || [];
+  const etLabel = cerradas.length || et.nombre ? `Etapa ${et.n}${et.nombre ? ` «${et.nombre}»` : ""} · ` : "";
   $("subCurva").textContent =
-    `Empezaste en 100 el ${fmtFecha(c.desde)}. Un día de 100 suma un 1 %, un día de ${c.equilibrio} no mueve nada, un día en blanco resta. ` +
-    `Ritmo de los últimos ${c.dias_ritmo} días: ${fmtPct(c.ritmo_dia_pct)} al día.`;
+    `${etLabel}Empezaste en 100 el ${fmtFecha(c.desde)}. Un día de 100 suma un 1 %, un día de ${c.equilibrio} no mueve nada, un día en blanco resta. ` +
+    (c.dias_ritmo > 1 ? `Ritmo de los últimos ${c.dias_ritmo} días: ${fmtPct(c.ritmo_dia_pct)} al día.` : `Primer día de la etapa.`);
+  // cómo cerraron las etapas anteriores (quedan guardadas con sus hábitos)
+  const ec = $("etapasCerradas");
+  ec.hidden = !cerradas.length;
+  ec.textContent = cerradas.map((e) => `Etapa ${e.n}${e.nombre ? ` «${e.nombre}»` : ""}: del ${fmtFecha(e.desde)} al ${fmtFecha(e.hasta)}, cerró en ${Math.round(e.capital)}` +
+    `${e.media !== null ? `, media ${e.media}` : ""}${e.dias_blanco ? `, ${e.dias_blanco} días en blanco` : ""}.`).join(" ");
 
-  const vals = serie.map((p) => p.capital);
+  // la curva solo dibuja la etapa en curso
+  const tramo = serie.filter((p) => p.fecha >= c.desde && p.capital !== null && p.capital !== undefined);
+  const vals = tramo.map((p) => p.capital);
   const lo = Math.min(...vals, 100), hi = Math.max(...vals, 100);
   const span = Math.max(hi - lo, 6);
   const yMin = Math.max(0, Math.floor((lo - span * 0.18) / 5) * 5), yMax = Math.ceil((hi + span * 0.18) / 5) * 5;
@@ -1230,7 +1259,7 @@ function renderCurvaChart() {
   const ticks = [];
   for (let t = Math.ceil(yMin / step) * step; t <= yMax; t += step) ticks.push(t);
   // el color dice de qué lado del 100 estás: verde por encima de donde empezaste, rojo por debajo
-  makeChart($("chartCurva"), serie.map((p) => ({ fecha: p.fecha, y: p.capital, rend: p.rend, score: p.score })), {
+  makeChart($("chartCurva"), tramo.map((p) => ({ fecha: p.fecha, y: p.capital, rend: p.rend, score: p.score })), {
     color: c.capital >= 100 ? "var(--ok)" : "var(--bad)",
     yMin, yMax, ticks, dots: false,
     baseline: 100,
