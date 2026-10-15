@@ -2,6 +2,22 @@
    Estilo claro (referencia Cashora/Muzli): sidebar blanco, item activo con barra índigo.
    En desktop: barra fija a la izquierda (padding-left en html).
    En móvil: off-canvas con botón ☰ (se inserta en .top-bar si existe, si no crea una barra superior). */
+/* Transiciones entre páginas: si el navegador salta una (p. ej. una página que redirige nada más
+   cargar, como la de una cuenta nueva camino de la bienvenida), que no quede como error sin capturar. */
+for (const ev of ["pagereveal", "pageswap"]) {
+  window.addEventListener(ev, (e) => {
+    const vt = e.viewTransition;
+    if (vt) [vt.ready, vt.finished, vt.updateCallbackDone].forEach((p) => p && p.catch(() => {}));
+  });
+}
+// todas las páginas con ui.js (también las que no tienen barra: bienvenida, editor) aceptan la
+// transición; si una sola la acepta, el navegador la salta al ir de una a otra
+(function () {
+  const st = document.createElement("style");
+  st.textContent = "@view-transition { navigation: auto; } ::view-transition-old(root), ::view-transition-new(root) { animation-duration: 0.12s; }";
+  (document.head || document.documentElement).appendChild(st);
+})();
+
 /* ---------- OSMe: quién soy (y, si soy admin, qué cuenta estoy viendo) ----------
    Caché en sessionStorage para pintar el nombre antes del primer frame; se refresca con /api/me
    y avisa con el evento "os:me" a las páginas que muestran el nombre (saludo del panel). */
