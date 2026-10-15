@@ -145,6 +145,29 @@ async function initSchema() {
       PRIMARY KEY (owner_id, cid)
     );
   `);
+  /* visión (Creator Vision): la plantilla una vez por cuenta + una fila por versión (15 oct 2026) */
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS vision (
+      owner_id TEXT PRIMARY KEY REFERENCES users(id),
+      plantilla TEXT NOT NULL,
+      css TEXT NOT NULL DEFAULT '',
+      campos JSONB NOT NULL DEFAULT '[]'::jsonb,
+      updated BIGINT
+    );
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS vision_versiones (
+      owner_id TEXT NOT NULL REFERENCES users(id),
+      v INTEGER NOT NULL,
+      creada BIGINT NOT NULL,
+      origen TEXT NOT NULL,
+      autor TEXT,
+      resumen TEXT,
+      datos JSONB NOT NULL,
+      cambios JSONB NOT NULL DEFAULT '[]'::jsonb,
+      PRIMARY KEY (owner_id, v)
+    );
+  `);
   /* alcance del token: 'mcp' = IA con lectura y escritura · 'widget' = solo lee /api/widget */
   await pool.query(`ALTER TABLE mcp_tokens ADD COLUMN IF NOT EXISTS scope TEXT NOT NULL DEFAULT 'mcp';`);
   /* onboarding: las cuentas nuevas pasan por /bienvenida.html la primera vez. Al añadir la columna,
@@ -785,6 +808,32 @@ function mcpTools() {
         required: ["ejercicio", "series"],
       },
     },
+    {
+      name: "get_vision",
+      description: "Su VISIÓN de contenido (el «Creator Vision»): mensaje, pilares, a quién le habla, su historia en 3 partes, momentos de la rueda LIFE, tres porqués, ganchos y planificador. Devuelve la versión actual casilla a casilla (k, sección, etiqueta, texto) y el historial de versiones. Es el punto de partida para idear, escribir guiones o decidir algo de contenido. Con version=N devuelve esa versión y qué cambió respecto a la anterior.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          version: { type: "number", description: "Número de versión; por defecto la actual" },
+          solo_rellenas: { type: "boolean", description: "Por defecto true: solo las casillas con texto. false = también las vacías (para ver dónde escribir)" },
+        },
+      },
+    },
+    {
+      name: "update_vision",
+      description: "Cambia casillas de la visión y guarda una VERSIÓN NUEVA (la anterior queda en el historial y se puede restaurar). SOLO cuando la persona esté hablando de su visión, te pida el cambio y haya dado el OK al texto exacto: nunca por tu cuenta ni de paso en otra tarea. Cada casilla lleva su texto completo nuevo en texto plano (en las de tipo lista, un elemento por línea; vacío = vaciarla). El resumen es obligatorio: una frase con qué cambia y por qué.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          cambios: {
+            type: "array",
+            items: { type: "object", properties: { k: { type: "string", description: "Clave de la casilla (de get_vision)" }, texto: { type: "string" } }, required: ["k", "texto"] },
+          },
+          resumen: { type: "string", description: "Una frase: qué cambia y por qué" },
+        },
+        required: ["cambios", "resumen"],
+      },
+    },
   ];
 }
 
@@ -855,6 +904,44 @@ async function mcpHandle(msg, user) {
     if (!nombre) return jsonRpcError(id, -32602, "falta el nombre de la herramienta");
     if (!mcpTools().some((t) => t.name === nombre)) {
       return jsonRpcError(id, -32602, `herramienta desconocida: ${nombre}`);
+    }
+    if (nombre === "get_vision" || nombre === "update_vision") {
+      const ok = (o) => ({ jsonrpc: "2.0", id, result: { content: [{ type: "text", text: JSON.stringify(o) }] } });
+      const err = (t) => ({ jsonrpc: "2.0", id, result: { content: [{ type: "text", text: t }], isError: true } });
+      const p = await cvPlantilla(user.id);
+      if (!p) return err("Todavía no hay visión en el panel: se importa desde el esquema original (Instagram → Visión).");
+      const campos = p.campos || [];
+      const porK = new Map(campos.map((c) => [c.k, c]));
+      const fechaDe = (ms) => new Date(ms).toISOString().slice(0, 16).replace("T", " ");
+      if (nombre === "get_vision") {
+        const n = Number(args.version);
+        const x = Number.isInteger(n) && n > 0 ? await cvVersion(user.id, n) : await cvVersion(user.id);
+        if (!x) return err("esa versión no existe");
+        const todas = args.solo_rellenas === false;
+        const casillas = campos.filter((c) => todas || !cvVacia(x.datos[c.k])).map((c) => ({ k: c.k, seccion: c.seccion, etiqueta: c.etiqueta, tipo: c.tipo, texto: celdaATexto(x.datos[c.k]) }));
+        const out = {
+          version: x.v, fecha: fechaDe(x.creada), origen: x.origen, autor: x.autor, resumen: x.resumen,
+          casillas, casillas_vacias: campos.filter((c) => cvVacia(x.datos[c.k])).length,
+          versiones: (await cvVersiones(user.id)).map((y) => ({ v: y.v, fecha: fechaDe(y.creada), origen: y.origen, autor: y.autor, resumen: y.resumen, casillas_cambiadas: y.n_cambios })),
+        };
+        if (Number.isInteger(n) && n > 1) {
+          const ant = await cvVersion(user.id, n - 1);
+          out.cambios_respecto_a_la_anterior = (x.cambios || []).map((k) => ({ k, etiqueta: porK.get(k)?.etiqueta || k, antes: celdaATexto(ant?.datos?.[k]), ahora: celdaATexto(x.datos[k]) }));
+        }
+        return ok(out);
+      }
+      // update_vision
+      const resumen = String(args.resumen || "").trim();
+      const lista = Array.isArray(args.cambios) ? args.cambios : [];
+      if (!resumen) return err("falta el resumen: una frase con qué cambia y por qué (queda en el historial)");
+      if (!lista.length) return err("no hay cambios");
+      const malas = lista.filter((c) => !porK.has(String(c?.k || ""))).map((c) => c?.k);
+      if (malas.length) return err(`casillas que no existen: ${malas.slice(0, 5).join(", ")}. Mira las claves con get_vision (solo_rellenas: false para ver también las vacías).`);
+      const html = Object.fromEntries(lista.map((c) => [c.k, textoACelda(c.texto, porK.get(c.k).tipo)]));
+      const r = await cvNuevaVersion(user.id, (prev) => ({ ...prev, ...html }), { origen: "claude", autor: "Claude (MCP)", resumen });
+      console.log(`MCP ${user.username} update_vision: ${r.sin_cambios ? "sin cambios" : "v" + r.v + " · " + r.cambios.length + " casillas"}`);
+      if (r.sin_cambios) return ok({ ok: true, sin_cambios: true, version: r.v, nota: "el texto ya era ese: no se ha creado versión nueva" });
+      return ok({ ok: true, version: r.v, casillas_cambiadas: r.cambios.map((k) => ({ k, etiqueta: porK.get(k)?.etiqueta || k })), donde: "Instagram → Visión (Historial para ver o deshacer)" });
     }
     const data = await readData(user.id);
     if (nombre === "get_dashboard") {
@@ -1497,6 +1584,186 @@ app.post("/api/editor/piezas/:cid/mensaje", requireEditor, async (req, res) => {
 });
 
 /* ======================================================================
+   VISIÓN (Creator Vision) CON HISTORIAL DE VERSIONES (15 oct 2026)
+   La plantilla (estructura y estilos, casillas vacías con data-k) va una vez por cuenta en `vision`.
+   Cada guardado crea una fila en `vision_versiones` con TODAS las casillas ({k: html}) y la lista de
+   las que cambiaron. Nada de esto vive en el JSONB del estado: no pesa en cada carga ni se pisa.
+   La IA solo la cambia por MCP (update_vision) cuando la persona lo pide; cada cambio es una versión.
+   ====================================================================== */
+const CV_TAGS = new Set(["br", "ol", "ul", "li", "b", "strong", "i", "em", "u", "div", "p", "span"]);
+/* HTML de una casilla: solo etiquetas de texto, sin atributos (se pinta con innerHTML en el panel) */
+function limpiaCelda(html) {
+  return String(html ?? "")
+    .replace(/<!--[\s\S]*?-->/g, "")
+    .replace(/<(script|style|iframe|object|embed|template|svg|math)\b[\s\S]*?<\/\1\s*>/gi, "")
+    .replace(/<\/?([a-zA-Z][a-zA-Z0-9]*)\b[^>]*>/g, (m, tag) => {
+      const t = tag.toLowerCase();
+      if (!CV_TAGS.has(t)) return "";
+      if (t === "br") return "<br>";
+      return m.startsWith("</") ? `</${t}>` : `<${t}>`;
+    })
+    .replace(/<(?!\/?(?:br|ol|ul|li|b|strong|i|em|u|div|p|span)>)/g, "&lt;")
+    .slice(0, 20000);
+}
+const cvVacia = (html) => !String(html || "").replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").trim();
+const cvDecode = (s) => s.replace(/&nbsp;/g, " ").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, "&");
+/* casilla → texto plano legible (listas numeradas, saltos de línea) para la IA y para comparar versiones */
+function celdaATexto(html) {
+  const pila = [];
+  let out = String(html || "").replace(/<(\/?)(ol|ul|li|br|div|p)\b[^>]*>/gi, (m, cierre, tag) => {
+    tag = tag.toLowerCase();
+    if (tag === "ol" || tag === "ul") { if (cierre) { pila.pop(); return "\n"; } pila.push({ tipo: tag, n: 0 }); return ""; }
+    if (tag === "li") {
+      if (cierre) return "";
+      const l = pila[pila.length - 1];
+      if (!l) return "\n- ";
+      l.n++;
+      return "\n" + (l.tipo === "ol" ? `${l.n}. ` : "- ");
+    }
+    // br, div y p: salto de línea, salvo dentro de un elemento de lista (cada elemento = una línea)
+    return pila.length ? " " : "\n";
+  });
+  out = cvDecode(out.replace(/<[^>]+>/g, ""));
+  return out.replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+const cvEsc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+/* texto plano (de la IA) → HTML de la casilla; en las de tipo lista, un elemento por línea */
+function textoACelda(texto, tipo) {
+  const lineas = String(texto ?? "").replace(/\r/g, "").split("\n");
+  if (tipo === "lista") {
+    const items = lineas.map((l) => l.trim()).filter(Boolean).map((l) => l.replace(/^(\d+[.)]|[-·•*])\s+/, ""));
+    return items.length ? `<ol>${items.map((l) => `<li>${cvEsc(l)}</li>`).join("")}</ol>` : "";
+  }
+  return lineas.map((l) => cvEsc(l)).join("<br>").replace(/^(<br>)+|(<br>)+$/g, "");
+}
+async function cvPlantilla(ownerId) {
+  const r = await pool.query("SELECT plantilla, css, campos, updated FROM vision WHERE owner_id = $1", [ownerId]);
+  return r.rows[0] || null;
+}
+async function cvVersion(ownerId, v) {
+  const r = v
+    ? await pool.query("SELECT * FROM vision_versiones WHERE owner_id = $1 AND v = $2", [ownerId, v])
+    : await pool.query("SELECT * FROM vision_versiones WHERE owner_id = $1 ORDER BY v DESC LIMIT 1", [ownerId]);
+  const x = r.rows[0];
+  return x ? { v: x.v, creada: Number(x.creada), origen: x.origen, autor: x.autor || "", resumen: x.resumen || "", datos: x.datos || {}, cambios: x.cambios || [] } : null;
+}
+async function cvVersiones(ownerId) {
+  const r = await pool.query(
+    "SELECT v, creada, origen, autor, resumen, jsonb_array_length(cambios) AS n FROM vision_versiones WHERE owner_id = $1 ORDER BY v DESC", [ownerId]);
+  return r.rows.map((x) => ({ v: x.v, creada: Number(x.creada), origen: x.origen, autor: x.autor || "", resumen: x.resumen || "", n_cambios: Number(x.n) || 0 }));
+}
+/* Crea la versión siguiente aplicando `cambia(datosAnteriores)` dentro de un cerrojo por cuenta:
+   dos guardados a la vez nunca se pisan ni repiten número. Sin cambios reales no crea nada. */
+async function cvNuevaVersion(ownerId, cambia, { origen, autor, resumen }) {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", ["vision:" + ownerId]);
+    const ult = await client.query("SELECT v, datos FROM vision_versiones WHERE owner_id = $1 ORDER BY v DESC LIMIT 1", [ownerId]);
+    const prev = ult.rows[0]?.datos || {};
+    const datos = {};
+    for (const [k, h] of Object.entries(cambia({ ...prev }) || {})) { const c = limpiaCelda(h); if (!cvVacia(c)) datos[k] = c; }
+    const claves = new Set([...Object.keys(prev), ...Object.keys(datos)]);
+    const cambios = [...claves].filter((k) => (prev[k] || "") !== (datos[k] || ""));
+    if (ult.rows.length && !cambios.length) { await client.query("ROLLBACK"); return { sin_cambios: true, v: ult.rows[0].v }; }
+    const v = (ult.rows[0]?.v || 0) + 1;
+    await client.query(
+      "INSERT INTO vision_versiones (owner_id, v, creada, origen, autor, resumen, datos, cambios) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+      [ownerId, v, Date.now(), origen, String(autor || "").slice(0, 80), String(resumen || "").trim().slice(0, 300), JSON.stringify(datos), JSON.stringify(cambios)]);
+    await client.query("COMMIT");
+    return { v, cambios };
+  } catch (e) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw e;
+  } finally { client.release(); }
+}
+
+app.get("/api/vision", async (req, res) => {
+  try {
+    const p = await cvPlantilla(req.user.id);
+    res.set("Cache-Control", "no-store");
+    if (!p) return res.json({ vacia: true });
+    res.json({ plantilla: p.plantilla, css: p.css, campos: p.campos || [], version: await cvVersion(req.user.id), versiones: await cvVersiones(req.user.id) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/* una versión concreta + la anterior, para ver qué cambió */
+app.get("/api/vision/v/:v", async (req, res) => {
+  try {
+    const n = Number(req.params.v);
+    const x = Number.isInteger(n) && n > 0 ? await cvVersion(req.user.id, n) : null;
+    if (!x) return res.status(404).json({ error: "esa versión no existe" });
+    const ant = n > 1 ? await cvVersion(req.user.id, n - 1) : null;
+    res.set("Cache-Control", "no-store");
+    res.json({ ...x, anterior: ant ? ant.datos : {} });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/* guardado a mano desde el panel: {cambios: {k: html}, resumen} → versión nueva */
+app.post("/api/vision", async (req, res) => {
+  try {
+    const p = await cvPlantilla(req.user.id);
+    if (!p) return res.status(404).json({ error: "todavía no hay visión importada" });
+    const cambios = req.body?.cambios && typeof req.body.cambios === "object" ? req.body.cambios : {};
+    const validas = new Set((p.campos || []).map((c) => c.k));
+    const malas = Object.keys(cambios).filter((k) => !validas.has(k));
+    if (malas.length) return res.status(400).json({ error: "casillas que no existen: " + malas.slice(0, 5).join(", ") });
+    if (!Object.keys(cambios).length) return res.status(400).json({ error: "no hay cambios" });
+    const r = await cvNuevaVersion(req.user.id, (prev) => ({ ...prev, ...cambios }), {
+      origen: "manual", autor: req.actor?.display_name || req.user.display_name || req.user.username,
+      resumen: String(req.body?.resumen || "").trim() || `Cambios a mano en ${Object.keys(cambios).length} casilla${Object.keys(cambios).length === 1 ? "" : "s"}`,
+    });
+    res.json({ ok: true, ...r });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/* volver a una versión anterior = versión nueva con sus datos (el historial nunca se reescribe) */
+app.post("/api/vision/restaurar", async (req, res) => {
+  try {
+    const n = Number(req.body?.v);
+    const x = Number.isInteger(n) && n > 0 ? await cvVersion(req.user.id, n) : null;
+    if (!x) return res.status(404).json({ error: "esa versión no existe" });
+    const r = await cvNuevaVersion(req.user.id, () => x.datos, {
+      origen: "restaurada", autor: req.actor?.display_name || req.user.display_name || req.user.username,
+      resumen: `Vuelta a la v${n}` + (String(req.body?.motivo || "").trim() ? ` · ${String(req.body.motivo).trim()}` : ""),
+    });
+    res.json({ ok: true, ...r });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/* importar o reimportar el esquema (scripts/importar-vision.mjs): plantilla + estilos + casillas + datos */
+app.post("/api/vision/importar", async (req, res) => {
+  try {
+    if (req.actor?.role === "editor") return res.status(403).json({ error: "solo el dueño" });
+    if (req.viewingAs) return res.status(400).json({ error: "estás viendo otra cuenta" });
+    const b = req.body || {};
+    const plantilla = String(b.plantilla || "")
+      .replace(/<script\b[\s\S]*?<\/script\s*>/gi, "")
+      .replace(/\son[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, "")
+      .replace(/javascript:/gi, "");
+    const css = String(b.css || "").replace(/<\/?style/gi, "").replace(/@import[^;]*;?/gi, "").replace(/expression\s*\(/gi, "");
+    const campos = Array.isArray(b.campos) ? b.campos.slice(0, 3000).map((c) => ({
+      k: String(c?.k || "").slice(0, 80), seccion: String(c?.seccion || "").slice(0, 120), etiqueta: String(c?.etiqueta || "").slice(0, 160),
+      tipo: ["lista", "celda", "texto"].includes(c?.tipo) ? c.tipo : "texto",
+    })).filter((c) => /^[\w-]+$/.test(c.k)) : [];
+    if (!plantilla || plantilla.length > 600000) return res.status(400).json({ error: "plantilla vacía o demasiado grande" });
+    if (css.length > 200000) return res.status(400).json({ error: "estilos demasiado grandes" });
+    if (!campos.length) return res.status(400).json({ error: "sin casillas" });
+    const validas = new Set(campos.map((c) => c.k));
+    const datos = {};
+    for (const [k, h] of Object.entries(b.datos && typeof b.datos === "object" ? b.datos : {})) if (validas.has(k)) datos[k] = h;
+    await pool.query(
+      `INSERT INTO vision (owner_id, plantilla, css, campos, updated) VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (owner_id) DO UPDATE SET plantilla = EXCLUDED.plantilla, css = EXCLUDED.css, campos = EXCLUDED.campos, updated = EXCLUDED.updated`,
+      [req.user.id, plantilla, css, JSON.stringify(campos), Date.now()]);
+    const r = await cvNuevaVersion(req.user.id, () => datos, {
+      origen: "importada", autor: req.user.display_name || req.user.username, resumen: String(b.resumen || "Importada"),
+    });
+    res.json({ ok: true, casillas: campos.length, con_texto: Object.keys(datos).length, v: r.v, casillas_cambiadas: (r.cambios || []).length, ...(r.sin_cambios ? { sin_cambios: true } : {}) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/* ======================================================================
    INTEGRACIONES BANCARIAS (Airwallex + Mercury)
    Las credenciales viven en la BD y se gestionan desde /config.html.
    GET devuelve solo estado + últimos 4 caracteres, nunca el secreto entero.
@@ -1773,6 +2040,7 @@ Estructura del estado:
 - contenido: las PIEZAS del área Instagram (${N} publica solo en Instagram): [{ cid?, num?, fecha (creada), tipo: reel|youtube, clase?: soft|hard, titulo, estado: idea|guion|grabar|editar|lista|publicado (pipeline en ese orden: idea → guion escrito → por grabar → en edición → lista para publicar → publicada), fecha_plan? (día en que se publica), hora?, fecha_pub?, url?, views?, likes?, comments?, gancho?, cuerpo?, cierre?, cta?, caption?, hashtags?, fuente?, formato?, broll?, pantalla?, carpeta?, archivo?, editor?: {enviada, recibida, aprobada, cambios}, produccion?, nota? (1-10), porque_no_10?, notas? }]. «Ya grabé la 3» → estado editar (o lista si no hay editor); «la 1 está lista» → lista; «publiqué la 1» → publicado + fecha_pub. palabra? = palabra clave del CTA («comenta CLAUDE» → CLAUDE). edicion = SOLO LECTURA, la añade el servidor cuando la pieza está asignada a un editor ({ editor_nombre, estado: por_editar|en_edicion|entregada|cambios|aprobada, fecha_limite, brief, entregas, mensajes }); no la escribas: la gestionan ${N} y el editor desde el panel. Las tomas pendientes de cada pieza están en tomas (por cid). — las métricas de piezas con link (YouTube e Instagram) se actualizan solas desde sus APIs; no hace falta que ${N} las dicte salvo que quiera corregirlas. video_url es interno (mp4 del reel para el player del panel, lo rellena la API — no lo toques). notas es la "pizarra" de la pieza y puede llevar HTML sencillo (h2/h3, b, u, div, br); si escribes tú, texto plano o ese HTML simple. — al marcar publicado, pon fecha_pub con el día real de publicación (cuenta para el reto). fecha_plan = día en que ${N} planea publicarla (calendario de publicación; «el reel del Excel sale el jueves» → fecha_plan). Si ${N} pasa el link («publiqué un reel: <link>»), guárdalo en url (sirve para la miniatura y el player del panel). Si menciona métricas («el reel lleva 4k views»), actualiza views/likes de esa pieza.
 - referencias: [{ id, cuenta, url?, titulo?, nota (qué se lleva de ella), formato?, creada }] — reels y cuentas modelo (Instagram → Referencias). «Guárdame este reel de X como referencia: me gusta cómo…» → add_item referencias.
 - ganchos: [{ id, texto, tipo?, fuente?, nota?, creada }] — banco de ganchos reutilizables. Los ganchos de sus propias piezas ya salen solos del campo gancho de contenido; aquí van los ajenos o sueltos.
+- VISIÓN (su «Creator Vision»: mensaje, pilares, a quién le habla, su historia, rueda LIFE, tres porqués, ganchos y planificador): vive aparte del estado, con historial de versiones (Instagram → Visión). Léela con get_vision cuando vayas a idear, escribir un guion o decidir algo de contenido: es la base de la que partir. Cambiarla es delicado: SOLO con update_vision y SOLO cuando ${N} esté hablando de su visión y te pida cambiarla. Antes de guardar, enséñale el texto exacto que quedará en cada casilla y espera su OK; guarda con un resumen de una frase (qué cambia y por qué). Cada guardado es una versión nueva y la anterior se puede restaurar desde el panel. Nunca la toques de paso en otra tarea.
 - tomas: [{ cid, descripcion, como?, lugar?, tipo: broll|galeria|pantalla|camara|voz, piezas: [cid], estado: pendiente|grabada, plan?, grabada_el?, archivo?, notas? }] — qué hay que grabar para cada pieza. «Grabé las tomas de la cafetería» → set_value en tomas.<índice>.estado = grabada + grabada_el.
 - bandeja: [{ id, texto, creada, origen }] — la BANDEJA de captura (Cerebro). Todo lo que ${N} suelte sin clasificar («apunta: …», una idea a medias, un enlace, algo que no sabe dónde va) entra aquí con add_item SIN pensar dónde encaja. Se vacía al cerrar el día: cada entrada se convierte en idea (add_item ideas), tarea (add_item tareas), nota (add_item notas) o pieza (add_item contenido con estado idea) y se borra de la bandeja (set_value bandeja.<i> con delete, de mayor a menor índice). Cuando ${N} diga «cierro el día» o «vacía la bandeja»: lee bandeja con read_state, propón el destino de cada entrada en una línea y hazlo.
 - ideas: [{ id, texto, tipo: contenido|negocio, estado: nueva|en_guion|descartada, creada, notas?, pieza_cid? }] — ideas sueltas (Cerebro). «Idea: …» → add_item ideas (tipo contenido salvo que sea de negocio). Convertir una idea en pieza = add_item contenido { titulo, estado: idea } y poner la idea en en_guion.

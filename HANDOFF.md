@@ -151,6 +151,8 @@ Tablas, todas creadas por `initSchema` (esquema aditivo, sin migraciones):
 - `user_state (user_id, data JSONB, updated_at)`: **todo el estado de un usuario** en una fila.
 - `chat_images (id, mime, data base64, created, user_id)`: legado del chat retirado. La tabla y sus filas se conservan, pero ya no se escribe ni se lee.
 - `app_files (id, nombre, mime, data base64, size, created, user_id)`: archivos de proyectos y subproyectos.
+- `ediciones (owner_id, cid, editor_id, estado, fecha_limite, brief, entregas, mensajes, …)`: la edición de cada pieza asignada a una cuenta de editor (rol `editor`, ligada al dueño por `users.owner_id`). Fuera del JSONB para que el dueño y el editor nunca se pisen.
+- `vision (owner_id, plantilla, css, campos)` y `vision_versiones (owner_id, v, creada, origen, autor, resumen, datos, cambios)`: la «Visión» de contenido (Instagram → Visión). La plantilla se importa una vez con `scripts/importar-vision.mjs` desde un esquema HTML con casillas `data-k`; cada guardado (a mano, por MCP o al restaurar) es una versión nueva con todas las casillas y la lista de las que cambiaron.
 - `app_state (id=1, data)`: legado de la versión mono-usuario. En el primer arranque multiusuario su contenido se copia al admin y la tabla se conserva como copia.
 
 Claves top-level de `data` (las describe en detalle el `SYSTEM_PROMPT`):
@@ -201,6 +203,8 @@ Autenticación: cookie `os_session` (login del navegador) o Basic auth (`-u user
 | GET/DELETE | `/api/chats`, `/api/chats/:id` | historial de chats |
 | POST | `/api/chat` | mensaje al asistente (tools: `read_state`, `log_day`, `append_journal`, `add_item`, `set_value`) |
 | POST/GET/DELETE | `/api/archivos`, `/api/imagenes` | binarios |
+| GET | `/api/vision`, `/api/vision/v/:v` | la visión (plantilla, estilos, casillas, versión actual e historial) y una versión concreta con la anterior |
+| POST | `/api/vision`, `/api/vision/restaurar`, `/api/vision/importar` | guardar casillas (versión nueva), volver a una versión (otra versión nueva), importar la plantilla |
 
 `set_value` del chat tiene bloqueado el acceso a `integraciones`.
 

@@ -650,6 +650,50 @@
   .kb-vacio { color: var(--ink-3); font-size: 12px; padding: 4px; }
   .kb-mas { background: none; border: 1px dashed var(--border-strong); color: var(--ink-3); border-radius: 8px; padding: 7px; font-family: inherit; font-size: 12px; cursor: pointer; }
   .kb-mas:hover { color: var(--ink); }
+  /* ---- Instagram · Visión (Creator Vision) · 15 oct 2026 ----
+     El documento trae su propio CSS (todo bajo .cv, clases cv-*, variables --cv-*): aquí se ata al tema. */
+  .cv { container: cv / inline-size; --cv-bg: var(--surface-2); --cv-paper: var(--surface); --cv-ink: var(--ink); --cv-muted: var(--ink-3); --cv-line: var(--border); --cv-v: var(--good); --cv-vv: var(--good); --cv-soft: var(--good-bg); --cv-dash: var(--border-strong); --cv-warn: var(--warn); color: var(--cv-ink); font-size: 14px; line-height: 1.4; }
+  #cvDoc .cv-wrap { max-width: none; padding: 4px 0 40px; gap: 30px; }
+  #cvDoc [data-k].cv-cambiada { outline: 2px solid var(--accent); outline-offset: 2px; }
+  #cvDoc:not(.editando) [data-k] { cursor: default; }
+  #cvDoc:not(.editando) .cv-tree .cv-slot, #cvDoc:not(.editando) .cv-slot.cv-pop { cursor: zoom-in; }
+  #cvDoc.editando [data-k] { cursor: text; }
+  #cvDoc.editando .cv-tree .cv-slot, #cvDoc.editando .cv-slot.cv-pop { max-height: none; overflow: visible; }
+  #cvDoc.editando .cv-slot.cv-clamp::before, #cvDoc.editando .cv-slot.cv-clamp::after { display: none; }
+  #cvDoc.editando td[data-k]:hover { background: var(--surface-2); }
+  #cvDoc.editando [data-k]:focus { box-shadow: 0 0 0 2px var(--accent); }
+  #cvDoc .cv-tree > * { max-width: 100%; } /* el árbol centra a sus hijos: que ninguno crezca más que la página */
+  /* en pantallas estrechas las tablas se desplazan de lado dentro de su caja, sin mover la página */
+  @container cv (max-width: 700px) {
+    #cvDoc table { display: block; overflow-x: auto; max-width: 100%; }
+    #cvDoc table > tbody { display: table; width: 100%; min-width: 620px; }
+  }
+  .cv-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+  .cv-bar .cv-ver { flex: 1; min-width: 220px; font-size: 13px; color: var(--ink-3); }
+  .cv-bar .cv-ver b { color: var(--ink); font-weight: 600; }
+  .cv-bar .cv-ver.cv-antigua { color: var(--ink-2); background: var(--accent-soft); border-radius: 8px; padding: 8px 12px; }
+  .cv-bar button[disabled] { opacity: 0.45; cursor: default; }
+  .cv-big-ov { position: fixed; inset: 0; background: rgba(17,19,24,0.45); z-index: 150; display: flex; align-items: center; justify-content: center; padding: 24px; }
+  .cv-big { width: min(820px, 100%); max-height: 86vh; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,0.25); }
+  .cv-big-h { display: flex; align-items: flex-start; gap: 12px; padding: 14px 18px 12px; border-bottom: 1px solid var(--hairline); }
+  .cv-big-h b { flex: 1; font-size: 14.5px; font-weight: 600; color: var(--ink); }
+  .cv-big-h small { display: block; font-weight: 400; font-size: 12px; color: var(--ink-3); margin-top: 2px; }
+  .cv-big-b { overflow: auto; padding: 16px 18px 20px; font-size: 15.5px; line-height: 1.55; white-space: pre-wrap; color: var(--ink); }
+  .cv-big-b ol, .cv-big-b ul { margin: 0; padding-left: 22px; }
+  .cv-vrow { padding: 12px 10px; border-bottom: 1px solid var(--hairline); cursor: pointer; border-radius: 8px; }
+  .cv-vrow:hover, .cv-vrow.sel { background: var(--surface-2); }
+  .cv-vrow-h { display: flex; align-items: baseline; gap: 8px; font-size: 12.5px; color: var(--ink-3); }
+  .cv-vrow-h b { color: var(--ink); font-size: 14px; }
+  .cv-act { margin-left: auto; font-size: 11.5px; border-radius: 4px; padding: 1px 6px; background: var(--good-bg); color: var(--good); }
+  .cv-vrow-r { font-size: 13.5px; color: var(--ink-2); margin-top: 3px; }
+  .cv-vrow-n { font-size: 12px; color: var(--ink-3); margin-top: 2px; }
+  .cv-det { padding: 4px 10px 18px; border-bottom: 1px solid var(--hairline); }
+  .cv-det-acts { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0 2px; }
+  .cv-dk { font-size: 12.5px; font-weight: 600; color: var(--ink-2); margin: 16px 0 5px; }
+  .cv-dk span { display: block; font-weight: 400; color: var(--ink-3); font-size: 11.5px; }
+  .cv-diff { font-size: 13px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; background: var(--bg); border: 1px solid var(--hairline); border-radius: 8px; padding: 8px 10px; color: var(--ink-2); }
+  .cv-diff del { background: var(--bad-bg); color: var(--bad); text-decoration: line-through; }
+  .cv-diff ins { background: var(--good-bg); color: var(--good); text-decoration: none; }
   @media (max-width: 700px) {
     .kb, .kb.kb-5 { grid-auto-columns: 80%; scroll-snap-type: x mandatory; }
     .kb-col { scroll-snap-align: start; }
@@ -770,6 +814,7 @@
 <aside class="side-panel" id="subPanel"></aside>
 <aside class="side-panel" id="tareaPanel"></aside>
 <aside class="side-panel" id="notaPanel"></aside>
+<aside class="side-panel" id="cvHist"></aside>
 
 <script>
 const TABS = [
@@ -811,7 +856,7 @@ function parseHash() {
   finSub = FIN_SUBS.some((x) => x.id === s) ? s : "resumen";
   proySub = a === "proyectos" && s ? decodeURIComponent(s) : null;
   contSub = a === "instagram"
-    ? (["tablero", "edicion", "cola", "grabacion", "referencias"].includes(s) ? s : "tablero")
+    ? (["tablero", "edicion", "cola", "grabacion", "referencias", "vision"].includes(s) ? s : "tablero")
     : (a === "contenido" && ["reto", "piezas", "calendario"].includes(s) ? s : "reto");
   gymSub = a === "gym" && ["resumen", "tracker", "rutina"].includes(s) ? s : "resumen";
 }
@@ -3547,7 +3592,7 @@ const VIEWS = {
   instagram() {
     const nRev = (STATE.contenido || []).filter((c) => c.edicion?.estado === "entregada").length;
     const nav = `<div class="subnav">${IG_TABS.map((t) => `<button class="${contSub === t.id ? "active" : ""}" onclick="location.hash='instagram/${t.id}'">${t.l}${t.id === "edicion" && nRev ? ` · ${nRev}` : ""}</button>`).join("")}</div>`;
-    const vista = contSub === "edicion" ? vistaEdicionIG() : contSub === "cola" ? vistaColaIG() : contSub === "grabacion" ? vistaGrabacionIG() : contSub === "referencias" ? vistaReferenciasIG() : vistaTableroIG();
+    const vista = contSub === "edicion" ? vistaEdicionIG() : contSub === "cola" ? vistaColaIG() : contSub === "grabacion" ? vistaGrabacionIG() : contSub === "referencias" ? vistaReferenciasIG() : contSub === "vision" ? vistaVisionIG() : vistaTableroIG();
     return nav + vista;
   },
   agenda() { return vistaAgendaCal() + VIEWS.tareas(); },
@@ -4277,7 +4322,7 @@ function vistaAgendaCal() {
    La ficha de cada pieza (renderPiezaPanel) va en pestañas: Guion · Publicación · Producción · Edición · Notas. */
 const IG_TABS = [
   { id: "tablero", l: "Tablero" }, { id: "edicion", l: "Edición" }, { id: "cola", l: "Cola" },
-  { id: "grabacion", l: "Grabación" }, { id: "referencias", l: "Referencias" },
+  { id: "grabacion", l: "Grabación" }, { id: "referencias", l: "Referencias" }, { id: "vision", l: "Visión" },
 ];
 const RANGO_PIEZA = { idea: 0, guion: 1, grabar: 2, editar: 3, lista: 4, publicado: 5 };
 const ED_ESTADOS = [
@@ -4682,6 +4727,234 @@ function abrirTeleprompter(c) {
   pinta();
 }
 
+/* ---------- Visión (Creator Vision) con historial de versiones · 15 oct 2026 ----------
+   Plantilla y estilos vienen del servidor (importados del esquema original con scripts/importar-vision.mjs);
+   las casillas [data-k] se rellenan con la versión que toque. Leer: clic en una casilla larga = en grande.
+   Editar: «Editar» → escribir → «Guardar versión» con un resumen. Historial: qué cambió en cada versión,
+   verla entera y restaurarla (restaurar crea una versión nueva: el pasado nunca se reescribe).
+   Por MCP: get_vision / update_vision (solo cuando la persona lo pide; cada cambio es una versión). */
+let VISION = null, cvViendo = null, cvEditando = false, cvBorrador = {}, cvHistSel = null;
+const CV_ORIGEN = { importada: "importada", manual: "a mano", claude: "Claude", restaurada: "restaurada" };
+async function cargaVision() {
+  try {
+    const r = await fetch("/api/vision", { credentials: "include" });
+    VISION = r.ok ? await r.json() : { error: (await r.json().catch(() => ({}))).error || "HTTP " + r.status };
+  } catch (e) { VISION = { error: e.message }; }
+  return VISION;
+}
+function vistaVisionIG() {
+  if (!VISION) {
+    cargaVision().then(() => { if (active === "instagram" && contSub === "vision") renderContent(); });
+    return `<div class="card"><div class="empty-note">Cargando la visión…</div></div>`;
+  }
+  if (VISION.error) return `<div class="card"><div class="empty-note">No se pudo cargar la visión: ${esc(VISION.error)}</div></div>`;
+  if (VISION.vacia) return `<div class="card"><h2>Visión</h2><div class="sub" style="margin-top:6px">Aquí vive tu Creator Vision (mensaje, pilares, a quién le hablas, tu historia, la rueda LIFE, los ganchos y el planificador) con su historial de versiones. Todavía no se ha importado.</div></div>`;
+  setTimeout(pintaVision, 0);
+  return `<div class="cv-bar" id="cvBar"></div><div class="cv${cvEditando ? " editando" : ""}" id="cvDoc"></div>`;
+}
+function pintaVision() {
+  const doc = $("cvDoc");
+  if (!doc || !VISION?.plantilla) return;
+  let st = document.getElementById("cvCss");
+  if (!st) { st = document.createElement("style"); st.id = "cvCss"; document.head.appendChild(st); }
+  if (st.textContent !== VISION.css) st.textContent = VISION.css;
+  doc.classList.toggle("editando", cvEditando);
+  doc.innerHTML = VISION.plantilla;
+  const datos = cvViendo ? cvViendo.datos || {} : VISION.version?.datos || {};
+  const marcadas = new Set(cvViendo && cvViendo.v > 1 ? cvViendo.cambios || [] : []);
+  doc.querySelectorAll("[data-k]").forEach((el) => {
+    const k = el.dataset.k;
+    el.innerHTML = cvEditando && k in cvBorrador ? cvBorrador[k] : datos[k] || "";
+    el.classList.toggle("cv-filled", !!el.textContent.trim());
+    if (marcadas.has(k)) el.classList.add("cv-cambiada");
+    if (cvEditando) el.contentEditable = "true";
+  });
+  cvCuenta(doc);
+  if (!cvEditando) requestAnimationFrame(() => cvClamp(doc));
+  pintaBarVision();
+}
+function cvCuenta(doc) {
+  doc.querySelectorAll(".cv-quads .cv-pillar").forEach((p) => {
+    const n = p.querySelectorAll("[data-k] li").length, b = p.querySelector(".cv-cnt");
+    if (b) b.textContent = n ? `${n} momento${n === 1 ? "" : "s"}` : "";
+  });
+}
+function cvClamp(doc) {
+  doc.querySelectorAll(".cv-tree .cv-slot, .cv-slot.cv-pop").forEach((el) => {
+    el.classList.remove("cv-clamp");
+    if (el.scrollHeight > el.clientHeight + 2) el.classList.add("cv-clamp");
+  });
+}
+function pintaBarVision() {
+  const bar = $("cvBar");
+  if (!bar || !VISION?.version) return;
+  const act = VISION.version, n = (VISION.versiones || []).length;
+  if (cvEditando) {
+    const c = cvCambiosPendientes().length;
+    bar.innerHTML = `<div class="cv-ver"><b>Editando</b> · escribe directamente en las casillas. ${c ? `${c} casilla${c === 1 ? "" : "s"} cambiada${c === 1 ? "" : "s"}.` : "Sin cambios todavía."}</div>
+      <button class="btn-mini" onclick="cancelaEdicionVision()">Cancelar</button>
+      <button class="btn-mini primary" onclick="guardaVision()"${c ? "" : " disabled"}>Guardar versión</button>`;
+    return;
+  }
+  if (cvViendo) {
+    bar.innerHTML = `<div class="cv-ver cv-antigua"><b>Estás viendo la v${cvViendo.v}</b> · ${fechaHora(cvViendo.creada)} · ${esc(cvViendo.resumen)}${cvViendo.v > 1 ? ". Lo marcado cambió en esa versión." : ""}</div>
+      <button class="btn-mini" onclick="cvViendo=null;pintaVision()">Volver a la actual</button>
+      ${cvViendo.v !== act.v ? `<button class="btn-mini" onclick="restauraVision(${cvViendo.v})">Restaurar esta versión</button>` : ""}`;
+    return;
+  }
+  bar.innerHTML = `<div class="cv-ver"><b>v${act.v}</b> · ${fechaHora(act.creada)} · ${esc(CV_ORIGEN[act.origen] || act.origen)}${act.resumen ? ` · ${esc(act.resumen)}` : ""}</div>
+    <button class="btn-mini" onclick="abrirHistVision()">Historial · ${n}</button>
+    <button class="btn-mini primary" onclick="editaVision()">Editar</button>`;
+}
+/* leer: casillas largas en grande; en la rueda, clic en el nombre del cuadrante = su lista */
+function cvGrande(el) {
+  const c = (VISION.campos || []).find((x) => x.k === el.dataset.k) || {};
+  const ov = document.createElement("div");
+  ov.className = "cv-big-ov";
+  ov.innerHTML = `<div class="cv-big" role="dialog"><div class="cv-big-h"><b>${esc(c.etiqueta || "Casilla")}<small>${esc(c.seccion || "")}</small></b><button class="btn-mini" data-x>Cerrar</button></div><div class="cv-big-b">${el.innerHTML || `<span class="empty-note">Vacía</span>`}</div></div>`;
+  ov.addEventListener("mousedown", (e) => { if (e.target === ov || e.target.closest("[data-x]")) ov.remove(); });
+  document.body.appendChild(ov);
+}
+document.addEventListener("click", (e) => {
+  const doc = e.target.closest?.("#cvDoc");
+  if (!doc || cvEditando) return;
+  const q = e.target.closest("text.cv-qlab");
+  if (q) { const el = doc.querySelector(`[data-k="life_${q.getAttribute("data-q")}"]`); if (el) cvGrande(el); return; }
+  const el = e.target.closest("[data-k]");
+  if (el && (el.classList.contains("cv-clamp") || el.matches(".cv-tree [data-k], .cv-pop"))) cvGrande(el);
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") {
+    const ov = document.querySelector(".cv-big-ov");
+    if (ov) { ov.remove(); return; }
+    if ($("cvHist")?.classList.contains("show") && !document.querySelector(".osui-ov")) cerrarHistVision();
+    return;
+  }
+  if (e.key === "Enter" && cvEditando && e.target.closest?.("#cvDoc td[data-k]")) { e.preventDefault(); document.execCommand("insertLineBreak"); }
+});
+/* editar */
+function editaVision() { cvEditando = true; cvBorrador = {}; cvViendo = null; pintaVision(); }
+document.addEventListener("input", (e) => {
+  const el = e.target.closest?.("#cvDoc [data-k]");
+  if (!el || !cvEditando) return;
+  cvBorrador[el.dataset.k] = el.innerHTML;
+  el.classList.toggle("cv-filled", !!el.textContent.trim());
+  cvCuenta($("cvDoc"));
+  pintaBarVision();
+});
+document.addEventListener("paste", (e) => {
+  const el = e.target.closest?.("#cvDoc [data-k]");
+  if (!el || !cvEditando) return;
+  e.preventDefault();
+  document.execCommand("insertText", false, (e.clipboardData || window.clipboardData).getData("text"));
+});
+const cvNorm = (h) => String(h || "").replace(/&nbsp;/g, " ").replace(/(<br\s*\/?>|\s)+$/i, "").trim();
+function cvCambiosPendientes() {
+  const act = VISION?.version?.datos || {};
+  return Object.keys(cvBorrador).filter((k) => cvNorm(cvBorrador[k]) !== cvNorm(act[k]));
+}
+async function guardaVision() {
+  const ks = cvCambiosPendientes();
+  if (!ks.length) { cvEditando = false; pintaVision(); return; }
+  const r = await OSUI.form({
+    titulo: "Guardar versión nueva",
+    texto: `${ks.length} casilla${ks.length === 1 ? "" : "s"} cambiada${ks.length === 1 ? "" : "s"}. La versión de ahora queda en el historial.`,
+    campos: [{ id: "resumen", label: "Qué has cambiado", placeholder: "Una frase: qué y por qué" }], ok: "Guardar",
+  });
+  if (!r) return;
+  try {
+    await apiPost("/api/vision", { cambios: Object.fromEntries(ks.map((k) => [k, cvBorrador[k]])), resumen: r.resumen });
+    cvEditando = false; cvBorrador = {};
+    await cargaVision();
+    if (active === "instagram" && contSub === "vision") renderContent();
+  } catch (err) { OSUI.form({ titulo: "No se pudo guardar", texto: esc(err.message), campos: [], ok: "Vale" }); }
+}
+async function cancelaEdicionVision() {
+  if (cvCambiosPendientes().length && !(await OSUI.confirm("¿Descartar los cambios?", "Lo que has escrito en este modo edición se pierde.", { ok: "Descartar" }))) return;
+  cvEditando = false; cvBorrador = {}; pintaVision();
+}
+/* historial */
+function abrirHistVision() {
+  cvHistSel = null;
+  pintaHistVision();
+  const el = $("cvHist");
+  if (!el.classList.contains("show")) { void el.offsetWidth; el.classList.add("show"); }
+}
+function cerrarHistVision() { $("cvHist")?.classList.remove("show"); }
+function pintaHistVision() {
+  const p = $("cvHist");
+  if (!p || !VISION?.versiones) return;
+  const actual = VISION.version?.v;
+  const porK = new Map((VISION.campos || []).map((c) => [c.k, c]));
+  const detalle = (x) => {
+    const filas = x.v === 1
+      ? `<div class="empty-note" style="margin-top:10px">Versión inicial: ${Object.keys(x.datos || {}).length} casillas con texto.</div>`
+      : (x.cambios || []).map((k) => { const c = porK.get(k) || {}; return `<div class="cv-dk">${esc(c.etiqueta || k)}<span>${esc(c.seccion || "")}</span></div>${cvDiffHTML(x.anterior?.[k], x.datos?.[k])}`; }).join("") || `<div class="empty-note">Sin cambios de texto.</div>`;
+    return `<div class="cv-det"><div class="cv-det-acts"><button class="btn-mini" onclick="verVersionVision()">Ver el documento así</button>${x.v !== actual ? `<button class="btn-mini" onclick="restauraVision(${x.v})">Restaurar esta versión</button>` : ""}</div>${filas}</div>`;
+  };
+  p.innerHTML = `<div class="sp-top"><div class="sp-ruta"><span class="rlink" onclick="cerrarHistVision()">Visión</span><span class="sep">/</span><span class="act">Historial</span></div><span style="flex:1"></span><button title="Cerrar" onclick="cerrarHistVision()">${OSIcons.cerrar}</button></div>
+    <div class="sp-body"><div class="sub" style="margin:2px 0 10px">Cada guardado es una versión. Toca una para ver qué cambió.</div>${VISION.versiones.map((y) => `
+      <div class="cv-vrow${cvHistSel?.v === y.v ? " sel" : ""}" onclick="selVersionVision(${y.v})">
+        <div class="cv-vrow-h"><b>v${y.v}</b><span>${fechaHora(y.creada)} · ${esc(CV_ORIGEN[y.origen] || y.origen)}</span>${y.v === actual ? `<span class="cv-act">actual</span>` : ""}</div>
+        <div class="cv-vrow-r">${esc(y.resumen)}</div>
+        <div class="cv-vrow-n">${y.v === 1 ? "inicial" : `${y.n_cambios} casilla${y.n_cambios === 1 ? "" : "s"}`}</div>
+      </div>${cvHistSel?.v === y.v ? detalle(cvHistSel) : ""}`).join("")}</div>`;
+}
+async function selVersionVision(v) {
+  if (cvHistSel?.v === v) { cvHistSel = null; pintaHistVision(); return; }
+  try {
+    const r = await fetch(`/api/vision/v/${v}`, { credentials: "include" });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    cvHistSel = await r.json();
+  } catch (e) { cvHistSel = null; }
+  pintaHistVision();
+}
+function verVersionVision() {
+  if (!cvHistSel) return;
+  cvViendo = cvHistSel.v === VISION.version?.v ? null : cvHistSel;
+  cvEditando = false;
+  cerrarHistVision();
+  pintaVision();
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+async function restauraVision(v) {
+  if (!(await OSUI.confirm(`¿Volver a la v${v}?`, "Se crea una versión nueva con su contenido. Lo de ahora queda en el historial.", { ok: "Restaurar", danger: false }))) return;
+  try {
+    await apiPost("/api/vision/restaurar", { v });
+    cvViendo = null; cvHistSel = null;
+    await cargaVision();
+    if ($("cvHist")?.classList.contains("show")) pintaHistVision();
+    if (active === "instagram" && contSub === "vision") renderContent();
+  } catch (err) { OSUI.form({ titulo: "No se pudo restaurar", texto: esc(err.message), campos: [], ok: "Vale" }); }
+}
+/* diferencias palabra a palabra entre dos versiones de una casilla */
+function cvTexto(html) {
+  const d = document.createElement("div");
+  d.innerHTML = html || "";
+  d.querySelectorAll("br").forEach((b) => b.replaceWith("\n"));
+  d.querySelectorAll("ol, ul").forEach((l) => { let n = 0; l.querySelectorAll(":scope > li").forEach((li) => { n++; li.prepend(l.tagName === "OL" ? `${n}. ` : "- "); li.append("\n"); }); });
+  d.querySelectorAll("div, p").forEach((x) => x.append("\n"));
+  return d.textContent.replace(/\n{3,}/g, "\n\n").trim();
+}
+function cvDiffHTML(antesH, ahoraH) {
+  const a = cvTexto(antesH), b = cvTexto(ahoraH);
+  if (!a) return `<div class="cv-diff"><ins>${esc(b)}</ins></div>`;
+  if (!b) return `<div class="cv-diff"><del>${esc(a)}</del></div>`;
+  const ta = a.split(/(\s+)/), tb = b.split(/(\s+)/), n = ta.length, m = tb.length;
+  if (n * m > 1500000) return `<div class="cv-diff"><del>${esc(a)}</del></div><div class="cv-diff" style="margin-top:6px"><ins>${esc(b)}</ins></div>`;
+  const L = Array.from({ length: n + 1 }, () => new Uint16Array(m + 1));
+  for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) L[i][j] = ta[i] === tb[j] ? L[i + 1][j + 1] + 1 : Math.max(L[i + 1][j], L[i][j + 1]);
+  let i = 0, j = 0, out = "";
+  while (i < n && j < m) {
+    if (ta[i] === tb[j]) { out += esc(ta[i]); i++; j++; }
+    else if (L[i + 1][j] >= L[i][j + 1]) out += `<del>${esc(ta[i++])}</del>`;
+    else out += `<ins>${esc(tb[j++])}</ins>`;
+  }
+  while (i < n) out += `<del>${esc(ta[i++])}</del>`;
+  while (j < m) out += `<ins>${esc(tb[j++])}</ins>`;
+  return `<div class="cv-diff">${out.replace(/<\/del><del>/g, "").replace(/<\/ins><ins>/g, "")}</div>`;
+}
+
 function pendiente(nombre, texto, fase) {
   return `<div class="card"><h2>${nombre}</h2><div class="note">${texto}</div><div class="empty-note" style="margin-top:10px">Pendiente de construir · fase ${fase}.</div></div>`;
 }
@@ -4689,7 +4962,9 @@ function pendiente(nombre, texto, fase) {
 function renderContent() {
   renderTitle();
   if (!STATE || !DASH) return;
-  document.querySelector(".wrap")?.classList.toggle("ancho", active === "instagram" && ["tablero", "edicion"].includes(contSub));
+  // la visión en modo edición no se repinta con el refresco de datos: se perdería lo que se está escribiendo
+  if (active === "instagram" && contSub === "vision" && cvEditando && $("cvDoc")) return;
+  document.querySelector(".wrap")?.classList.toggle("ancho", active === "instagram" && ["tablero", "edicion", "vision"].includes(contSub));
   $("content").innerHTML = VIEWS[active]();
   initHeatmaps(); // dimensiona los heatmaps y los deja en lo más reciente
   initProyPizarra(); // pizarra editable de la página de proyecto
