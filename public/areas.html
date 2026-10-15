@@ -3401,9 +3401,11 @@ const VIEWS = {
       ? `<div class="card">${chartHead}<div class="sub">${okN} de ${con30.length} registradas llegan a ${umbral}h</div><div class="chart-bars">${barsSueno(d30, umbral)}</div></div>`
       : `<div class="card">${chartHead}<div class="empty-note">Sin noches registradas. Registra aquí a qué hora te acuestas y te levantas, o dile a Claude «dormí 7 horas».</div></div>`;
 
+    // las rutinas salen con el nombre que cada persona le dio al hábito (si lo tiene)
+    const habLabel = (id, fb) => ((STATE.config?.senales || []).find((x) => x.id === id) || {}).label || fb;
     const rutinas = `<div class="card"><h2>Rutinas de la noche</h2>
-      ${rutRow("Despertar 6:00", "despertar")}
-      ${rutRow("Sin móvil en cama", "no_movil")}
+      ${rutRow(habLabel("despertar", "Despertar a mi hora"), "despertar")}
+      ${rutRow(habLabel("no_movil", "Sin móvil en la cama"), "no_movil")}
     </div>`;
 
     return kpis + chart + rutinas + journalCard("sueno");

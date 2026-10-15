@@ -31,20 +31,20 @@ const { Pool } = pg;
 const pool = new Pool({ connectionString: DATABASE_URL });
 
 /* ======================================================================
-   DEFAULTS — se siembran en la BD la primera vez; después la BD manda
-   y la IA puede modificarlos vía chat (pesos, umbrales, señales nuevas).
+   DEFAULTS — se siembran en la BD la primera vez; después la BD manda y se
+   cambian desde el panel o pidiéndoselo a Claude (pesos, umbrales, hábitos nuevos).
+   Son un punto de partida neutro: la bienvenida y el onboarding los ajustan a cada persona.
    ====================================================================== */
 const DEFAULT_CONFIG = {
   racha_min: 50, // score mínimo para que un día cuente en la racha
   equilibrio: 35, // score que deja la curva de capital plana: por encima compone, por debajo se deshace
   senales: [
-    { id: "contenido", label: "Contenido", tipo: "bool", peso: 25, hint: "Grabó, editó o publicó contenido" },
-    { id: "deep_work", label: "Deep work", tipo: "horas", peso: 20, umbral: 4, hint: "Horas de trabajo enfocado en el proyecto prioritario" },
-    { id: "entreno", label: "Entreno", tipo: "bool", peso: 15 },
-    { id: "sueno", label: "Sueño", tipo: "horas", peso: 15, umbral: 7 },
-    { id: "despertar", label: "Despertar 6:00", tipo: "bool", peso: 10 },
+    { id: "deep_work", label: "Trabajo enfocado", tipo: "horas", peso: 25, umbral: 3, hint: "Horas de trabajo o estudio sin distracciones en lo que más te importa" },
+    { id: "entreno", label: "Entreno", tipo: "bool", peso: 20 },
+    { id: "sueno", label: "Sueño", tipo: "horas", peso: 20, umbral: 7 },
+    { id: "despertar", label: "Despertar a mi hora", tipo: "bool", peso: 15 },
     { id: "nutricion", label: "Nutrición", tipo: "kcal", peso: 10, hint: "Calorías del día ≥ objetivo (no se marca a mano: se deriva de las kcal registradas)" },
-    { id: "no_movil", label: "Sin móvil en cama", tipo: "bool", peso: 5 },
+    { id: "no_movil", label: "Sin móvil en la cama", tipo: "bool", peso: 10 },
   ],
 };
 
@@ -590,7 +590,7 @@ function normalizarWidget(w) {
   return out;
 }
 
-/* "Despertar 6:20 + página leída" → "Despertar 6:20" · "Protocolo postural 10 min" → "Protocolo postural" */
+/* etiqueta corta de un hábito: "Leer + apuntar una idea" → "Leer" · "Estiramientos 10 min" → "Estiramientos" */
 const etiquetaCorta = (label) =>
   String(label || "").split(/\s+\+\s+|\s+≥|\s+\(/)[0].replace(/\s+\d+([.,]\d+)?\s*(min|h)$/i, "").trim();
 const fmtDec = (n) => String(Math.round(n * 10) / 10).replace(".", ",");
