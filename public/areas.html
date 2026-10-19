@@ -1512,6 +1512,14 @@ function rutRow(label, senalId) {
 function isoLocal(d) {
   return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
 }
+/* Día al que cuenta una publicación: lo que se publica de madrugada (00:00-05:59) es el vídeo
+   del día anterior (Alex llega tarde a casa y lo sube para el día que acaba de terminar). */
+const HORA_CORTE_PUB = 6;
+function diaDePublicacion(d = new Date()) {
+  const x = new Date(d.getTime());
+  if (x.getHours() < HORA_CORTE_PUB) x.setDate(x.getDate() - 1);
+  return isoLocal(x);
+}
 function senalOn(fecha, id) { return STATE.days?.[fecha]?.senales?.[id] === true; }
 function entrenoDe(fecha) { return senalOn(fecha, "entreno"); }
 
@@ -2454,7 +2462,7 @@ async function marcarPublicada(i) {
   if (!c) return;
   const r = await OSUI.form({ titulo: "Marcar publicada", texto: esc(c.titulo || ""), campos: [{ id: "url", label: "Link del reel (opcional)", valor: c.url || "", placeholder: "https://www.instagram.com/reel/…" }], ok: "Publicada" });
   if (!r) return;
-  c.estado = "publicado"; c.fecha_pub = isoLocal(new Date());
+  c.estado = "publicado"; c.fecha_pub = diaDePublicacion();
   if (r.url.trim()) c.url = r.url.trim();
   saveClave("contenido");
 }
@@ -2596,7 +2604,7 @@ function aplicaPiezaForm(c, r) {
   const views = Number(r.views), likes = Number(r.likes);
   if (r.views !== "" && Number.isFinite(views)) c.views = views; else delete c.views;
   if (r.likes !== "" && Number.isFinite(likes)) c.likes = likes; else delete c.likes;
-  if (c.estado === "publicado" && !c.fecha_pub) c.fecha_pub = isoLocal(new Date());
+  if (c.estado === "publicado" && !c.fecha_pub) c.fecha_pub = diaDePublicacion();
   if (c.estado !== "publicado") delete c.fecha_pub;
 }
 
@@ -4311,7 +4319,7 @@ async function cargaEditores(forzar) {
 }
 async function guardaContenido() { await postClaves({ contenido: STATE.contenido }); load(); }
 function muevePieza(c, estado) {
-  const hoy = isoLocal(new Date());
+  const hoy = diaDePublicacion(); // de madrugada, «hoy» para publicar es el día anterior
   c.estado = estado;
   if (estado === "publicado") { if (!c.fecha_pub) c.fecha_pub = c.fecha_plan && c.fecha_plan <= hoy ? c.fecha_plan : hoy; }
   else delete c.fecha_pub;
