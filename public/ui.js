@@ -58,7 +58,7 @@ for (const ev of ["pagereveal", "pageswap"]) {
    siempre (legado). Lo usan la barra, la bienvenida, Configuración y el «Hoy toca» del panel. */
 window.OS_MODULOS = (function () {
   const catalogo = [
-    { id: "agenda", grupo: "Resumen", label: "Agenda", href: "/areas.html#agenda", icon: "calendario", fb: "▦", desc: "Calendario con tareas, recordatorios y lo que toca cada día." },
+    { id: "agenda", grupo: "Resumen", label: "Agenda", href: "/areas.html#agenda", icon: "calendario", fb: "▦", desc: "Calendario por mes o por semana con lo que toca cada día: publicaciones, recordatorios y entrenos hechos." },
     { id: "instagram", grupo: "Áreas", label: "Instagram", href: "/areas.html#instagram", icon: "instagram", fb: "◎", desc: "Piezas de contenido de la idea a la publicación: tablero, cola, grabación, edición con editor, referencias y visión." },
     { id: "skool", grupo: "Áreas", label: "Skool", href: "/areas.html#skool", icon: "users", fb: "◌", desc: "Reservado: todavía sin construir.", reservado: true },
     { id: "gym", grupo: "Áreas", label: "Gym", href: "/areas.html#gym", icon: "gym", fb: "⚓", desc: "Rutina semanal, las series de cada día frente a la última vez y el peso corporal." },

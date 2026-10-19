@@ -93,12 +93,34 @@
   .badge.revision { color: var(--warn); background: var(--warn-bg); }
   .badge.nota { color: var(--ink-3); background: var(--surface-2); }
   /* agenda: chips por tipo */
-  .pieza-chip.tarea { background: var(--accent-soft); color: var(--accent); border: 1px solid transparent; }
   .pieza-chip.rec { background: var(--surface); color: var(--ink-2); border: 1px solid var(--border); }
-  .pieza-chip.gym { background: transparent; color: var(--ink-3); border: 1px dashed var(--border-strong); }
   .pieza-chip.gymok { background: var(--good-bg); color: var(--good); border: 1px solid transparent; }
   .ag-leyenda { display: flex; gap: 12px; flex-wrap: wrap; font-size: 11.5px; color: var(--ink-3); margin-top: 10px; }
   .ag-leyenda i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; vertical-align: -1px; margin-right: 4px; }
+  /* agenda: navegación (Hoy ‹ › título · Mes | Semana) y vista semanal */
+  .ag-nav { flex-wrap: wrap; row-gap: 8px; }
+  .ag-nav .ag-hoy { width: auto; padding: 0 10px; font-size: 12px; font-weight: 550; color: var(--ink-2); }
+  .ag-nav .ag-vista { margin: 0 0 0 auto; }
+  .ag-nav .ag-vista button { width: auto; height: auto; }
+  .semcal { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
+  .semcal .ag-dia { min-height: 250px; border: 1px solid var(--hairline); border-radius: 11px; background: var(--surface-2); padding: 7px 7px 9px; min-width: 0; }
+  .semcal .ag-dia.hoy { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .semcal .ag-dia-h { display: flex; align-items: baseline; gap: 5px; font-size: 11px; color: var(--ink-3); font-weight: 600; }
+  .semcal .ag-dia-h b { font-size: 17px; color: var(--ink); font-weight: 650; letter-spacing: -0.01em; }
+  .semcal .ag-dia.pasado .ag-dia-h b { color: var(--ink-3); }
+  .semcal .pieza-chip { white-space: normal; overflow-wrap: anywhere; font-size: 11.5px; line-height: 1.35; padding: 5px 7px; margin-top: 6px; }
+  .semcal .pieza-chip small { display: block; font-size: 10px; font-weight: 500; opacity: 0.75; margin-top: 1px; }
+  @media (max-width: 700px) {
+    .semcal { grid-template-columns: 1fr; gap: 0; }
+    .semcal .ag-dia { min-height: 0; display: flex; gap: 12px; border: 0; border-bottom: 1px solid var(--hairline); border-radius: 0; background: none; padding: 10px 2px; }
+    .semcal .ag-dia:last-child { border-bottom: 0; }
+    .semcal .ag-dia.hoy { outline: none; }
+    .semcal .ag-dia.hoy .ag-dia-h b { text-decoration: underline; text-underline-offset: 3px; }
+    .semcal .ag-dia-h { width: 46px; flex-shrink: 0; flex-direction: column; gap: 0; }
+    .semcal .ag-dia-b { flex: 1; min-width: 0; }
+    .semcal .ag-dia-b > .pieza-chip:first-child { margin-top: 0; }
+    .semcal .ag-dia-b:empty::after { content: "—"; color: var(--ink-3); font-size: 12px; }
+  }
   .badge.cerrado, .badge.gasto { color: var(--ink-3); background: var(--surface-2); }
   .item .nota { font-size: 13px; color: var(--ink-2); margin-top: 3px; }
   .item .meta { font-size: 11.5px; color: var(--ink-3); margin-top: 2px; }
@@ -849,9 +871,16 @@ let contSub = "reto"; // pestaña de contenido (#contenido/reto | #contenido/pie
 let contFiltro = "todas";
 let ideasFiltro = "nueva";
 let calMes = new Date().toISOString().slice(0, 7);
+let agVista = "mes"; // agenda: #agenda/mes | #agenda/semana (solo #agenda = la última que se usó)
+let calSemana = null; // lunes de la semana que enseña la vista semanal
 let gymSub = "resumen"; // #gym/resumen | #gym/tracker | #gym/rutina
 function parseHash() {
   const [a, s] = location.hash.slice(1).split("/");
+  if (a === "agenda") {
+    let ultima = null;
+    try { ultima = localStorage.getItem("os_agenda_vista"); } catch (e) {}
+    agVista = ["mes", "semana"].includes(s) ? s : ultima === "semana" ? "semana" : "mes";
+  }
   active = TABS.some((t) => t.id === a) ? a : "proyectos";
   finSub = FIN_SUBS.some((x) => x.id === s) ? s : "resumen";
   proySub = a === "proyectos" && s ? decodeURIComponent(s) : null;
@@ -3556,7 +3585,7 @@ const VIEWS = {
     const vista = contSub === "edicion" ? vistaEdicionIG() : contSub === "cola" ? vistaColaIG() : contSub === "grabacion" ? vistaGrabacionIG() : contSub === "referencias" ? vistaReferenciasIG() : contSub === "vision" ? vistaVisionIG() : vistaTableroIG();
     return nav + vista;
   },
-  agenda() { return vistaAgendaCal() + VIEWS.tareas(); },
+  agenda() { return vistaAgendaCal(); },
   skool() { return pendiente("Skool", "Miembros de la comunidad, de qué pieza viene cada alta y el embudo: visitas al perfil, clics al enlace, altas. Se monta cuando abra la comunidad.", 4); },
   bandeja() {
     const items = (STATE.bandeja || []).slice().reverse();
@@ -4234,46 +4263,77 @@ function renderNotaPanel() {
   };
 }
 
-/* ======================== AGENDA: todo lo que tiene fecha, en un mes ======================== */
-const DIA_ID = ["domingo", "lunes", "martes", "miercoles", "jueves", "viernes", "sabado"];
+/* ======================== AGENDA: todo lo que tiene fecha, por mes o por semana ======================== */
+const masDias = (f, n) => { const d = new Date(f + "T12:00"); d.setDate(d.getDate() + n); return isoLocal(d); };
+const lunesDe = (f) => masDias(f, -((new Date(f + "T12:00").getDay() + 6) % 7));
+function rangoSemana(a, b) {
+  const da = new Date(a + "T12:00"), db = new Date(b + "T12:00");
+  const mes = (d) => d.toLocaleDateString("es", { month: "short" }).replace(".", "");
+  if (da.getFullYear() !== db.getFullYear()) return `${da.getDate()} ${mes(da)} ${da.getFullYear()} – ${db.getDate()} ${mes(db)} ${db.getFullYear()}`;
+  if (da.getMonth() !== db.getMonth()) return `${da.getDate()} ${mes(da)} – ${db.getDate()} ${mes(db)} ${db.getFullYear()}`;
+  return `${da.getDate()} – ${db.getDate()} ${mes(db)} ${db.getFullYear()}`;
+}
+function agMueve(n) {
+  if (agVista === "mes") return calMesMueve(n);
+  calSemana = masDias(calSemana, 7 * n);
+  renderContent();
+}
+function agHoy() { const h = isoLocal(new Date()); calMes = h.slice(0, 7); calSemana = lunesDe(h); renderContent(); }
+function agVer(v) {
+  try { localStorage.setItem("os_agenda_vista", v); } catch (e) {}
+  if (v === agVista) return;
+  // se queda en el mismo sitio: de un mes a la semana de hoy (o a la de su primer lunes) y de una semana al mes de su jueves
+  const h = isoLocal(new Date());
+  if (v === "semana") calSemana = calMes === h.slice(0, 7) ? lunesDe(h) : lunesDe(masDias(calMes + "-01", 6));
+  else if (calSemana) calMes = masDias(calSemana, 3).slice(0, 7);
+  location.hash = "agenda/" + v;
+}
+function chipsAgenda(f, piezas, semana) {
+  let chips = (piezas[f] || []).map((i) => { const c = STATE.contenido[i]; const pub = estadoPieza(c) === "publicado";
+    return `<span class="pieza-chip ${pub ? "pub" : "reel"}" onclick="event.stopPropagation();abrirPieza(${i})">${pub ? "✓ " : ""}${c.hora && !pub ? c.hora + " " : ""}${esc(c.titulo || "(sin título)")}${semana && !pub ? `<small>${esc(labelEstado(c))}</small>` : ""}</span>`; }).join("");
+  chips += (STATE.recordatorios || []).filter((r) => tocaRecordatorio(r, f)).map((r) => `<span class="pieza-chip rec${r.hechos?.[f] ? " pub" : ""}" onclick="event.stopPropagation();editarRecordatorio('${esc(r.id)}')">↻ ${esc(r.titulo)}</span>`).join("");
+  if (STATE.entrenos?.[f]) chips += `<span class="pieza-chip gymok">✓ Gym</span>`;
+  return chips;
+}
 function vistaAgendaCal() {
   const hoy = isoLocal(new Date());
-  const [y, m] = calMes.split("-").map(Number);
-  const first = new Date(y, m - 1, 1);
-  const start = (first.getDay() + 6) % 7;
-  const nDias = new Date(y, m, 0).getDate();
-  const piezas = {}, tareasD = {};
+  if (!calSemana) calSemana = lunesDe(hoy);
+  const piezas = {};
   (STATE.contenido || []).forEach((c, i) => {
     const f = estadoPieza(c) === "publicado" ? (c.fecha_pub || c.fecha_plan) : c.fecha_plan;
     if (f) (piezas[f] = piezas[f] || []).push(i);
   });
-  (STATE.tareas || []).forEach((t) => { if (t.fecha && estadoTarea(t) !== "completado") (tareasD[t.fecha] = tareasD[t.fecha] || []).push(t); });
-  const recs = (STATE.recordatorios || []);
-  const mesTxt = first.toLocaleDateString("es", { month: "long", year: "numeric" });
-  let grid = `<div class="pubcal">` + ["L", "M", "X", "J", "V", "S", "D"].map((d) => `<span class="cd">${d}</span>`).join("");
-  for (let i = 0; i < start; i++) grid += `<div class="day off"></div>`;
-  for (let d = 1; d <= nDias; d++) {
-    const f = `${calMes}-${String(d).padStart(2, "0")}`;
-    const dow = new Date(f + "T12:00").getDay();
-    let chips = (piezas[f] || []).map((i) => { const c = STATE.contenido[i]; const pub = estadoPieza(c) === "publicado";
-      return `<span class="pieza-chip ${pub ? "pub" : "reel"}" onclick="event.stopPropagation();abrirPieza(${i})">${pub ? "✓ " : ""}${c.hora && !pub ? c.hora + " " : ""}${esc(c.titulo || "(sin título)")}</span>`; }).join("");
-    chips += (tareasD[f] || []).map((t) => `<span class="pieza-chip tarea" onclick="event.stopPropagation();abrirTarea('${esc(t.id)}','area')">${esc(t.titulo)}</span>`).join("");
-    chips += recs.filter((r) => tocaRecordatorio(r, f)).map((r) => `<span class="pieza-chip rec${r.hechos?.[f] ? " pub" : ""}" onclick="event.stopPropagation();editarRecordatorio('${esc(r.id)}')">↻ ${esc(r.titulo)}</span>`).join("");
-    const rut = STATE.rutina_gym?.[DIA_ID[dow]];
-    if (STATE.entrenos?.[f]) chips += `<span class="pieza-chip gymok">✓ Gym</span>`;
-    else if (rut && (rut.ejercicios || []).length && f >= hoy) chips += `<span class="pieza-chip gym">Gym · ${esc(rut.titulo || DIA_ID[dow])}</span>`;
-    grid += `<div class="day${f === hoy ? " hoy" : ""}"><span class="dn">${d}</span>${chips}</div>`;
+  let titulo, cuerpo;
+  if (agVista === "semana") {
+    const dias = Array.from({ length: 7 }, (_, k) => masDias(calSemana, k));
+    titulo = rangoSemana(dias[0], dias[6]);
+    cuerpo = `<div class="semcal">${dias.map((f) => { const d = new Date(f + "T12:00");
+      return `<div class="ag-dia${f === hoy ? " hoy" : f < hoy ? " pasado" : ""}"><div class="ag-dia-h"><span>${DIAS_CORTOS[d.getDay()]}</span><b>${d.getDate()}</b></div><div class="ag-dia-b">${chipsAgenda(f, piezas, true)}</div></div>`; }).join("")}</div>`;
+  } else {
+    const [y, m] = calMes.split("-").map(Number);
+    const first = new Date(y, m - 1, 1);
+    const start = (first.getDay() + 6) % 7;
+    const nDias = new Date(y, m, 0).getDate();
+    const mesTxt = first.toLocaleDateString("es", { month: "long", year: "numeric" });
+    titulo = mesTxt.charAt(0).toUpperCase() + mesTxt.slice(1);
+    cuerpo = `<div class="pubcal">` + ["L", "M", "X", "J", "V", "S", "D"].map((d) => `<span class="cd">${d}</span>`).join("");
+    for (let i = 0; i < start; i++) cuerpo += `<div class="day off"></div>`;
+    for (let d = 1; d <= nDias; d++) {
+      const f = `${calMes}-${String(d).padStart(2, "0")}`;
+      cuerpo += `<div class="day${f === hoy ? " hoy" : ""}"><span class="dn">${d}</span>${chipsAgenda(f, piezas, false)}</div>`;
+    }
+    cuerpo += `</div>`;
   }
-  grid += `</div>`;
   return `<div class="card">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px;gap:8px;flex-wrap:wrap">
       <h2>Agenda</h2>
-      <span style="display:flex;gap:6px"><button class="btn-mini" onclick="nuevoRecordatorio()">${OSIcons.nueva} Recordatorio</button><button class="btn-mini primary" onclick="nuevaTarea()">${OSIcons.nueva} Tarea</button></span>
+      <button class="btn-mini" onclick="nuevoRecordatorio()">${OSIcons.nueva} Recordatorio</button>
     </div>
-    <div class="sub">Todo lo que tiene fecha: publicaciones, tareas con fecha límite, recordatorios y gym. Toca algo para abrirlo.</div>
-    <div class="mes-nav"><button onclick="calMesMueve(-1)">‹</button><b>${mesTxt.charAt(0).toUpperCase() + mesTxt.slice(1)}</b><button onclick="calMesMueve(1)">›</button></div>
-    ${grid}
-    <div class="ag-leyenda"><span><i style="background:rgba(227,57,130,.35)"></i>Publicación</span><span><i style="background:var(--accent-soft)"></i>Tarea</span><span><i style="background:var(--surface);border:1px solid var(--border)"></i>Recordatorio</span><span><i style="border:1px dashed var(--border-strong)"></i>Gym</span><span><i style="background:var(--good-bg)"></i>Hecho</span></div>
+    <div class="sub">Todo lo que tiene fecha: publicaciones, recordatorios y entrenos hechos. Toca algo para abrirlo.</div>
+    <div class="mes-nav ag-nav"><button class="ag-hoy" onclick="agHoy()">Hoy</button><button onclick="agMueve(-1)" aria-label="Anterior">‹</button><button onclick="agMueve(1)" aria-label="Siguiente">›</button><b>${titulo}</b>
+      <span class="filtros ag-vista"><button class="${agVista === "mes" ? "on" : ""}" onclick="agVer('mes')">Mes</button><button class="${agVista === "semana" ? "on" : ""}" onclick="agVer('semana')">Semana</button></span></div>
+    ${cuerpo}
+    <div class="ag-leyenda"><span><i style="background:rgba(227,57,130,.35)"></i>Publicación</span><span><i style="background:var(--surface);border:1px solid var(--border)"></i>Recordatorio</span><span><i style="background:var(--good-bg)"></i>Hecho</span></div>
   </div>`;
 }
 

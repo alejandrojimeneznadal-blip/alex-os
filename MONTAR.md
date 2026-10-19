@@ -137,7 +137,7 @@ Reglas: el panel sale de su vida, no copies el de nadie; no inventes datos; si a
 | Parte | Para qué |
 |---|---|
 | Panel | Siempre está: hábitos del día, score de 0 a 100 y la curva de crecimiento. |
-| Agenda | Calendario con tareas, recordatorios y lo que toca cada día. |
+| Agenda | Calendario por mes o por semana con lo que toca cada día: publicaciones, recordatorios y entrenos hechos. |
 | Instagram | Piezas de contenido de la idea a la publicación: tablero, cola, grabación, edición con un editor que solo ve lo que le asignas, referencias y la «visión» de tu marca. |
 | Gym | Rutina semanal, las series de cada día frente a la última vez y el peso corporal. |
 | Sueño | Horas por noche, medias, racha y rutinas de despertar. |

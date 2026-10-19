@@ -540,7 +540,7 @@ function renderHoyToca() {
     filas.push(`<div class="ht-row"><span class="k">Publicar</span><a href="/areas.html#instagram">${e(c.titulo || "(sin título)")}</a><span class="m">${c.hora ? e(c.hora) + " · " : ""}${ep(c) === "lista" ? "lista" : ep(c)}</span></div>`);
   const activa = (t) => (t.fecha && t.fecha <= hoy) || (t.inicio && t.inicio <= hoy && (!t.fecha || t.fecha >= hoy));
   const ts = on("agenda") ? (STATE.tareas || []).filter((t) => ["pendiente", "por_definir", "en_ejecucion", undefined].includes(t.estado) && !t.hecha && activa(t)).slice(0, 6) : [];
-  for (const t of ts) filas.push(`<div class="ht-row"><span class="k">Tarea</span><a href="/areas.html#agenda">${e(t.titulo)}</a><span class="m">${t.fecha && t.fecha < hoy ? "atrasada" : t.estado === "en_ejecucion" ? "en ejecución" : ""}</span></div>`);
+  for (const t of ts) filas.push(`<div class="ht-row"><span class="k">Tarea</span><a href="/areas.html#tareas">${e(t.titulo)}</a><span class="m">${t.fecha && t.fecha < hoy ? "atrasada" : t.estado === "en_ejecucion" ? "en ejecución" : ""}</span></div>`);
   for (const r of on("agenda") ? (STATE.recordatorios || []).filter((r) => tocaRec(r, hoy) && !r.hechos?.[hoy]).slice(0, 4) : [])
     filas.push(`<div class="ht-row"><span class="k">Recordatorio</span><a href="/areas.html#agenda">${e(r.titulo)}</a></div>`);
   const dow = new Date(hoy + "T12:00").getDay(), rut = STATE.rutina_gym?.[["domingo", "lunes", "martes", "miercoles", "jueves", "viernes", "sabado"][dow]];
