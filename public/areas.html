@@ -59,11 +59,14 @@
   .badge.guion { color: var(--ink-2); background: var(--surface-2); }
   .badge.lista { color: var(--accent); background: var(--accent-soft); }
   .badge.idea { color: var(--ink-3); background: var(--surface-2); }
-  .sp-campo { margin: 10px 0 14px; }
-  .sp-campo > label { display: block; font-size: 12px; color: var(--ink-3); margin-bottom: 4px; }
-  .sp-campo textarea, .sp-campo input { width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--ink); font-family: inherit; font-size: 13.5px; padding: 8px 10px; line-height: 1.45; }
-  .sp-campo textarea { min-height: 68px; resize: vertical; }
-  .sp-campo textarea:focus, .sp-campo input:focus { outline: none; border-color: var(--accent); }
+  /* campos de la ficha (gancho, cuerpo, caption…): como la pizarra de Notas, sin caja ni scroll propio.
+     El texto crece con lo que se escribe (field-sizing; donde no lo hay, creceCampos) */
+  .sp-campo { margin: 16px 0 18px; }
+  .sp-campo > label { display: block; font-size: 12px; font-weight: 650; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 2px; cursor: text; }
+  .sp-campo textarea, .sp-campo input { width: 100%; background: transparent; border: 0; border-radius: 0; color: var(--ink); font-family: inherit; font-size: 14px; line-height: 1.7; padding: 2px 0; }
+  .sp-campo textarea { resize: none; overflow: hidden; field-sizing: content; min-height: calc(1.7em + 4px); }
+  .sp-campo textarea::placeholder, .sp-campo input::placeholder { color: var(--placeholder); }
+  .sp-campo textarea:focus, .sp-campo input:focus { outline: none; }
   .sp-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; }
   @media (max-width: 600px) { .sp-grid2 { grid-template-columns: 1fr; } }
   .hoy-item { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--hairline); font-size: 13.5px; }
@@ -770,7 +773,7 @@
   .ft-sec { display: none; }
   .ft-sec.on { display: block; }
   .ft-dur { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 12.5px; color: var(--ink-3); margin-top: 2px; }
-  .ft-cnt { float: right; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+  .ft-cnt { float: right; color: var(--ink-3); font-variant-numeric: tabular-nums; font-weight: 500; text-transform: none; letter-spacing: 0; }
   .ft-nota { font-size: 12px; color: var(--ink-3); margin-top: -6px; }
   .sp-grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0 12px; }
   .ft-toma { display: flex; gap: 8px; align-items: flex-start; font-size: 13.5px; padding: 5px 0; color: var(--ink); cursor: pointer; }
@@ -2822,7 +2825,7 @@ function htmlEdicionFicha(c) {
       <div class="sp-prop"><label>Estado</label><select id="edEstado">${ED_ESTADOS.map((e) => `<option value="${e.id}" ${ed.estado === e.id ? "selected" : ""}>${e.l}</option>`).join("")}</select></div>
       <div class="sp-prop"><label>Entrega antes del</label><div class="osui-dw"><input class="osui-date" id="edLimite" type="text" readonly data-opt="1" data-iso="${ed.fecha_limite || ""}" value="${ed.fecha_limite ? ed.fecha_limite.split("-").reverse().join("/") : ""}" placeholder="sin fecha"></div></div>
     </div>
-    <div class="sp-campo"><label>Indicaciones para el editor</label><textarea id="edBrief" rows="4" placeholder="Ritmo, música, textos en pantalla, referencias, duración…">${esc(ed.brief)}</textarea></div>
+    <div class="sp-campo"><label for="edBrief">Indicaciones para el editor</label><textarea id="edBrief" rows="1" placeholder="Ritmo, música, textos en pantalla, referencias, duración…">${esc(ed.brief)}</textarea></div>
     <div class="ft-sub">Entregas</div>
     ${entregas.length ? entregas.slice().reverse().map((e) => `<div class="ed-entrega"><b>v${e.v}</b><a href="${escA(e.url)}" target="_blank" rel="noopener">Ver el vídeo</a><span>${fechaHora(e.fecha)}</span>${e.nota ? `<div class="nota">${esc(e.nota)}</div>` : ""}</div>`).join("") : `<div class="empty-note">Todavía no ha entregado nada.</div>`}
     ${ed.estado === "entregada" ? `<div class="ed-btns"><button class="btn-mini primary" id="edAprobar">Aprobar</button><button class="btn-mini" id="edCambios">Pedir cambios</button></div>` : ""}
@@ -2830,6 +2833,12 @@ function htmlEdicionFicha(c) {
     <div class="ed-msgs">${msgs.length ? msgs.map((m) => `<div class="ed-msg ${m.de === ed.editor ? "" : "mio"}"><div class="ed-msg-h">${esc(m.nombre || "")} · ${fechaHora(m.fecha)}</div>${esc(m.texto)}</div>`).join("") : `<div class="empty-note">Sin mensajes.</div>`}</div>
     <div class="ed-enviar"><input id="edMsg" placeholder="Escribe al editor" autocomplete="off"><button class="btn-mini primary" id="edMsgBtn">Enviar</button></div>`;
 }
+
+// los campos de texto de la ficha crecen con lo que se escribe: con CSS (field-sizing) donde se puede; si no, aquí
+const CAMPOS_CSS = typeof CSS !== "undefined" && CSS.supports?.("field-sizing", "content");
+function creceCampo(t) { if (CAMPOS_CSS || !t.offsetParent) return; t.style.height = "auto"; t.style.height = t.scrollHeight + "px"; }
+const creceCampos = (raiz) => raiz?.querySelectorAll(".sp-campo textarea").forEach(creceCampo);
+addEventListener("resize", () => creceCampos($("piezaPanel")));
 
 function renderPiezaPanel() {
   const c = (STATE.contenido || [])[piezaIdx];
@@ -2842,8 +2851,11 @@ function renderPiezaPanel() {
   const ts = tomasDe(c);
   const area = active === "instagram" ? "Instagram" : active === "agenda" ? "Agenda" : "Contenido";
   const clases = CLASES.includes(c.clase || "soft") ? CLASES : CLASES.concat([c.clase]);
-  const campo = (id, label, rows, ph = "") => `<div class="sp-campo"><label>${label}</label><textarea id="sp_${id}" rows="${rows}" placeholder="${escA(ph)}">${esc(c[id])}</textarea></div>`;
-  const input = (id, label, ph = "", tipo = "text") => `<div class="sp-campo"><label>${label}</label><input id="sp_${id}" type="${tipo}" value="${escA(c[id])}" placeholder="${escA(ph)}"></div>`;
+  const campo = (id, label, ph = "Vacío") => `<div class="sp-campo"><label for="sp_${id}">${label}</label><textarea id="sp_${id}" rows="1" placeholder="${escA(ph)}">${esc(c[id])}</textarea></div>`;
+  // los de texto de una línea también saltan de línea al verse (sin caja, un input cortaría el texto), pero sin Intro
+  const input = (id, label, ph = "Vacío", tipo = "text") => tipo === "text"
+    ? `<div class="sp-campo"><label for="sp_${id}">${label}</label><textarea id="sp_${id}" rows="1" data-linea="1" placeholder="${escA(ph)}">${esc(c[id])}</textarea></div>`
+    : `<div class="sp-campo"><label for="sp_${id}">${label}</label><input id="sp_${id}" type="${tipo}" value="${escA(c[id])}" placeholder="${escA(ph)}"></div>`;
   const legado = c.editor && (c.editor.enviada || c.editor.recibida || c.editor.aprobada)
     ? `<div class="ft-nota" style="margin-top:8px">Antes del panel: ${[c.editor.enviada && "enviada " + c.editor.enviada, c.editor.recibida && "recibida " + c.editor.recibida, c.editor.aprobada && "aprobada " + c.editor.aprobada].filter(Boolean).join(" · ")}</div>` : "";
 
@@ -2868,14 +2880,14 @@ function renderPiezaPanel() {
       <div class="ft-tabs">${FICHA_TABS.filter(([id]) => id !== "edicion" || ed).map(([id, l]) => `<button class="${fichaTab === id ? "on" : ""}" data-tab="${id}">${l}${id === "edicion" && ed.estado === "entregada" ? " · revisar" : ""}</button>`).join("")}</div>
 
       <div class="ft-sec" data-sec="guion">
-        ${campo("gancho", "Gancho", 2, "La primera frase: lo que hace que se queden")}
-        ${campo("cuerpo", "Cuerpo", 8)}
-        <div class="sp-grid2">${campo("cierre", "Cierre", 3)}${campo("cta", "Llamada a la acción", 3, "Comenta CLAUDE y te lo mando")}</div>
+        ${campo("gancho", "Gancho", "La primera frase: lo que hace que se queden")}
+        ${campo("cuerpo", "Cuerpo")}
+        <div class="sp-grid2">${campo("cierre", "Cierre")}${campo("cta", "Llamada a la acción", "Comenta CLAUDE y te lo mando")}</div>
         <div class="ft-dur"><span id="spDur">${duracionTxt(palabrasDe(c))}</span><button class="btn-mini" id="spTele">Teleprompter</button></div>
       </div>
 
       <div class="ft-sec" data-sec="publicacion">
-        <div class="sp-campo"><label>Caption <span class="ft-cnt" id="spCapN">${String(c.caption || "").length} / 2.200</span></label><textarea id="sp_caption" rows="7">${esc(c.caption)}</textarea></div>
+        <div class="sp-campo"><label for="sp_caption">Caption <span class="ft-cnt" id="spCapN">${String(c.caption || "").length} / 2.200</span></label><textarea id="sp_caption" rows="1" placeholder="Vacío">${esc(c.caption)}</textarea></div>
         <div class="sp-grid2">${input("hashtags", "Hashtags", "#claudecode #ia")}${input("palabra", "Palabra clave de la llamada a la acción", "CLAUDE")}</div>
         ${input("url", "Enlace del reel publicado", "https://www.instagram.com/reel/…")}
         <div class="sp-grid3">${input("views", "Visualizaciones", "—", "number")}${input("likes", "Likes", "—", "number")}${input("comments", "Comentarios", "—", "number")}</div>
@@ -2885,13 +2897,13 @@ function renderPiezaPanel() {
       <div class="ft-sec" data-sec="produccion">
         <div class="sp-grid2">${input("formato", "Formato", "a cámara · voz en off · mudo")}${input("fuente", "De dónde sale la idea")}</div>
         ${input("carpeta", "Material para editar", "Enlace de la carpeta de Drive")}
-        ${campo("broll", "Recursos y B-roll", 3)}
-        ${campo("pantalla", "Pantalla", 2)}
+        ${campo("broll", "Recursos y B-roll")}
+        ${campo("pantalla", "Pantalla")}
         ${input("archivo", "Vídeo final", "Enlace o ruta del vídeo final")}
         <div class="ft-sub"><span>Tomas</span><button class="btn-mini" id="spToma">${OSIcons.nueva} Toma</button></div>
         ${ts.length ? ts.map((t) => `<label class="ft-toma"><input type="checkbox" data-k="${(STATE.tomas || []).indexOf(t)}" ${t.estado === "grabada" ? "checked" : ""}><span>${esc(t.descripcion || "")}${t.lugar ? ` <i>· ${esc(t.lugar)}</i>` : ""}</span></label>`).join("") : `<div class="empty-note">Sin tomas apuntadas.</div>`}
-        ${campo("produccion", "Notas de producción", 2)}
-        <div class="sp-grid2">${input("nota", "Nota del 1 al 10", "", "number")}${input("porque_no_10", "Por qué no es un 10")}</div>
+        ${campo("produccion", "Notas de producción")}
+        <div class="sp-grid2">${input("nota", "Nota del 1 al 10", "—", "number")}${input("porque_no_10", "Por qué no es un 10")}</div>
         ${legado}
       </div>
 
@@ -2917,11 +2929,13 @@ function renderPiezaPanel() {
     const fila = p.querySelector(".ft-tabs"), on = fila?.querySelector("button.on");
     if (on) { const rf = fila.getBoundingClientRect(), rb = on.getBoundingClientRect(); fila.scrollLeft += rb.right > rf.right ? rb.right - rf.right : rb.left < rf.left ? rb.left - rf.left : 0; }
     p.querySelectorAll(".ft-sec").forEach((s) => s.classList.toggle("on", s.dataset.sec === id));
+    creceCampos(p);
   };
   p.querySelectorAll(".ft-tabs button").forEach((b) => { b.onclick = () => muestra(b.dataset.tab); });
   muestra(fichaTab);
 
-  $("spFull").onclick = () => p.classList.toggle("full");
+  $("spFull").onclick = () => { p.classList.toggle("full"); setTimeout(() => creceCampos(p), 450); };
+  p.querySelectorAll(".sp-campo textarea").forEach((t) => t.addEventListener("input", () => creceCampo(t)));
   $("spCerrar").onclick = cerrarPieza;
   $("spTitulo").oninput = () => { c.titulo = $("spTitulo").value.trim(); guardaPiezaQuiet(); };
   $("spEstado").onchange = () => { muevePieza(c, $("spEstado").value); guardaPiezaQuiet(); renderPiezaPanel(); };
@@ -2947,7 +2961,9 @@ function renderPiezaPanel() {
   for (const k of texto) {
     const el = $("sp_" + k);
     if (!el) continue;
+    if (el.dataset.linea) el.onkeydown = (e) => { if (e.key === "Enter") e.preventDefault(); };
     el.oninput = () => {
+      if (el.dataset.linea && /\n/.test(el.value)) el.value = el.value.replace(/\s*\n+\s*/g, " "); // pegado con saltos
       const v = el.value.trim();
       if (v) c[k] = v; else delete c[k];
       if (["gancho", "cuerpo", "cierre", "cta"].includes(k)) $("spDur").textContent = duracionTxt(palabrasDe(c));
