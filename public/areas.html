@@ -761,8 +761,11 @@
   .g-t { font-size: 14px; color: var(--ink); font-weight: 550; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
   .g-m { font-size: 12px; color: var(--ink-3); margin-top: 3px; }
   /* ficha en pestañas */
-  .ft-tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--border); margin: 6px 0 14px; overflow-x: auto; }
-  .ft-tabs button { background: none; border: 0; border-bottom: 2px solid transparent; color: var(--ink-3); font-family: inherit; font-size: 13.5px; font-weight: 500; padding: 8px 10px; cursor: pointer; margin-bottom: -1px; white-space: nowrap; }
+  /* la línea de abajo es una sombra interior (no un borde con las pestañas bajando 1 px): así no desborda en vertical.
+     En el móvil se desliza de lado, sin barra; la pestaña elegida se pone a la vista sola */
+  .ft-tabs { display: flex; gap: 2px; box-shadow: inset 0 -1px 0 var(--border); margin: 6px 0 14px; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
+  .ft-tabs::-webkit-scrollbar { display: none; }
+  .ft-tabs button { background: none; border: 0; border-bottom: 2px solid transparent; color: var(--ink-3); font-family: inherit; font-size: 13.5px; font-weight: 500; padding: 8px 10px; cursor: pointer; white-space: nowrap; }
   .ft-tabs button.on { color: var(--ink); border-bottom-color: var(--ink); font-weight: 600; }
   .ft-sec { display: none; }
   .ft-sec.on { display: block; }
@@ -2910,6 +2913,9 @@ function renderPiezaPanel() {
   const muestra = (id) => {
     fichaTab = id;
     p.querySelectorAll(".ft-tabs button").forEach((b) => b.classList.toggle("on", b.dataset.tab === id));
+    // la pestaña elegida, entera a la vista (solo de lado: la fila no lleva barra)
+    const fila = p.querySelector(".ft-tabs"), on = fila?.querySelector("button.on");
+    if (on) { const rf = fila.getBoundingClientRect(), rb = on.getBoundingClientRect(); fila.scrollLeft += rb.right > rf.right ? rb.right - rf.right : rb.left < rf.left ? rb.left - rf.left : 0; }
     p.querySelectorAll(".ft-sec").forEach((s) => s.classList.toggle("on", s.dataset.sec === id));
   };
   p.querySelectorAll(".ft-tabs button").forEach((b) => { b.onclick = () => muestra(b.dataset.tab); });
