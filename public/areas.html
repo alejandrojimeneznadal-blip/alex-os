@@ -100,6 +100,12 @@
   .pieza-chip.gymok { background: var(--good-bg); color: var(--good); border: 1px solid transparent; }
   .ag-leyenda { display: flex; gap: 12px; flex-wrap: wrap; font-size: 11.5px; color: var(--ink-3); margin-top: 10px; }
   .ag-leyenda i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; vertical-align: -1px; margin-right: 4px; }
+  /* agenda: piezas sin publicar con el color de su carril (config_contenido.carriles = { nombres, defecto }):
+     el primero en rojo (el de siempre), el segundo en azul y el tercero en verde azulado; lo publicado sigue en verde tachado */
+  .pieza-chip.reel.ag-c1 { background: rgba(59,130,246,0.13); color: #2f74e0; border: 1px solid rgba(59,130,246,0.3); }
+  .pieza-chip.reel.ag-c2 { background: rgba(14,159,138,0.13); color: #0e8f7c; border: 1px solid rgba(14,159,138,0.3); }
+  :root[data-theme="negro"] .pieza-chip.reel.ag-c1, :root[data-theme="azul"] .pieza-chip.reel.ag-c1 { color: #6aa5ff; }
+  :root[data-theme="negro"] .pieza-chip.reel.ag-c2, :root[data-theme="azul"] .pieza-chip.reel.ag-c2 { color: #34d3b8; }
   /* agenda: navegación (Hoy ‹ › título · Mes | Semana) y vista semanal */
   .ag-nav { flex-wrap: wrap; row-gap: 8px; }
   .ag-nav .ag-hoy { width: auto; padding: 0 10px; font-size: 12px; font-weight: 550; color: var(--ink-2); }
@@ -4310,9 +4316,25 @@ function agVer(v) {
   else if (calSemana) calMes = masDias(calSemana, 3).slice(0, 7);
   location.hash = "agenda/" + v;
 }
-function chipsAgenda(f, piezas, semana) {
-  let chips = (piezas[f] || []).map((i) => { const c = STATE.contenido[i]; const pub = estadoPieza(c) === "publicado";
-    return `<span class="pieza-chip ${pub ? "pub" : "reel"}" onclick="event.stopPropagation();abrirPieza(${i})">${pub ? "✓ " : ""}${c.hora && !pub ? c.hora + " " : ""}${esc(c.titulo || "(sin título)")}${semana && !pub ? `<small>${esc(labelEstado(c))}</small>` : ""}</span>`; }).join("");
+/* Carriles de publicación (p. ej. un día un tipo de vídeo y al siguiente otro): config_contenido.carriles = { nombres: [..], defecto }.
+   Cada pieza va al carril cuyo nombre coincide con su Tipo o con el nombre de su editor; si no, al de por defecto. */
+function carrilesCfg() {
+  const c = STATE.config_contenido?.carriles;
+  if (!c || !Array.isArray(c.nombres) || !c.nombres.length) return null;
+  const nombres = c.nombres.map((x) => String(x));
+  return { nombres, def: nombres.map(normCarril).indexOf(normCarril(c.defecto)) };
+}
+function normCarril(s) { return String(s || "").trim().toLowerCase(); }
+function carrilDePieza(c, cfg) {
+  if (!cfg) return -1;
+  const ns = cfg.nombres.map(normCarril);
+  let i = ns.indexOf(normCarril(c.clase));
+  if (i < 0 && c.edicion) i = ns.indexOf(normCarril(c.edicion.editor_nombre));
+  return i >= 0 ? i : cfg.def;
+}
+function chipsAgenda(f, piezas, semana, cfg = carrilesCfg()) {
+  let chips = (piezas[f] || []).map((i) => { const c = STATE.contenido[i]; const pub = estadoPieza(c) === "publicado"; const k = pub ? -1 : carrilDePieza(c, cfg);
+    return `<span class="pieza-chip ${pub ? "pub" : "reel"}${k > 0 ? ` ag-c${k % 3}` : ""}" onclick="event.stopPropagation();abrirPieza(${i})">${pub ? "✓ " : ""}${c.hora && !pub ? c.hora + " " : ""}${esc(c.titulo || "(sin título)")}${semana && !pub ? `<small>${esc(labelEstado(c))}</small>` : ""}</span>`; }).join("");
   chips += (STATE.recordatorios || []).filter((r) => tocaRecordatorio(r, f)).map((r) => `<span class="pieza-chip rec${r.hechos?.[f] ? " pub" : ""}" onclick="event.stopPropagation();editarRecordatorio('${esc(r.id)}')">↻ ${esc(r.titulo)}</span>`).join("");
   if (STATE.entrenos?.[f]) chips += `<span class="pieza-chip gymok">✓ Gym</span>`;
   return chips;
@@ -4355,7 +4377,8 @@ function vistaAgendaCal() {
     <div class="mes-nav ag-nav"><button class="ag-hoy" onclick="agHoy()">Hoy</button><button onclick="agMueve(-1)" aria-label="Anterior">‹</button><button onclick="agMueve(1)" aria-label="Siguiente">›</button><b>${titulo}</b>
       <span class="filtros ag-vista"><button class="${agVista === "mes" ? "on" : ""}" onclick="agVer('mes')">Mes</button><button class="${agVista === "semana" ? "on" : ""}" onclick="agVer('semana')">Semana</button></span></div>
     ${cuerpo}
-    <div class="ag-leyenda"><span><i style="background:rgba(227,57,130,.35)"></i>Publicación</span><span><i style="background:var(--surface);border:1px solid var(--border)"></i>Recordatorio</span><span><i style="background:var(--good-bg)"></i>Hecho</span></div>
+    <div class="ag-leyenda">${(() => { const cfg = carrilesCfg(); const col = ["rgba(227,57,130,.35)", "rgba(59,130,246,.45)", "rgba(14,159,138,.45)"];
+      return cfg ? cfg.nombres.map((n, k) => `<span><i style="background:${col[k % 3]}"></i>${esc(n)}</span>`).join("") : `<span><i style="background:rgba(227,57,130,.35)"></i>Publicación</span>`; })()}<span><i style="background:var(--surface);border:1px solid var(--border)"></i>Recordatorio</span><span><i style="background:var(--good-bg)"></i>Hecho</span></div>
   </div>`;
 }
 
