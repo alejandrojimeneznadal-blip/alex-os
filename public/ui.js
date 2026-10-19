@@ -350,6 +350,18 @@ window.OS_MODULOS = (function () {
     .osel-menu button:hover { background: var(--surface-2); color: var(--ink); }
     .osel-menu button.sel { color: var(--accent); font-weight: 600; }
     .osel-menu button.sel .tic { width: 13px; height: 13px; }
+    /* desplegable con buscador: el campo arriba, fijo, y la lista con su scroll debajo */
+    .osel-menu.buscable { max-height: none; overflow: visible; }
+    .osel-menu .osel-q {
+      width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--ink);
+      font-family: inherit; font-size: 13.5px; padding: 7px 10px; margin: 0 0 5px;
+    }
+    .osel-menu .osel-q:focus { outline: none; border-color: var(--accent); }
+    .osel-menu .osel-q::placeholder { color: var(--placeholder); }
+    .osel-lista { max-height: 240px; overflow: auto; }
+    .osel-menu button[hidden] { display: none; }
+    .osel-menu button.act { background: var(--surface-2); color: var(--ink); }
+    .osel-vacio { font-size: 12.5px; color: var(--ink-3); padding: 8px 10px; }
 
     .osui-ov {
       position: fixed; inset: 0; background: rgba(23,23,30,0.35); z-index: 400;
@@ -429,9 +441,12 @@ window.OS_MODULOS = (function () {
   document.head.appendChild(style);
 
   // ----- select custom sincronizado con el <select> nativo (que queda oculto) -----
+  // con data-buscar, el desplegable lleva un buscador arriba (sin tildes ni mayúsculas, por palabras)
+  const normQ = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
   function enhanceSelect(sel) {
     if (sel.dataset.osel || sel.closest(".osel")) return;
     sel.dataset.osel = "1";
+    const buscable = sel.hasAttribute("data-buscar");
     const wrap = document.createElement("div");
     wrap.className = "osel";
     sel.parentNode.insertBefore(wrap, sel);
@@ -441,7 +456,7 @@ window.OS_MODULOS = (function () {
     btn.className = "osel-btn";
     wrap.appendChild(btn);
     const label = () => sel.options[sel.selectedIndex]?.text || "";
-    const paintBtn = () => { btn.innerHTML = `<span>${label()}</span>${I.chevron || ""}`; };
+    const paintBtn = () => { btn.innerHTML = `<span></span>${I.chevron || ""}`; btn.firstChild.textContent = label(); };
     paintBtn();
     sel.addEventListener("change", paintBtn);
     let menu = null;
@@ -452,21 +467,57 @@ window.OS_MODULOS = (function () {
       document.querySelectorAll(".osel.open").forEach((o) => o.classList.remove("open"));
       document.querySelectorAll(".osel-menu").forEach((m) => m.remove());
       menu = document.createElement("div");
-      menu.className = "osel-menu";
-      [...sel.options].forEach((op, i) => {
+      menu.className = "osel-menu" + (buscable ? " buscable" : "");
+      const q = buscable ? document.createElement("input") : null;
+      const lista = buscable ? document.createElement("div") : menu;
+      if (q) {
+        q.className = "osel-q"; q.type = "text"; q.placeholder = "Buscar…"; q.autocomplete = "off"; q.spellcheck = false;
+        lista.className = "osel-lista";
+        menu.append(q, lista);
+      }
+      const items = [...sel.options].map((op, i) => {
         const b = document.createElement("button");
         b.type = "button";
         b.className = i === sel.selectedIndex ? "sel" : "";
-        b.innerHTML = `<span>${op.text}</span>${i === sel.selectedIndex ? (I.check || "") : ""}`;
+        b.innerHTML = `<span></span>${i === sel.selectedIndex ? (I.check || "") : ""}`;
+        b.firstChild.textContent = op.text;
         b.onclick = () => {
           sel.selectedIndex = i;
           sel.dispatchEvent(new Event("change", { bubbles: true }));
           close();
         };
-        menu.appendChild(b);
+        lista.appendChild(b);
+        return { b, t: normQ(op.text) };
       });
       wrap.appendChild(menu);
       wrap.classList.add("open");
+      if (!q) return;
+      const vacio = document.createElement("div");
+      vacio.className = "osel-vacio";
+      vacio.hidden = true;
+      lista.appendChild(vacio);
+      let act = -1; // la opción marcada con las flechas; Intro elige esa o la primera que quede
+      const visibles = () => items.filter((it) => !it.b.hidden);
+      const marca = (n) => {
+        const v = visibles();
+        items.forEach((it) => it.b.classList.remove("act"));
+        act = v.length ? (n + v.length) % v.length : -1;
+        if (act >= 0) { v[act].b.classList.add("act"); v[act].b.scrollIntoView({ block: "nearest" }); }
+      };
+      q.oninput = () => {
+        const partes = normQ(q.value).split(/\s+/).filter(Boolean);
+        items.forEach((it) => { it.b.hidden = !partes.every((p) => it.t.includes(p)); });
+        vacio.hidden = visibles().length > 0;
+        vacio.textContent = `Nada con «${q.value.trim()}»`;
+        marca(0);
+      };
+      q.onkeydown = (ev) => {
+        if (ev.key === "ArrowDown" || ev.key === "ArrowUp") { ev.preventDefault(); marca(act + (ev.key === "ArrowDown" ? 1 : -1)); }
+        else if (ev.key === "Enter") { ev.preventDefault(); ev.stopPropagation(); (visibles()[act] || visibles()[0])?.b.click(); btn.focus(); }
+        else if (ev.key === "Escape") { ev.preventDefault(); ev.stopPropagation(); close(); btn.focus(); }
+      };
+      q.onclick = (ev) => ev.stopPropagation();
+      if (!matchMedia("(pointer: coarse)").matches) q.focus(); // en el móvil no se abre el teclado solo
     };
     document.addEventListener("click", (e) => { if (menu && !wrap.contains(e.target)) close(); });
   }
@@ -501,7 +552,7 @@ window.OS_MODULOS = (function () {
         const l = typeof o === "object" ? o.l : o;
         return `<option value="${String(v).replace(/"/g, "&quot;")}" ${String(v) === val ? "selected" : ""}>${l}</option>`;
       }).join("");
-      return `<label>${c.label || ""}</label><select data-id="${c.id}">${ops}</select>`;
+      return `<label>${c.label || ""}</label><select data-id="${c.id}"${c.buscar ? " data-buscar" : ""}>${ops}</select>`;
     }
     if (c.tipo === "date") {
       const iso = /^\d{4}-\d{2}-\d{2}$/.test(val) ? val : "";
@@ -606,7 +657,10 @@ window.OS_MODULOS = (function () {
       };
       ov.onclick = (e) => { if (e.target === ov) done(null); };
       const first = card.querySelector("input:not([readonly])");
-      if (first) { first.focus(); first.select(); }
+      // si el primer campo es un desplegable con buscador, se abre solo para escribir directamente
+      // (después del clic que abrió el form: ese mismo clic, al llegar al documento, lo cerraría)
+      if (campos[0]?.buscar) { enhanceAll(card); setTimeout(() => card.querySelector(".osel-btn")?.click(), 0); }
+      else if (first) { first.focus(); first.select(); }
       card.onkeydown = (e) => {
         if (e.key === "Enter" && campos.length && e.target.tagName !== "SELECT") card.querySelector('[data-a="si"]').click();
         if (e.key === "Escape") done(null);

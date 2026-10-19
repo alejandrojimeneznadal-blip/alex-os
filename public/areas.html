@@ -631,7 +631,7 @@
   .hm-wrap { display: flex; gap: 10px; align-items: flex-start; margin-top: 10px; }
   .hm-days { display: grid; grid-template-rows: 18px repeat(7, var(--hmc, 22px)); row-gap: 4px; font-size: 10.5px; color: var(--ink-3); flex-shrink: 0; }
   .hm-days span { line-height: var(--hmc, 22px); }
-  .hm-scroll { overflow-x: auto; flex: 1; padding-bottom: 6px; -webkit-overflow-scrolling: touch; scrollbar-width: thin; }
+  .hm-scroll { overflow-x: auto; flex: 1; padding-bottom: 6px; -webkit-overflow-scrolling: touch; }
   .hm-grid { display: grid; grid-auto-flow: column; grid-auto-columns: var(--hmc, 22px); grid-template-rows: 18px repeat(7, var(--hmc, 22px)); gap: 4px; width: max-content; }
   .hm-grid .hmm { font-size: 10.5px; color: var(--ink-3); white-space: nowrap; line-height: 18px; }
   .hmc { border-radius: 5px; background: var(--surface-2); }
@@ -4564,8 +4564,9 @@ async function asignaHueco(f) {
   const cands = (STATE.contenido || []).map((c, i) => ({ c, i })).filter((x) => estadoPieza(x.c) !== "publicado" && !x.c.fecha_plan);
   if (!cands.length) { await OSUI.confirm("No hay piezas sin fecha", "Todas las piezas pendientes ya tienen día. Crea una en el tablero o cambia la fecha de otra.", { ok: "Vale", danger: false }); return; }
   cands.sort((a, b) => RANGO_PIEZA[estadoPieza(b.c)] - RANGO_PIEZA[estadoPieza(a.c)]);
-  const r = await OSUI.form({ titulo: `Publicar el ${fmtDiaCorto(f)}`, campos: [
-    { id: "i", label: "Pieza", tipo: "select", opciones: cands.map((x) => ({ v: String(x.i), l: `${labelEstado(x.c)} · ${x.c.titulo || "(sin título)"}` })) },
+  const dia = fmtDiaCorto(f);
+  const r = await OSUI.form({ titulo: dia === "hoy" || dia === "mañana" ? `Publicar ${dia}` : `Publicar el ${dia}`, campos: [
+    { id: "i", label: "Pieza", tipo: "select", buscar: true, opciones: cands.map((x) => ({ v: String(x.i), l: `${labelEstado(x.c)} · ${x.c.titulo || "(sin título)"}` })) },
     { id: "hora", label: "Hora (opcional)", tipo: "time", valor: "" },
   ], ok: "Asignar" });
   if (!r) return;

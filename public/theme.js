@@ -26,6 +26,13 @@
   input[type="number"]::-webkit-outer-spin-button,
   input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
   input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
+  /* barras de scroll del panel, no las del navegador (con el tema negro salían claras): finas, del color
+     de los bordes y sin carril. Chrome y Safari con ::-webkit-scrollbar; Firefox con las propiedades estándar */
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border-strong); border: 2px solid transparent; border-radius: 99px; background-clip: padding-box; }
+  ::-webkit-scrollbar-thumb:hover { background-color: var(--ink-3); }
+  @supports not selector(::-webkit-scrollbar) { * { scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; } }
   /* ---- Tinta (11 oct 2026): la esencia de Stripe en un solo color. Tema claro por defecto. ---- */
   :root {
     --bg: #f6f7f9; --surface: #ffffff; --surface-2: #f3f4f6; --border: #e3e5e9; --grid: #eceef1;
