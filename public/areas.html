@@ -2809,7 +2809,7 @@ let fichaTab = "guion", briefTimer = null;
 const FICHA_TABS = [["guion", "Guion"], ["publicacion", "Publicación"], ["produccion", "Producción"], ["edicion", "Edición"], ["notas", "Notas"]];
 const palabrasDe = (c) => [c.gancho, c.cuerpo, c.cierre, c.cta].map((t) => String(t || "").trim()).filter(Boolean).join(" ").split(/\s+/).filter(Boolean).length;
 const duracionTxt = (n) => (n ? `Unos ${Math.max(1, Math.round(n / 2.5))} segundos hablados · ${n} palabras` : "Sin guion todavía");
-const CLASES = ["soft", "hard", "meme", "3D"]; // 3D = reel 3D sin cara (pipeline de reels 3D): lo hace Alex, no el editor
+const CLASES = ["soft", "hard", "meme", "propio", "3D"]; // propio = lo edita Alex (pantalla partida, etc.), no el editor · 3D = reel 3D sin cara (pipeline de reels 3D)
 
 function htmlEdicionFicha(c) {
   const ed = c.edicion;
