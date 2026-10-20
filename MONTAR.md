@@ -138,7 +138,7 @@ Reglas: el panel sale de su vida, no copies el de nadie; no inventes datos; si a
 |---|---|
 | Panel | Siempre está: hábitos del día, score de 0 a 100 y la curva de crecimiento. |
 | Agenda | Calendario por mes o por semana con lo que toca cada día: publicaciones, recordatorios y entrenos hechos. |
-| Instagram | Piezas de contenido de la idea a la publicación: tablero, cola, grabación, edición con un editor que solo ve lo que le asignas, referencias y la «visión» de tu marca. |
+| Instagram | Piezas de contenido de la idea a la publicación: tablero, cola, grabación, edición con un editor que solo ve lo que le asignas, banco de ganchos y la «visión» de tu marca; en cada pieza, guion con notas de voz transcritas y reels de referencia. |
 | Gym | Rutina semanal, las series de cada día frente a la última vez y el peso corporal. |
 | Sueño | Horas por noche, medias, racha y rutinas de despertar. |
 | Nutrición | Calorías de cada día frente a tu objetivo. |
@@ -246,5 +246,6 @@ Dockerfile        Node 22, puerto 3200.
 | `PANEL_TZ`, `DIA_CIERRA_A` | No | Zona horaria y hora a la que acaba el día del panel (por defecto `Europe/Madrid` y `5`: lo de antes de las 5:00 cuenta para el día anterior). |
 | `PORT` | No | Por defecto 3200. |
 | `YOUTUBE_API_KEY`, `APIFY_TOKEN` | No | Métricas automáticas de vídeos publicados. |
+| `OPENAI_API_KEY` | No | Transcribe las notas de voz de las piezas (Claude no escucha audio). Sin ella se graban y se escuchan, pero sin texto. `TRANSCRIPCION_MODELO` cambia el modelo (por defecto `gpt-4o-transcribe`). |
 
 **Cuentas.** La primera cuenta es **admin**. Desde `/admin.html` puede crear cuentas para otras personas en la misma instalación: cada una tiene sus propios datos, su bienvenida y su propia conexión con Claude.

@@ -145,6 +145,24 @@ async function initSchema() {
       PRIMARY KEY (owner_id, cid)
     );
   `);
+  /* notas de voz de las piezas (20 oct 2026): el audio y su transcripción, fuera del JSONB como la edición */
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS audios (
+      id TEXT PRIMARY KEY,
+      owner_id TEXT NOT NULL REFERENCES users(id),
+      cid TEXT NOT NULL,
+      nombre TEXT,
+      mime TEXT NOT NULL,
+      data BYTEA NOT NULL,
+      size BIGINT,
+      duracion REAL,
+      creado BIGINT,
+      estado TEXT NOT NULL DEFAULT 'pendiente',
+      transcripcion TEXT,
+      error TEXT
+    );
+    CREATE INDEX IF NOT EXISTS audios_owner_cid ON audios (owner_id, cid);
+  `);
   /* visión (Creator Vision): la plantilla una vez por cuenta + una fila por versión (15 oct 2026) */
   await pool.query(`
     CREATE TABLE IF NOT EXISTS vision (
@@ -305,8 +323,8 @@ function normalizarTareas(data) {
   return data;
 }
 
-/* piezas: cid estable (determinista hasta que se guarda) y la edición nunca vive en el documento:
-   está en la tabla ediciones y se adjunta al leer */
+/* piezas: cid estable (determinista hasta que se guarda) y ni la edición ni los audios viven en el documento:
+   están en las tablas ediciones y audios y se adjuntan al leer */
 function normalizarPiezas(data) {
   const vistos = new Set();
   for (const c of data?.contenido || []) {
@@ -319,6 +337,7 @@ function normalizarPiezas(data) {
     }
     vistos.add(c.cid);
     delete c.edicion;
+    delete c.audios;
   }
   return data;
 }
@@ -346,6 +365,23 @@ async function adjuntaEdiciones(ownerId, data) {
   return data;
 }
 
+function audioPublico(a) {
+  return {
+    id: a.id, nombre: a.nombre || null, fecha: Number(a.creado) || null, duracion: a.duracion == null ? null : Number(a.duracion),
+    mime: a.mime, size: Number(a.size) || null, estado: a.estado, transcripcion: a.transcripcion || null, ...(a.error ? { error: a.error } : {}),
+  };
+}
+const COLS_AUDIO = "id, cid, nombre, mime, size, duracion, creado, estado, transcripcion, error";
+async function adjuntaAudios(ownerId, data) {
+  if (!Array.isArray(data?.contenido) || !data.contenido.length) return data;
+  const r = await pool.query(`SELECT ${COLS_AUDIO} FROM audios WHERE owner_id = $1 ORDER BY creado`, [ownerId]);
+  if (!r.rows.length) return data;
+  const porCid = new Map();
+  for (const a of r.rows) { if (!porCid.has(a.cid)) porCid.set(a.cid, []); porCid.get(a.cid).push(audioPublico(a)); }
+  for (const c of data.contenido) { const l = c && porCid.get(c.cid); if (l) c.audios = l; }
+  return data;
+}
+
 async function readData(userId) {
   if (!userId) throw new Error("readData sin usuario");
   const { rows } = await pool.query("SELECT data FROM user_state WHERE user_id = $1", [userId]);
@@ -356,6 +392,7 @@ async function readData(userId) {
   // si hoy ha empezado una etapa programada, se guarda ya (el cambio se hace una sola vez)
   if (seeded || !rows.length || (teniaProxima && !out.config?.proxima)) await writeData(userId, out);
   await adjuntaEdiciones(userId, out);
+  await adjuntaAudios(userId, out);
   return out;
 }
 
@@ -1468,6 +1505,110 @@ app.post("/api/day", async (req, res) => {
    asignadas, con los campos que necesita para editar, y solo puede: empezar, entregar versiones y
    escribir mensajes. Aprobar o pedir cambios es cosa del dueño.
    ====================================================================== */
+/* ======================================================================
+   AUDIOS de las piezas (20 oct 2026): notas de voz para el guion, varias por pieza. Se graban o se suben
+   desde la ficha, se escuchan en el panel y se transcriben solas si hay OPENAI_API_KEY (Claude no escucha
+   audio: la transcripción es lo que lee por el MCP en contenido[].audios). Las cuentas de editor no llegan.
+   ====================================================================== */
+const AUDIO_EXT = { "audio/webm": "webm", "video/webm": "webm", "audio/mp4": "m4a", "video/mp4": "mp4", "audio/x-m4a": "m4a", "audio/m4a": "m4a",
+  "audio/mpeg": "mp3", "audio/mp3": "mp3", "audio/ogg": "ogg", "audio/wav": "wav", "audio/x-wav": "wav", "audio/wave": "wav", "audio/flac": "flac" };
+const TRANSCRIPCION_MODELO = process.env.TRANSCRIPCION_MODELO || "gpt-4o-transcribe";
+async function transcribeAudio(id) {
+  const key = process.env.OPENAI_API_KEY;
+  const { rows } = await pool.query("SELECT mime, data FROM audios WHERE id = $1", [id]);
+  if (!rows.length) return;
+  if (!key) { await pool.query("UPDATE audios SET estado = 'sin_clave' WHERE id = $1", [id]); return; }
+  await pool.query("UPDATE audios SET estado = 'pendiente', error = NULL WHERE id = $1", [id]);
+  const { mime, data } = rows[0];
+  const pide = async (modelo) => {
+    const fd = new FormData();
+    fd.append("file", new Blob([data], { type: mime }), `nota.${AUDIO_EXT[mime] || "webm"}`);
+    fd.append("model", modelo);
+    fd.append("language", "es");
+    fd.append("response_format", "json");
+    const r = await fetch(`${process.env.OPENAI_BASE_URL || "https://api.openai.com/v1"}/audio/transcriptions`, { method: "POST", headers: { Authorization: `Bearer ${key}` }, body: fd, signal: AbortSignal.timeout(180000) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw Object.assign(new Error(j?.error?.message || `HTTP ${r.status}`), { status: r.status, codigo: j?.error?.code });
+    return String(j.text || "").trim();
+  };
+  try {
+    let texto;
+    try { texto = await pide(TRANSCRIPCION_MODELO); }
+    catch (e) {
+      // si el modelo configurado ya no existe, el de siempre
+      if (TRANSCRIPCION_MODELO !== "whisper-1" && (e.status === 404 || e.codigo === "model_not_found")) texto = await pide("whisper-1");
+      else throw e;
+    }
+    await pool.query("UPDATE audios SET estado = 'lista', transcripcion = $2, error = NULL WHERE id = $1", [id, texto]);
+  } catch (e) {
+    console.warn("transcripción", id, e.message);
+    await pool.query("UPDATE audios SET estado = 'error', error = $2 WHERE id = $1", [id, String(e.message || e).slice(0, 300)]);
+  }
+}
+// al arrancar: lo que se quedó a medias (o sin clave, si ya la hay) se transcribe, de uno en uno
+async function transcribePendientes() {
+  const estados = process.env.OPENAI_API_KEY ? ["pendiente", "sin_clave"] : ["pendiente"];
+  const { rows } = await pool.query("SELECT id FROM audios WHERE estado = ANY($1) ORDER BY creado", [estados]);
+  for (const { id } of rows) await transcribeAudio(id).catch(() => {});
+}
+
+app.get("/api/piezas/:cid/audios", async (req, res) => {
+  try {
+    const r = await pool.query(`SELECT ${COLS_AUDIO} FROM audios WHERE owner_id = $1 AND cid = $2 ORDER BY creado`, [req.user.id, req.params.cid]);
+    res.json({ audios: r.rows.map(audioPublico) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.post("/api/piezas/:cid/audios", express.raw({ type: () => true, limit: "25mb" }), async (req, res) => {
+  try {
+    const mime = String(req.headers["content-type"] || "").split(";")[0].trim().toLowerCase();
+    if (!/^(audio\/[\w.+-]+|video\/(mp4|webm))$/.test(mime)) return res.status(400).json({ error: "Eso no parece un audio" });
+    if (!Buffer.isBuffer(req.body) || !req.body.length) return res.status(400).json({ error: "El audio ha llegado vacío" });
+    const data = await readData(req.user.id);
+    if (!(data.contenido || []).some((c) => c?.cid === req.params.cid)) return res.status(404).json({ error: "No encuentro esa pieza" });
+    const dur = Number(req.query.dur);
+    const fila = {
+      id: uid("au"), cid: req.params.cid, nombre: String(req.query.nombre || "").trim().slice(0, 80) || null, mime, size: req.body.length,
+      duracion: Number.isFinite(dur) && dur > 0 ? Math.round(dur * 10) / 10 : null, creado: Date.now(),
+      estado: process.env.OPENAI_API_KEY ? "pendiente" : "sin_clave", transcripcion: null,
+    };
+    await pool.query(
+      "INSERT INTO audios (id, owner_id, cid, nombre, mime, data, size, duracion, creado, estado) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
+      [fila.id, req.user.id, fila.cid, fila.nombre, mime, req.body, fila.size, fila.duracion, fila.creado, fila.estado]);
+    if (process.env.OPENAI_API_KEY) transcribeAudio(fila.id).catch(() => {});
+    res.json({ audio: audioPublico(fila) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+// el audio en sí, con rangos (Safari no reproduce sin respuestas 206)
+app.get("/api/audios/:id", async (req, res) => {
+  try {
+    const r = await pool.query("SELECT mime, data FROM audios WHERE id = $1 AND owner_id = $2", [req.params.id, req.user.id]);
+    if (!r.rows.length) return res.status(404).json({ error: "No existe" });
+    const { mime, data } = r.rows[0], total = data.length;
+    res.set({ "Content-Type": mime, "Accept-Ranges": "bytes", "Cache-Control": "private, max-age=86400" });
+    const m = /^bytes=(\d*)-(\d*)$/.exec(String(req.headers.range || ""));
+    if (!m || (!m[1] && !m[2])) return res.set("Content-Length", String(total)).end(data);
+    let ini = m[1] ? Number(m[1]) : Math.max(0, total - Number(m[2]));
+    let fin = m[1] && m[2] ? Math.min(Number(m[2]), total - 1) : total - 1;
+    if (ini >= total || ini > fin) return res.status(416).set("Content-Range", `bytes */${total}`).end();
+    res.status(206).set({ "Content-Range": `bytes ${ini}-${fin}/${total}`, "Content-Length": String(fin - ini + 1) }).end(data.subarray(ini, fin + 1));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.delete("/api/audios/:id", async (req, res) => {
+  try {
+    const r = await pool.query("DELETE FROM audios WHERE id = $1 AND owner_id = $2", [req.params.id, req.user.id]);
+    res.json({ ok: r.rowCount > 0 });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.post("/api/audios/:id/transcribir", async (req, res) => {
+  try {
+    const r = await pool.query("SELECT id FROM audios WHERE id = $1 AND owner_id = $2", [req.params.id, req.user.id]);
+    if (!r.rows.length) return res.status(404).json({ error: "No existe" });
+    if (!process.env.OPENAI_API_KEY) { await transcribeAudio(req.params.id); return res.json({ estado: "sin_clave" }); }
+    transcribeAudio(req.params.id).catch(() => {});
+    res.json({ estado: "pendiente" });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 const ESTADOS_EDICION = ["por_editar", "en_edicion", "entregada", "cambios", "aprobada"];
 const esDueno = (req) => req.actor?.role !== "editor";
 const msgNuevo = (u, texto) => ({ id: uid("msg"), de: u.id, nombre: u.display_name || u.username, texto: String(texto).trim().slice(0, 2000), fecha: Date.now() });
@@ -2122,7 +2263,7 @@ Esta app es su panel de vida y tú estás conectado a ella por MCP: él te cuent
 Estructura del estado:
 - config.equilibrio (35 por defecto): el score que deja plana la CURVA DE CAPITAL. La curva trata el score del día como un tipo de interés: un día de 100 rinde +1 %, un día en el equilibrio no mueve nada y un día que se cerró sin registrar cuenta como un 0 (en get_dashboard.serie sale con score 0 y vacio: true; si ${N} te cuenta ese día después, regístralo con log_day y su fecha y manda lo registrado); el capital arranca en 100 el primer día registrado, no tiene techo y puede caer. Es su medida de crecimiento a largo plazo ("ser un 1 % mejor cada día"): cuando pregunte cómo va, léela en get_dashboard.curva (capital, pico, caída, rend_hoy, anual = multiplicador si sostiene el ritmo de los últimos 30 días) y cuéntasela sin maquillar. Solo él cambia el equilibrio.
 - config.senales: [{ id, label, tipo: "bool"|"horas"|"kcal", peso, umbral? }] — los HÁBITOS que puntúan (${N} los llama "hábitos": dile siempre hábito, nunca señal — la clave interna sigue siendo senales). Actuales: ${HAB}
-- config.modulos: [ids] — las PARTES del panel que ${N} usa (la barra lateral solo enseña esas). Catálogo: agenda (calendario por mes o semana: publicaciones, recordatorios y entrenos hechos; sin tareas), instagram (piezas de contenido: tablero, cola, grabación, edición con editor, referencias, visión), gym (rutina, series y peso), sueno, nutricion (kcal frente a objetivo), finanzas (cuentas, bancos, movimientos, suscripciones, ahorro), proyectos (carpetas con subproyectos, tareas y archivos), bandeja, ideas, notas (las tres del Cerebro) y skool (reservado, sin construir). El Panel siempre está. Si no existe la clave se ven las de siempre. Cámbiala solo con su OK, con set_value config.modulos y la lista entera.
+- config.modulos: [ids] — las PARTES del panel que ${N} usa (la barra lateral solo enseña esas). Catálogo: agenda (calendario por mes o semana: publicaciones, recordatorios y entrenos hechos; sin tareas), instagram (piezas de contenido: tablero, cola, grabación, edición con editor, ganchos, visión; en cada pieza, notas de voz transcritas y reels de referencia), gym (rutina, series y peso), sueno, nutricion (kcal frente a objetivo), finanzas (cuentas, bancos, movimientos, suscripciones, ahorro), proyectos (carpetas con subproyectos, tareas y archivos), bandeja, ideas, notas (las tres del Cerebro) y skool (reservado, sin construir). El Panel siempre está. Si no existe la clave se ven las de siempre. Cámbiala solo con su OK, con set_value config.modulos y la lista entera.
 - config.etapa / config.etapas / config.proxima — ETAPAS de la curva. Cuando cambia el sistema de medida (hábitos nuevos, otro objetivo) la curva vuelve a empezar en 100 y la etapa anterior queda cerrada con SUS hábitos: los días pasados no se vuelven a puntuar con la vara nueva. Para cambiar los hábitos a partir de una fecha NO toques config.senales: programa set_value config.proxima = { desde: "YYYY-MM-DD", nombre?, senales: [...] } (mismo formato que config.senales; conserva los ids de los hábitos que sigan) y el servidor hace el cambio solo ese día. Cambiar config.senales a mano vuelve a puntuar toda la etapa en curso: solo para retoques pequeños y con su OK. Regla de ${N}: se cambia de etapa solo cuando cambia el sistema, nunca porque la curva vaya mal. get_dashboard.curva trae la etapa en curso, el cierre de las anteriores y la programada.
 - days: por fecha { senales: {id: valor}, resumen } — el registro diario.${DIA_CIERRA_A ? ` EL DÍA ACABA A LAS ${DIA_CIERRA_A}:00 (${PANEL_TZ}), no a medianoche: lo que pase o te cuente antes de esa hora es del día anterior, y sin fecha log_day, log_gym, append_journal y add_item ya usan ese día.` : ""} Hoy sigue abierto hasta que acaba: si aún no hay nada apuntado, su score es null (no 0) y la curva no lo cuenta; un día que acabó sin nada cuenta como 0.
 - journal: [{ fecha, area, texto }] — apuntes de contexto por área: general|sueno|gym|nutricion|proyectos|contenido|finanzas.
@@ -2133,8 +2274,8 @@ Estructura del estado:
 - entrenos: { "<fecha>": { dia, sets: { "<nombre ejercicio>": [{ kg, reps }, ...una entrada por serie] } } } — lo que ${N} levanta cada día (Gym → Tracker). Si dice «hoy press inclinado 3×10 con 40kg», regístralo aquí con set_value y marca la señal entreno. REGLAS AL ESCRIBIR AQUÍ, el historial se indexa por nombre y se rompe si te desvías: (1) el campo "dia" = el id del día de la semana de ESA fecha (lunes|martes|miercoles|jueves|viernes|sabado|domingo), nunca el título del día ("Push", "Pierna 1"…). (2) El nombre del ejercicio debe coincidir LETRA POR LETRA con el de rutina_gym[dia].ejercicios[].nombre; léelo antes con read_state si no lo tienes delante. (3) Si el ejercicio no está en la rutina de ese día, usa el nombre tal cual aparece en otro día de la rutina. (4) Si no existe en ningún día, pregunta antes de inventarte un nombre nuevo: cada variante crea un historial separado.
 - days.<fecha>.sueno_horario: { acostar: "23:00", levantar: "06:00" } — opcional. Si ${N} dice a qué hora se acostó y se levantó, calcula las horas dormidas (si se acostó antes de medianoche, suma las 24h), regístralas como señal sueno con log_day y guarda el horario con set_value en days.<fecha>.sueno_horario.
 - proyectos: [{ id, nombre, icono (rocket|briefcase|code|video|mic|school|presentation|tienda|coin|chart|users|robot|server|camera|pencil|book|world|tool|flask|gamepad|palette|home|bolt|bulb), tipo: normal|periodico, estado: activo|en_cola|pausado|entregado|cerrado, desc?, siguiente?, subs, notas? (pizarra HTML sencillo, como contenido.notas), archivos? (NO tocar: se gestionan desde la página), updated }]. Un proyecto es una CARPETA: dentro viven sus tareas (campo proyecto en tareas), subproyectos, archivos y pizarra. Cada sub de subs es un SUBPROYECTO con vida propia: { id, nombre, estado: en_curso|en_cola|pausado|hecho, done (derivado: true solo si estado=hecho — para cambiarlo cambia SIEMPRE estado, nunca done), fecha? (día en que se completó, ponla al pasar a hecho), notas? (pizarra HTML sencillo, como la de contenido), archivos?: [{id, nombre, mime, size}] — NO toques archivos, se gestionan desde el panel }. Las tareas pueden colgar de un subproyecto vía su campo sub (id del sub). Si añades un sub nuevo no le pongas id (se genera solo) y usa estado en_curso o en_cola.
-- contenido: las PIEZAS del área Instagram: [{ cid?, num?, fecha (creada), tipo: reel|youtube, clase?: soft|hard|meme|propio|3D (propio = lo edita ${N} (pantalla partida, etc.) y no va al editor; 3D = reel 3D sin cara, del pipeline de reels 3D; «idea propia: …» → add_item contenido con estado idea y clase propio), mision?: atraccion|nutricion|conversion (para qué sirve la pieza: atracción = que la vea y le siga alguien nuevo; nutrición = prueba para el que ya le sigue: un sistema real, un número suyo, un fallo; conversión = manda al link de la bio o al Skool; «esta es de atracción» → mision atraccion; en la Agenda cada pieza sale del color de su misión), titulo, estado: idea|guion|grabar|editar|lista|publicado (pipeline en ese orden: idea → guion escrito → por grabar → en edición → lista para publicar → publicada), fecha_plan? (día en que se publica), hora?, fecha_pub?, url?, views?, likes?, comments?, gancho?, cuerpo?, cierre?, cta?, caption?, hashtags?, fuente?, formato?, broll?, pantalla?, carpeta?, archivo?, editor?: {enviada, recibida, aprobada, cambios}, produccion?, nota? (1-10), porque_no_10?, notas? }]. «Ya grabé la 3» → estado editar (o lista si no hay editor); «la 1 está lista» → lista; «publiqué la 1» → publicado + fecha_pub. palabra? = palabra clave del CTA («comenta CLAUDE» → CLAUDE). edicion = SOLO LECTURA, la añade el servidor cuando la pieza está asignada a un editor ({ editor_nombre, estado: por_editar|en_edicion|entregada|cambios|aprobada, fecha_limite, brief, entregas, mensajes }); no la escribas: la gestionan ${N} y el editor desde el panel. Las tomas pendientes de cada pieza están en tomas (por cid). — las métricas de piezas con link (YouTube e Instagram) se actualizan solas desde sus APIs; no hace falta que ${N} las dicte salvo que quiera corregirlas. video_url es interno (mp4 del reel para el player del panel, lo rellena la API — no lo toques). notas es la "pizarra" de la pieza y puede llevar HTML sencillo (h2/h3, b, u, div, br); si escribes tú, texto plano o ese HTML simple. — al marcar publicado, pon fecha_pub con el día al que cuenta la publicación: el día real, salvo si se publicó de madrugada (00:00-05:59), que cuenta como el vídeo del día anterior (regla de ${N}: llega tarde a casa y lo sube para el día que acaba de terminar). fecha_plan = día en que ${N} planea publicarla (calendario de publicación; «el reel del Excel sale el jueves» → fecha_plan). Si ${N} pasa el link («publiqué un reel: <link>»), guárdalo en url (sirve para la miniatura y el player del panel). Si menciona métricas («el reel lleva 4k views»), actualiza views/likes de esa pieza.
-- referencias: [{ id, cuenta, url?, titulo?, nota (qué se lleva de ella), formato?, creada }] — reels y cuentas modelo (Instagram → Referencias). «Guárdame este reel de X como referencia: me gusta cómo…» → add_item referencias.
+- contenido: las PIEZAS del área Instagram: [{ cid?, num?, fecha (creada), tipo: reel|youtube, clase?: soft|hard|meme|propio|3D (propio = lo edita ${N} (pantalla partida, etc.) y no va al editor; 3D = reel 3D sin cara, del pipeline de reels 3D; «idea propia: …» → add_item contenido con estado idea y clase propio), mision?: atraccion|nutricion|conversion (para qué sirve la pieza: atracción = que la vea y le siga alguien nuevo; nutrición = prueba para el que ya le sigue: un sistema real, un número suyo, un fallo; conversión = manda al link de la bio o al Skool; «esta es de atracción» → mision atraccion; en la Agenda cada pieza sale del color de su misión), titulo, estado: idea|guion|grabar|editar|lista|publicado (pipeline en ese orden: idea → guion escrito → por grabar → en edición → lista para publicar → publicada), fecha_plan? (día en que se publica), hora?, fecha_pub?, url?, views?, likes?, comments?, gancho?, cuerpo?, cierre?, cta?, caption?, hashtags?, fuente?, formato?, broll?, pantalla?, carpeta?, archivo?, editor?: {enviada, recibida, aprobada, cambios}, produccion?, nota? (1-10), porque_no_10?, notas? }]. «Ya grabé la 3» → estado editar (o lista si no hay editor); «la 1 está lista» → lista; «publiqué la 1» → publicado + fecha_pub. palabra? = palabra clave del CTA («comenta CLAUDE» → CLAUDE). edicion = SOLO LECTURA, la añade el servidor cuando la pieza está asignada a un editor ({ editor_nombre, estado: por_editar|en_edicion|entregada|cambios|aprobada, fecha_limite, brief, entregas, mensajes }); no la escribas: la gestionan ${N} y el editor desde el panel. audios = SOLO LECTURA, también la añade el servidor: las notas de voz de ${N} para el guion de esa pieza, [{ id, nombre, fecha, duracion (s), estado: pendiente|lista|error|sin_clave, transcripcion }] (se graban, se escuchan y se borran en la ficha; no las escribas). Cuando te pida montar o mejorar el guion de una pieza, lee sus transcripciones y propón gancho/cuerpo/cierre/cta con sus palabras y su tono; escribe solo lo que te confirme. reels_ref?: [{ url, nota? }] = reels de referencia de la pieza y qué coger de cada uno («ponle de referencia este reel» → añádelo ahí). Las tomas pendientes de cada pieza están en tomas (por cid). — las métricas de piezas con link (YouTube e Instagram) se actualizan solas desde sus APIs; no hace falta que ${N} las dicte salvo que quiera corregirlas. video_url es interno (mp4 del reel para el player del panel, lo rellena la API — no lo toques). notas es la "pizarra" de la pieza y puede llevar HTML sencillo (h2/h3, b, u, div, br); si escribes tú, texto plano o ese HTML simple. — al marcar publicado, pon fecha_pub con el día al que cuenta la publicación: el día real, salvo si se publicó de madrugada (00:00-05:59), que cuenta como el vídeo del día anterior (regla de ${N}: llega tarde a casa y lo sube para el día que acaba de terminar). fecha_plan = día en que ${N} planea publicarla (calendario de publicación; «el reel del Excel sale el jueves» → fecha_plan). Si ${N} pasa el link («publiqué un reel: <link>»), guárdalo en url (sirve para la miniatura y el player del panel). Si menciona métricas («el reel lleva 4k views»), actualiza views/likes de esa pieza.
+- referencias: [{ id, cuenta, url?, titulo?, nota (qué se lleva de ella), formato?, creada }] — ARCHIVO de reels y cuentas modelo: desde el 20 oct ya no tiene pantalla en el panel (la pestaña es solo Ganchos). Un reel de referencia para una pieza va en su contenido[].reels_ref; «guárdame este reel como referencia» sin pieza concreta → pregúntale para qué pieza es.
 - ganchos: [{ id, texto, tipo?, fuente?, nota?, creada }] — banco de ganchos reutilizables. Los ganchos de sus propias piezas ya salen solos del campo gancho de contenido; aquí van los ajenos o sueltos.
 - VISIÓN (su «Creator Vision»: mensaje, pilares, a quién le habla, su historia, rueda LIFE, tres porqués, ganchos y planificador): vive aparte del estado, con historial de versiones (Instagram → Visión). Léela con get_vision cuando vayas a idear, escribir un guion o decidir algo de contenido: es la base de la que partir. Cambiarla es delicado: SOLO con update_vision y SOLO cuando ${N} esté hablando de su visión y te pida cambiarla. Antes de guardar, enséñale el texto exacto que quedará en cada casilla y espera su OK; guarda con un resumen de una frase (qué cambia y por qué). Cada guardado es una versión nueva y la anterior se puede restaurar desde el panel. Nunca la toques de paso en otra tarea.
 - tomas: [{ cid, descripcion, como?, lugar?, tipo: broll|galeria|pantalla|camara|voz, piezas: [cid], estado: pendiente|grabada, plan?, grabada_el?, archivo?, notas? }] — qué hay que grabar para cada pieza. «Grabé las tomas de la cafetería» → set_value en tomas.<índice>.estado = grabada + grabada_el.
@@ -2479,6 +2620,7 @@ app.use(express.static(path.join(__dirname, "public")));
 initSchema()
   .then(() => {
     app.listen(PORT, () => console.log(`OS up on :${PORT}`));
+    transcribePendientes().catch((e) => console.warn("transcripciones pendientes:", e.message));
   })
   .catch((e) => {
     console.error("Schema init failed:", e.message);

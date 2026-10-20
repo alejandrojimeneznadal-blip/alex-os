@@ -201,7 +201,7 @@
   .card .sub { font-size: 12.5px; color: var(--ink-3); margin: -6px 0 12px; }
 
   .btn-mini.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
-  .btn-mini.primary:hover { color: #fff; opacity: 0.92; }
+  .btn-mini.primary:hover { color: var(--surface); opacity: 0.92; } /* nunca #fff fijo: en el tema negro el botón es claro */
   .btn-mini .tic { width: 13px; height: 13px; vertical-align: -2px; margin-right: 3px; }
 
   .ov {
@@ -769,12 +769,8 @@
   .gr-pieza { background: var(--surface-2); border: 0; border-radius: 4px; padding: 2px 7px; font-family: inherit; font-size: 11.5px; color: var(--ink-2); cursor: pointer; }
   .gr-pieza:hover { color: var(--ink); }
   /* referencias y ganchos */
-  .ref-row, .gancho { padding: 10px 0; border-bottom: 1px solid var(--hairline); cursor: pointer; }
-  .ref-row:last-child, .gancho:last-child { border-bottom: 0; }
-  .ref-h { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13.5px; }
-  .ref-link { margin-left: auto; font-size: 12px; color: var(--ink-3); }
-  .ref-t { font-size: 12.5px; color: var(--ink-2); margin-top: 2px; }
-  .ref-nota { font-size: 13px; color: var(--ink-2); margin-top: 4px; line-height: 1.45; white-space: pre-wrap; }
+  .gancho { padding: 10px 0; border-bottom: 1px solid var(--hairline); cursor: pointer; }
+  .gancho:last-child { border-bottom: 0; }
   .g-t { font-size: 14px; color: var(--ink); font-weight: 550; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
   .g-m { font-size: 12px; color: var(--ink-3); margin-top: 3px; }
   /* ficha en pestañas */
@@ -793,6 +789,44 @@
   .ft-toma { display: flex; gap: 8px; align-items: flex-start; font-size: 13.5px; padding: 5px 0; color: var(--ink); cursor: pointer; }
   .ft-toma i { color: var(--ink-3); font-style: normal; }
   .ft-sub { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 16px 0 6px; font-size: 12px; font-weight: 650; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.07em; }
+  /* Guion: reels de referencia y notas de voz, sueltos como el resto de campos */
+  .rf-item { margin: 2px 0 10px; }
+  .rf-fila { display: flex; align-items: flex-start; gap: 4px; }
+  .rf-item textarea { width: 100%; background: transparent; border: 0; border-radius: 0; color: var(--ink); font-family: inherit; font-size: 14px; line-height: 1.7; padding: 2px 0; resize: none; overflow: hidden; field-sizing: content; min-height: calc(1.7em + 4px); }
+  .rf-item textarea:focus { outline: none; }
+  .rf-item textarea::placeholder { color: var(--placeholder); }
+  .rf-fila .rf-url { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+  .rf-item .rf-nota { color: var(--ink-2); font-size: 13.5px; }
+  .rf-fila a, .rf-fila button, .au-borrar { flex-shrink: 0; width: 26px; height: 26px; display: inline-flex; align-items: center; justify-content: center; border-radius: 6px; color: var(--ink-3); background: none; border: 0; cursor: pointer; padding: 0; }
+  .rf-fila a { margin-top: 1px; }
+  .rf-fila a[hidden] { display: none; }
+  .rf-fila a:hover, .rf-fila button:hover, .au-borrar:hover { background: var(--surface-2); color: var(--ink); }
+  .rf-fila .tic, .au-borrar .tic { width: 15px; height: 15px; }
+  .au-vacio { font-size: 13px; color: var(--placeholder); margin: 0 0 12px; line-height: 1.5; }
+  .au-acc { display: inline-flex; gap: 6px; align-items: center; flex-wrap: wrap; justify-content: flex-end; text-transform: none; letter-spacing: 0; font-weight: 500; }
+  .au-acc .btn-mini .tic { width: 13px; height: 13px; vertical-align: -2px; }
+  .au-rec { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--bad); }
+  .au-rec b { font-variant-numeric: tabular-nums; font-weight: 600; }
+  .au-rec i { width: 8px; height: 8px; border-radius: 50%; background: var(--bad); animation: auLatido 1s ease-in-out infinite; }
+  .au-rec.quieto { color: var(--ink-3); }
+  @keyframes auLatido { 50% { opacity: 0.25; } }
+  .au-item { padding: 4px 0 12px; }
+  .au-fila { display: flex; align-items: center; gap: 10px; }
+  .au-play { width: 32px; height: 32px; flex-shrink: 0; border-radius: 50%; border: 1px solid var(--border-strong); background: var(--surface); color: var(--ink); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; }
+  .au-play:hover { border-color: var(--ink-3); }
+  .au-play .tic { width: 13px; height: 13px; }
+  .au-main { flex: 1; min-width: 0; }
+  .au-t { font-size: 13.5px; font-weight: 550; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .au-bar { position: relative; height: 4px; margin-top: 7px; border-radius: 99px; background: var(--hairline); cursor: pointer; }
+  .au-bar::before { content: ""; position: absolute; inset: -6px 0; } /* más fácil de tocar */
+  .au-bar i { position: absolute; left: 0; top: 0; bottom: 0; width: 0; border-radius: 99px; background: var(--ink); }
+  .au-tiempo { flex-shrink: 0; font-size: 12px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+  .au-tr { margin: 6px 0 0 42px; font-size: 13.5px; line-height: 1.6; color: var(--ink-2); white-space: pre-wrap; overflow-wrap: anywhere; }
+  .au-tr.corta { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  .au-tr.muted { color: var(--ink-3); }
+  .au-tr.mal { color: var(--bad); }
+  .au-link { margin: 2px 0 0 42px; padding: 0; background: none; border: 0; font-family: inherit; font-size: 12px; color: var(--ink-3); cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+  .au-link:hover { color: var(--ink); }
   .ed-entrega { padding: 8px 0; border-bottom: 1px solid var(--hairline); font-size: 13.5px; display: flex; gap: 10px; flex-wrap: wrap; align-items: baseline; }
   .ed-entrega a { color: var(--ink); font-weight: 550; }
   .ed-entrega span { color: var(--ink-3); font-size: 12px; }
@@ -894,7 +928,7 @@ function parseHash() {
   finSub = FIN_SUBS.some((x) => x.id === s) ? s : "resumen";
   proySub = a === "proyectos" && s ? decodeURIComponent(s) : null;
   contSub = a === "instagram"
-    ? (["tablero", "edicion", "cola", "grabacion", "referencias", "vision"].includes(s) ? s : "tablero")
+    ? (s === "referencias" ? "ganchos" : ["tablero", "edicion", "cola", "grabacion", "ganchos", "vision"].includes(s) ? s : "tablero") // referencias = nombre antiguo de Ganchos
     : (a === "contenido" && ["reto", "piezas", "calendario"].includes(s) ? s : "reto");
   gymSub = a === "gym" && ["resumen", "tracker", "rutina"].includes(s) ? s : "resumen";
 }
@@ -2698,33 +2732,41 @@ async function refrescaMetricasPanel(idx) {
 }
 
 function cerrarPieza() {
-  clearTimeout(piezaTimer);
+  auCierra();
+  limpiaRefsVacias(STATE.contenido?.[piezaIdx]);
+  // lo escrito en el último medio segundo se guarda antes de refrescar (antes se perdía)
+  const guardado = piezaPendiente ? guardaPiezaYa() : null;
   const p = $("piezaPanel");
   p.classList.remove("show", "full");
   piezaIdx = null;
   setTimeout(() => { if (piezaIdx === null) p.innerHTML = ""; }, 360); // tras la salida
-  load(); // refresca la lista con lo guardado
+  Promise.resolve(guardado).then(() => load()); // refresca la lista con lo guardado
 }
 
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && piezaIdx !== null && !document.querySelector(".osui-ov")) cerrarPieza();
 });
 
+let piezaPendiente = false;
 function guardaPiezaQuiet() {
   clearTimeout(piezaTimer);
-  piezaTimer = setTimeout(async () => {
-    try {
-      const res = await fetch("/api/state", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ contenido: STATE.contenido }),
-      });
-      if (!res.ok) throw new Error("HTTP " + res.status);
-    } catch (e) {
-      alert("No se guardó la pieza: " + e.message);
-    }
-  }, 500);
+  piezaPendiente = true;
+  piezaTimer = setTimeout(guardaPiezaYa, 500);
+}
+async function guardaPiezaYa() {
+  clearTimeout(piezaTimer);
+  piezaPendiente = false;
+  try {
+    const res = await fetch("/api/state", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ contenido: STATE.contenido }),
+    });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+  } catch (e) {
+    alert("No se guardó la pieza: " + e.message);
+  }
 }
 
 /* pizarra: contenteditable con títulos estilo notion, negrita y subrayado */
@@ -2843,6 +2885,269 @@ function htmlEdicionFicha(c) {
     <div class="ed-enviar"><input id="edMsg" placeholder="Escribe al editor" autocomplete="off"><button class="btn-mini primary" id="edMsgBtn">Enviar</button></div>`;
 }
 
+/* ---------- ficha · Guion: reels de referencia y notas de voz (20 oct 2026) ----------
+   reels_ref vive en la pieza. Los audios viven en el servidor (tabla audios) y llegan adjuntos a cada pieza
+   (c.audios, solo lectura): aquí se graban, se suben, se escuchan, se borran y se ve su transcripción. */
+const IC_PLAY = `<svg class="tic" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M7 4v16l13 -8z"/></svg>`;
+const IC_PAUSE = `<svg class="tic" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M6 5h4v14h-4z"/><path d="M14 5h4v14h-4z"/></svg>`;
+const IC_MIC = `<svg class="tic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5a3 3 0 0 1 6 0v5a3 3 0 0 1 -6 0z"/><path d="M5 10a7 7 0 0 0 14 0"/><path d="M8 21h8"/><path d="M12 17v4"/></svg>`;
+const fmtDur = (s) => { s = Math.max(0, Math.round(Number(s) || 0)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
+const piezaPorCid = (cid) => (STATE.contenido || []).find((x) => x?.cid === cid);
+const fichaAbiertaDe = (cid) => piezaIdx !== null && STATE.contenido?.[piezaIdx]?.cid === cid;
+const urlValida = (u) => /^https?:\/\/\S+$/i.test(String(u || "").trim());
+
+function htmlRefsPieza(c) {
+  const l = Array.isArray(c.reels_ref) ? c.reels_ref : [];
+  const filas = l.map((r, k) => `<div class="rf-item">
+      <div class="rf-fila"><textarea class="rf-url" data-k="${k}" rows="1" placeholder="Enlace del reel de referencia">${esc(r.url)}</textarea>
+        <a class="rf-abrir" href="${urlValida(r.url) ? escA(r.url.trim()) : "#"}" target="_blank" rel="noopener" title="Abrir el reel"${urlValida(r.url) ? "" : " hidden"}>${IC_LINK}</a>
+        <button class="rf-quitar" data-k="${k}" title="Quitar">${OSIcons.cerrar}</button></div>
+      <textarea class="rf-nota" data-k="${k}" rows="1" placeholder="Qué coger de él">${esc(r.nota)}</textarea>
+    </div>`).join("");
+  return `<div class="ft-sub"><span>Referencia</span><button class="btn-mini" id="rfNueva">${OSIcons.nueva} Reel</button></div>${filas || `<div class="au-vacio">Sin reel de referencia.</div>`}`;
+}
+function pintaRefs(c) { const box = $("spRefs"); if (!box) return; box.innerHTML = htmlRefsPieza(c); bindRefs(c); }
+function bindRefs(c) {
+  const box = $("spRefs");
+  if (!box) return;
+  const lista = () => (Array.isArray(c.reels_ref) ? c.reels_ref : (c.reels_ref = []));
+  box.querySelector("#rfNueva").onclick = () => {
+    lista().push({ url: "" });
+    pintaRefs(c);
+    box.querySelector(`.rf-url[data-k="${lista().length - 1}"]`)?.focus();
+  };
+  box.querySelectorAll(".rf-url").forEach((t) => {
+    t.onkeydown = (e) => { if (e.key === "Enter") e.preventDefault(); };
+    t.oninput = () => {
+      if (/\n/.test(t.value)) t.value = t.value.replace(/\s*\n+\s*/g, " ");
+      const r = lista()[t.dataset.k];
+      if (!r) return;
+      r.url = t.value.trim();
+      const a = t.parentElement.querySelector(".rf-abrir"); // el botón para abrirlo, solo con un enlace de verdad
+      a.hidden = !urlValida(r.url);
+      a.href = urlValida(r.url) ? r.url : "#";
+      guardaPiezaQuiet();
+    };
+  });
+  box.querySelectorAll(".rf-nota").forEach((t) => {
+    t.oninput = () => { const r = lista()[t.dataset.k]; if (!r) return; const v = t.value.trim(); if (v) r.nota = v; else delete r.nota; guardaPiezaQuiet(); };
+  });
+  box.querySelectorAll(".rf-quitar").forEach((b) => {
+    b.onclick = () => { lista().splice(Number(b.dataset.k), 1); if (!lista().length) delete c.reels_ref; pintaRefs(c); guardaPiezaQuiet(); };
+  });
+}
+// al cerrar la ficha, fuera las referencias que se quedaron en blanco
+function limpiaRefsVacias(c) {
+  if (!c || !Array.isArray(c.reels_ref)) return;
+  const l = c.reels_ref.filter((r) => String(r?.url || "").trim() || String(r?.nota || "").trim());
+  if (l.length === c.reels_ref.length) return;
+  if (l.length) c.reels_ref = l; else delete c.reels_ref;
+  guardaPiezaQuiet();
+}
+
+let auGrabando = null, auSubiendo = null, auSonando = null, auTimer = null;
+function htmlAudiosPieza(c) {
+  const l = c.audios || [];
+  const grabando = auGrabando?.cid === c.cid;
+  const acciones = grabando
+    ? `<span class="au-rec"><i></i>Grabando <b id="auRecT">${fmtDur((Date.now() - auGrabando.t0) / 1000)}</b></span><button class="btn-mini primary" id="auParar">Parar y guardar</button><button class="btn-mini" id="auCancelar">Cancelar</button>`
+    : auSubiendo === c.cid ? `<span class="au-rec quieto">Subiendo…</span>`
+    : `<button class="btn-mini" id="auGrabar">${IC_MIC} Grabar</button><button class="btn-mini" id="auSubir">${OSIcons.subir} Subir</button><input type="file" id="auFile" accept="audio/*" hidden>`;
+  const tr = (a) => {
+    if (a.estado === "pendiente") return `<div class="au-tr muted">Transcribiendo…</div>`;
+    if (a.estado === "sin_clave") return `<div class="au-tr muted">Sin transcribir: falta conectar la transcripción.</div>`;
+    if (a.estado === "error") return `<div class="au-tr mal">No se pudo transcribir.</div><button class="au-link" data-reintentar="${esc(a.id)}">Reintentar</button>`;
+    if (!a.transcripcion) return `<div class="au-tr muted">Sin palabras que transcribir.</div>`;
+    const larga = a.transcripcion.length > 260;
+    return `<div class="au-tr${larga ? " corta" : ""}">${esc(a.transcripcion)}</div>${larga ? `<button class="au-link" data-vermas>Ver entera</button>` : ""}`;
+  };
+  const items = l.map((a) => `<div class="au-item">
+      <div class="au-fila">
+        <button class="au-play" data-play="${esc(a.id)}" title="Escuchar">${IC_PLAY}</button>
+        <div class="au-main"><div class="au-t">${esc(a.nombre || "Nota de voz · " + fechaHora(a.fecha))}</div><div class="au-bar" data-seek="${esc(a.id)}"><i></i></div></div>
+        <span class="au-tiempo" data-t="${esc(a.id)}">${a.duracion ? fmtDur(a.duracion) : ""}</span>
+        <button class="au-borrar" data-borrar="${esc(a.id)}" title="Borrar el audio">${OSIcons.borrar}</button>
+      </div>${tr(a)}</div>`).join("");
+  return `<div class="ft-sub"><span>Audios</span><span class="au-acc">${acciones}</span></div>` +
+    (items || `<div class="au-vacio">Graba la idea del vídeo como te salga: se transcribe sola y Claude la lee para montarte el guion.</div>`);
+}
+function pintaAudios(cid) {
+  const c = piezaPorCid(cid), box = $("spAudios");
+  if (!c || !box || !fichaAbiertaDe(cid)) return;
+  box.innerHTML = htmlAudiosPieza(c);
+  bindAudios(c);
+  auPinta();
+}
+function bindAudios(c) {
+  const box = $("spAudios");
+  if (!box) return;
+  const cid = c.cid, audioDe = (id) => (piezaPorCid(cid)?.audios || []).find((a) => a.id === id);
+  const on = (sel, fn) => { const el = box.querySelector(sel); if (el) el.onclick = fn; };
+  on("#auGrabar", () => auGraba(cid));
+  on("#auParar", () => auPara(false));
+  on("#auCancelar", () => auPara(true));
+  const file = box.querySelector("#auFile");
+  on("#auSubir", () => file.click());
+  if (file) file.onchange = async () => { const f = file.files?.[0]; if (f) await auSube(cid, f, await duracionDe(f), f.name.replace(/\.[^.]+$/, "")); };
+  box.querySelectorAll("[data-play]").forEach((b) => { b.onclick = () => { const a = audioDe(b.dataset.play); if (a) auToca(a); }; });
+  box.querySelectorAll("[data-seek]").forEach((bar) => {
+    bar.onclick = (e) => { const r = bar.getBoundingClientRect(), a = audioDe(bar.dataset.seek); if (a && r.width) auToca(a, Math.min(1, Math.max(0, (e.clientX - r.left) / r.width))); };
+  });
+  box.querySelectorAll("[data-vermas]").forEach((b) => {
+    b.onclick = () => { const t = b.previousElementSibling; t.classList.toggle("corta"); b.textContent = t.classList.contains("corta") ? "Ver entera" : "Ver menos"; };
+  });
+  box.querySelectorAll("[data-borrar]").forEach((b) => {
+    b.onclick = async () => {
+      const a = audioDe(b.dataset.borrar);
+      if (!a || !(await OSUI.confirm("Borrar audio", `«${esc(a.nombre || "Nota de voz · " + fechaHora(a.fecha))}» y su transcripción se borran del todo.`, { ok: "Sí, borrar" }))) return;
+      try {
+        const r = await fetch(`/api/audios/${encodeURIComponent(a.id)}`, { method: "DELETE", credentials: "include" });
+        if (!r.ok) throw new Error("HTTP " + r.status);
+      } catch (e) { return OSUI.confirm("No se borró", esc(e.message), { ok: "Vale", danger: false }); }
+      if (auSonando?.id === a.id) { auSonando.audio.pause(); auSonando = null; }
+      const p = piezaPorCid(cid);
+      if (p) { p.audios = (p.audios || []).filter((x) => x.id !== a.id); if (!p.audios.length) delete p.audios; }
+      pintaAudios(cid);
+    };
+  });
+  box.querySelectorAll("[data-reintentar]").forEach((b) => {
+    b.onclick = async () => {
+      const a = audioDe(b.dataset.reintentar);
+      if (!a) return;
+      try {
+        const j = await apiPost(`/api/audios/${encodeURIComponent(a.id)}/transcribir`);
+        a.estado = j.estado || "pendiente";
+      } catch (e) { return OSUI.confirm("No se pudo reintentar", esc(e.message), { ok: "Vale", danger: false }); }
+      pintaAudios(cid);
+      auVigila(cid);
+    };
+  });
+}
+// mientras haya transcripciones en marcha, se mira cada 3 s cómo van
+function auVigila(cid) {
+  clearTimeout(auTimer);
+  if (!(piezaPorCid(cid)?.audios || []).some((a) => a.estado === "pendiente") || !fichaAbiertaDe(cid)) return;
+  auTimer = setTimeout(async () => {
+    try {
+      const j = await (await fetch(`/api/piezas/${encodeURIComponent(cid)}/audios`, { credentials: "include" })).json();
+      const p = piezaPorCid(cid);
+      if (p && Array.isArray(j.audios)) {
+        const antes = JSON.stringify((p.audios || []).map((a) => [a.id, a.estado]));
+        if (j.audios.length) p.audios = j.audios; else delete p.audios;
+        if (antes !== JSON.stringify(j.audios.map((a) => [a.id, a.estado]))) pintaAudios(cid);
+      }
+    } catch (e) {}
+    auVigila(cid);
+  }, 3000);
+}
+function duracionDe(file) {
+  return new Promise((ok) => {
+    const url = URL.createObjectURL(file), a = new Audio();
+    const fin = (v) => { URL.revokeObjectURL(url); ok(Number.isFinite(v) && v > 0 ? v : null); };
+    a.preload = "metadata";
+    a.onloadedmetadata = () => fin(a.duration);
+    a.onerror = () => fin(null);
+    setTimeout(() => fin(null), 4000);
+    a.src = url;
+  });
+}
+const AUDIO_POR_EXT = { m4a: "audio/mp4", mp4: "audio/mp4", mp3: "audio/mpeg", wav: "audio/wav", ogg: "audio/ogg", oga: "audio/ogg", webm: "audio/webm", flac: "audio/flac" };
+async function auSube(cid, blob, dur, nombre) {
+  const tipo = (blob.type || AUDIO_POR_EXT[String(blob.name || "").split(".").pop().toLowerCase()] || "").split(";")[0];
+  if (!/^audio\/|^video\/(mp4|webm)$/.test(tipo)) return OSUI.confirm("No es un audio", "Sube una nota de voz (m4a, mp3, wav, ogg o webm).", { ok: "Vale", danger: false });
+  if (blob.size > 25 * 1024 * 1024) return OSUI.confirm("Audio demasiado largo", "El máximo son 25 MB por audio (unos 25 minutos). Pártelo en dos.", { ok: "Vale", danger: false });
+  auSubiendo = cid;
+  pintaAudios(cid);
+  try {
+    const q = new URLSearchParams();
+    if (dur) q.set("dur", Number(dur).toFixed(1));
+    if (nombre) q.set("nombre", nombre);
+    const r = await fetch(`/api/piezas/${encodeURIComponent(cid)}/audios?${q}`, { method: "POST", credentials: "include", headers: { "Content-Type": tipo }, body: blob });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || "HTTP " + r.status);
+    const p = piezaPorCid(cid);
+    if (p) (p.audios = p.audios || []).push(j.audio);
+  } catch (e) {
+    OSUI.confirm("No se guardó el audio", esc(e.message), { ok: "Vale", danger: false });
+  } finally {
+    auSubiendo = null;
+    pintaAudios(cid);
+    auVigila(cid);
+  }
+}
+async function auGraba(cid) {
+  if (auGrabando) return;
+  if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined")
+    return OSUI.confirm("No se puede grabar aquí", "Este navegador no deja grabar audio. Graba la nota con el móvil y súbela con «Subir».", { ok: "Vale", danger: false });
+  let stream;
+  try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+  catch (e) { return OSUI.confirm("Sin micrófono", "El navegador no ha dado permiso para usar el micrófono. Actívalo en los permisos del sitio y vuelve a probar.", { ok: "Vale", danger: false }); }
+  // m4a donde se pueda (se escucha en todos lados); si no, webm
+  const tipo = ["audio/mp4;codecs=mp4a.40.2", "audio/mp4", "audio/webm;codecs=opus", "audio/webm"].find((t) => MediaRecorder.isTypeSupported?.(t)) || "";
+  const rec = new MediaRecorder(stream, tipo ? { mimeType: tipo } : undefined);
+  const g = { cid, rec, stream, chunks: [], t0: Date.now(), cancelado: false };
+  rec.ondataavailable = (e) => { if (e.data?.size) g.chunks.push(e.data); };
+  rec.onstop = async () => {
+    stream.getTracks().forEach((t) => t.stop());
+    clearInterval(g.reloj);
+    auGrabando = null;
+    if (g.cancelado || !g.chunks.length) return pintaAudios(cid);
+    const blob = new Blob(g.chunks, { type: (rec.mimeType || tipo || "audio/webm").split(";")[0] });
+    await auSube(cid, blob, (Date.now() - g.t0) / 1000);
+  };
+  auGrabando = g;
+  rec.start(1000);
+  g.reloj = setInterval(() => { const el = $("auRecT"); if (el) el.textContent = fmtDur((Date.now() - g.t0) / 1000); }, 500);
+  pintaAudios(cid);
+}
+function auPara(cancelar) {
+  if (!auGrabando || auGrabando.rec.state === "inactive") return; // ya parada: la primera orden manda
+  auGrabando.cancelado = !!cancelar;
+  auGrabando.rec.stop();
+}
+// el reproductor: uno a la vez, con su barra y su tiempo pintados en la ficha
+function auPinta() {
+  const p = $("piezaPanel");
+  if (!p) return;
+  p.querySelectorAll("[data-play]").forEach((b) => {
+    const suena = auSonando?.id === b.dataset.play && !auSonando.audio.paused;
+    b.innerHTML = suena ? IC_PAUSE : IC_PLAY;
+    b.title = suena ? "Pausa" : "Escuchar";
+  });
+  if (!auSonando) return;
+  const { id, audio } = auSonando;
+  const dur = Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : auSonando.dur || 0;
+  const barra = p.querySelector(`[data-seek="${CSS.escape(id)}"] i`);
+  if (barra) barra.style.width = dur ? Math.min(100, (audio.currentTime / dur) * 100) + "%" : "0";
+  const t = p.querySelector(`[data-t="${CSS.escape(id)}"]`);
+  if (t) t.textContent = `${fmtDur(audio.currentTime)} / ${fmtDur(dur)}`;
+}
+function auToca(a, ratio) {
+  if (auSonando?.id !== a.id) {
+    if (auSonando) auSonando.audio.pause();
+    const audio = new Audio(`/api/audios/${encodeURIComponent(a.id)}`);
+    audio.preload = "auto";
+    auSonando = { id: a.id, audio, dur: a.duracion || 0 };
+    for (const ev of ["timeupdate", "play", "pause", "loadedmetadata"]) audio.addEventListener(ev, auPinta);
+    audio.addEventListener("ended", () => { audio.currentTime = 0; auPinta(); });
+    audio.addEventListener("error", () => { if (auSonando?.audio === audio) auSonando = null; auPinta(); OSUI.confirm("No se puede escuchar", "Este navegador no reproduce el formato de este audio.", { ok: "Vale", danger: false }); });
+  }
+  const { audio } = auSonando;
+  if (ratio != null) {
+    const ve = () => { const d = Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : auSonando?.dur; if (d) audio.currentTime = ratio * d; };
+    if (audio.readyState >= 1) ve(); else audio.addEventListener("loadedmetadata", ve, { once: true });
+    if (audio.paused) audio.play().catch(() => {});
+    return;
+  }
+  if (audio.paused) audio.play().catch(() => {}); else audio.pause();
+}
+// al cerrar la ficha: lo que se está grabando se guarda; lo que suena se para
+function auCierra() {
+  clearTimeout(auTimer);
+  if (auGrabando) auPara(false);
+  if (auSonando) { auSonando.audio.pause(); auSonando = null; }
+}
+
 // los campos de texto de la ficha crecen con lo que se escribe: con CSS (field-sizing) donde se puede; si no, aquí
 const CAMPOS_CSS = typeof CSS !== "undefined" && CSS.supports?.("field-sizing", "content");
 function creceCampo(t) { if (CAMPOS_CSS || !t.offsetParent) return; t.style.height = "auto"; t.style.height = t.scrollHeight + "px"; }
@@ -2890,6 +3195,8 @@ function renderPiezaPanel() {
       <div class="ft-tabs">${FICHA_TABS.filter(([id]) => id !== "edicion" || ed).map(([id, l]) => `<button class="${fichaTab === id ? "on" : ""}" data-tab="${id}">${l}${id === "edicion" && ed.estado === "entregada" ? " · revisar" : ""}</button>`).join("")}</div>
 
       <div class="ft-sec" data-sec="guion">
+        <div id="spRefs">${htmlRefsPieza(c)}</div>
+        <div id="spAudios">${htmlAudiosPieza(c)}</div>
         ${campo("gancho", "Gancho", "La primera frase: lo que hace que se queden")}
         ${campo("cuerpo", "Cuerpo")}
         <div class="sp-grid2">${campo("cierre", "Cierre")}${campo("cta", "Llamada a la acción", "Comenta CLAUDE y te lo mando")}</div>
@@ -2943,6 +3250,9 @@ function renderPiezaPanel() {
   };
   p.querySelectorAll(".ft-tabs button").forEach((b) => { b.onclick = () => muestra(b.dataset.tab); });
   muestra(fichaTab);
+  bindRefs(c);
+  bindAudios(c);
+  auVigila(c.cid);
 
   $("spFull").onclick = () => { p.classList.toggle("full"); setTimeout(() => creceCampos(p), 450); };
   p.querySelectorAll(".sp-campo textarea").forEach((t) => t.addEventListener("input", () => creceCampo(t)));
@@ -3044,8 +3354,13 @@ function renderPiezaPanel() {
   initPizarra(c, p, guardaPiezaQuiet);
   $("spBorrar").onclick = async () => {
     if (!(await OSUI.confirm("Borrar pieza", `«${esc(c.titulo || "(sin título)")}» se elimina del todo.`, { ok: "Sí, borrar" }))) return;
+    if (auGrabando?.cid === c.cid) auPara(true);
+    auCierra();
+    // sus audios no se quedan huérfanos en el servidor
+    for (const a of c.audios || []) fetch(`/api/audios/${encodeURIComponent(a.id)}`, { method: "DELETE", credentials: "include" }).catch(() => {});
     STATE.contenido.splice(piezaIdx, 1);
     clearTimeout(piezaTimer);
+    piezaPendiente = false;
     piezaIdx = null;
     $("piezaPanel").classList.remove("show", "full");
     saveClave("contenido");
@@ -3614,7 +3929,7 @@ const VIEWS = {
   instagram() {
     const nRev = (STATE.contenido || []).filter((c) => c.edicion?.estado === "entregada").length;
     const nav = `<div class="subnav">${IG_TABS.map((t) => `<button class="${contSub === t.id ? "active" : ""}" onclick="location.hash='instagram/${t.id}'">${t.l}${t.id === "edicion" && nRev ? ` · ${nRev}` : ""}</button>`).join("")}</div>`;
-    const vista = contSub === "edicion" ? vistaEdicionIG() : contSub === "cola" ? vistaColaIG() : contSub === "grabacion" ? vistaGrabacionIG() : contSub === "referencias" ? vistaReferenciasIG() : contSub === "vision" ? vistaVisionIG() : vistaTableroIG();
+    const vista = contSub === "edicion" ? vistaEdicionIG() : contSub === "cola" ? vistaColaIG() : contSub === "grabacion" ? vistaGrabacionIG() : contSub === "ganchos" ? vistaGanchosIG() : contSub === "vision" ? vistaVisionIG() : vistaTableroIG();
     return nav + vista;
   },
   agenda() { return vistaAgendaCal(); },
@@ -4371,11 +4686,11 @@ function vistaAgendaCal() {
 
 /* ======================== INSTAGRAM · rediseño 15 oct 2026 ========================
    Tablero (pipeline + archivo de publicadas) · Edición (editores y lo que tienen entre manos) ·
-   Cola (qué sale cada día y colchón) · Grabación (tomas pendientes por sitio) · Referencias (cuentas modelo y ganchos).
+   Cola (qué sale cada día y colchón) · Grabación (tomas pendientes por sitio) · Ganchos (banco de ganchos).
    La ficha de cada pieza (renderPiezaPanel) va en pestañas: Guion · Publicación · Producción · Edición · Notas. */
 const IG_TABS = [
   { id: "tablero", l: "Tablero" }, { id: "edicion", l: "Edición" }, { id: "cola", l: "Cola" },
-  { id: "grabacion", l: "Grabación" }, { id: "referencias", l: "Referencias" }, { id: "vision", l: "Visión" },
+  { id: "grabacion", l: "Grabación" }, { id: "ganchos", l: "Ganchos" }, { id: "vision", l: "Visión" },
 ];
 const RANGO_PIEZA = { idea: 0, guion: 1, grabar: 2, editar: 3, lista: 4, publicado: 5 };
 const ED_ESTADOS = [
@@ -4665,15 +4980,12 @@ async function nuevaToma(cidFijo) {
   return true;
 }
 
-/* ---------- Referencias y ganchos ---------- */
-function vistaReferenciasIG() {
-  const refs = (STATE.referencias || []).slice().reverse();
+/* ---------- Ganchos ---------- */
+/* Ganchos: los guardados y los de tus piezas. Las cuentas de referencia se quitaron el 20 oct (Alex): ahora cada
+   pieza lleva sus reels de referencia en la ficha (reels_ref); STATE.referencias se queda como archivo, sin pantalla. */
+function vistaGanchosIG() {
   const propios = (STATE.contenido || []).map((c, i) => ({ c, i })).filter((x) => String(x.c.gancho || "").trim());
   const guardados = (STATE.ganchos || []).slice().reverse();
-  const refHtml = refs.length ? refs.map((r) => `<div class="ref-row" onclick="editarReferencia('${esc(r.id)}')">
-      <div class="ref-h"><b>${esc(r.cuenta || r.titulo || "Referencia")}</b>${r.formato ? `<span class="kb-tag">${esc(r.formato)}</span>` : ""}${r.url ? `<a class="ref-link" href="${escA(r.url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Abrir</a>` : ""}</div>
-      ${r.titulo && r.cuenta ? `<div class="ref-t">${esc(r.titulo)}</div>` : ""}${r.nota ? `<div class="ref-nota">${esc(r.nota)}</div>` : ""}</div>`).join("")
-    : `<div class="empty-note">Guarda aquí los reels y las cuentas que te sirven de modelo, con lo que te llevas de cada uno.</div>`;
   const lista = [
     ...(refFiltro !== "mios" ? guardados.map((g) => ({ g })) : []),
     ...(refFiltro !== "guardados" ? propios.map((x) => ({ x })) : []),
@@ -4682,32 +4994,8 @@ function vistaReferenciasIG() {
       ? `<div class="gancho" onclick="editarGancho('${esc(it.g.id)}')"><div class="g-t">${esc(it.g.texto)}</div><div class="g-m">${[it.g.tipo, it.g.fuente].filter(Boolean).map(esc).join(" · ") || "Guardado"}</div></div>`
       : `<div class="gancho" onclick="abrirPieza(${it.x.i},'guion')"><div class="g-t">${esc(it.x.c.gancho)}</div><div class="g-m">Tu pieza · ${esc((it.x.c.titulo || "").slice(0, 48))}${estadoPieza(it.x.c) === "publicado" && it.x.c.views ? ` · ${fmtN(it.x.c.views)} vistas` : ` · ${labelEstado(it.x.c).toLowerCase()}`}</div></div>`).join("")
     : `<div class="empty-note">Sin ganchos todavía.</div>`;
-  return `<div class="card"><div class="row-h"><h2>Referencias</h2><button class="btn-mini primary" onclick="nuevaReferencia()">${OSIcons.nueva} Referencia</button></div>${refHtml}</div>
-    <div class="card"><div class="row-h"><h2>Ganchos</h2><button class="btn-mini primary" onclick="nuevoGancho()">${OSIcons.nueva} Gancho</button></div>
+  return `<div class="card"><div class="row-h"><h2>Ganchos</h2><button class="btn-mini primary" onclick="nuevoGancho()">${OSIcons.nueva} Gancho</button></div>
       <div class="filtros" style="margin-top:8px">${[["todo", "Todos"], ["guardados", "Guardados"], ["mios", "De tus piezas"]].map(([id, l]) => `<button class="${refFiltro === id ? "on" : ""}" onclick="refFiltro='${id}';renderContent()">${l}</button>`).join("")}</div>${gHtml}</div>`;
-}
-const REF_CAMPOS = (r = {}) => [
-  { id: "cuenta", label: "Cuenta", valor: r.cuenta || "", placeholder: "@cuenta" },
-  { id: "url", label: "Enlace (opcional)", valor: r.url || "", placeholder: "https://www.instagram.com/reel/…" },
-  { id: "titulo", label: "Qué reel o formato (opcional)", valor: r.titulo || "", placeholder: "Reel mudo de 9 s con frase en pantalla" },
-  { id: "nota", label: "Qué me llevo", valor: r.nota || "", placeholder: "Gancho sostenido 3 s y corte con la música" },
-  { id: "formato", label: "Formato (opcional)", valor: r.formato || "", placeholder: "mudo · voz en off · a cámara" },
-];
-const limpiaRef = (r, f) => { for (const k of ["cuenta", "url", "titulo", "nota", "formato"]) { const v = String(f[k] || "").trim(); if (v) r[k] = v; else delete r[k]; } return r; };
-async function nuevaReferencia() {
-  const f = await OSUI.form({ titulo: "Nueva referencia", campos: REF_CAMPOS(), ok: "Guardar" });
-  if (!f || !(f.cuenta.trim() || f.titulo.trim() || f.url.trim())) return;
-  (STATE.referencias = STATE.referencias || []).push(limpiaRef({ id: uidL("rf"), creada: isoLocal(new Date()) }, f));
-  await guardaYPinta({ referencias: STATE.referencias });
-}
-async function editarReferencia(id) {
-  const r = (STATE.referencias || []).find((x) => x.id === id);
-  if (!r) return;
-  const f = await OSUI.form({ titulo: "Referencia", campos: REF_CAMPOS(r), ok: "Guardar", borrar: true });
-  if (!f) return;
-  if (f === "borrar") STATE.referencias.splice(STATE.referencias.indexOf(r), 1);
-  else limpiaRef(r, f);
-  await guardaYPinta({ referencias: STATE.referencias });
 }
 const GANCHO_CAMPOS = (g = {}) => [
   { id: "texto", label: "Gancho", valor: g.texto || "", placeholder: "La frase con la que empieza el reel" },
