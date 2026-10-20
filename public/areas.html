@@ -108,12 +108,6 @@
   :root[data-theme="negro"] .pieza-chip.reel.m-atraccion, :root[data-theme="azul"] .pieza-chip.reel.m-atraccion { color: #6aa5ff; }
   :root[data-theme="negro"] .pieza-chip.reel.m-nutricion, :root[data-theme="azul"] .pieza-chip.reel.m-nutricion { color: #ffa65c; }
   :root[data-theme="negro"] .pieza-chip.reel.m-conversion, :root[data-theme="azul"] .pieza-chip.reel.m-conversion { color: #b69cff; }
-  /* agenda: objetivo de la semana por misión (config_contenido.objetivos): cuántas hay de cada frente a cuántas tocan */
-  .ag-sem { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 3px 12px; font-size: 11px; color: var(--ink-3); padding: 0 2px 5px; }
-  .ag-sem b { font-weight: 650; color: var(--ink-2); }
-  .ag-sem .ok, .ag-sem .ok b { color: var(--good); }
-  .ag-sem i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; vertical-align: -0.5px; margin-right: 4px; }
-  .ag-sem.semana { padding: 0 2px 8px; }
   /* agenda: navegación (Hoy ‹ › título · Mes | Semana) y vista semanal */
   .ag-nav { flex-wrap: wrap; row-gap: 8px; }
   .ag-nav .ag-hoy { width: auto; padding: 0 10px; font-size: 12px; font-weight: 550; color: var(--ink-2); }
@@ -2825,7 +2819,7 @@ const palabrasDe = (c) => [c.gancho, c.cuerpo, c.cierre, c.cta].map((t) => Strin
 const duracionTxt = (n) => (n ? `Unos ${Math.max(1, Math.round(n / 2.5))} segundos hablados · ${n} palabras` : "Sin guion todavía");
 const CLASES = ["soft", "hard", "meme", "propio", "3D"]; // propio = lo edita Alex (pantalla partida, etc.), no el editor · 3D = reel 3D sin cara (pipeline de reels 3D)
 /* Misión de cada pieza (para qué sirve): atracción = que te vea y te siga alguien nuevo · nutrición = prueba para el que ya te sigue (sistema real, número, fallo) · conversión = el link / el Skool.
-   En la Agenda cada pieza sin publicar sale del color de su misión y config_contenido.objetivos = [{ desde, hasta?, atraccion, nutricion, conversion }] dice cuántas de cada tocan por semana. */
+   En la Agenda cada pieza sin publicar sale del color de su misión. */
 const MISIONES = [["atraccion", "Atracción"], ["nutricion", "Nutrición"], ["conversion", "Conversión"]];
 const MISION_COLOR = { atraccion: "rgba(59,130,246,.45)", nutricion: "rgba(234,122,24,.5)", conversion: "rgba(139,92,246,.5)" };
 const misionLabel = (id) => (MISIONES.find(([k]) => k === id) || [id, id || ""])[1];
@@ -4326,23 +4320,6 @@ function agVer(v) {
   else if (calSemana) calMes = masDias(calSemana, 3).slice(0, 7);
   location.hash = "agenda/" + v;
 }
-/* Objetivo de la semana por misión: config_contenido.objetivos = [{ desde, hasta?, atraccion, nutricion, conversion }] (el que contenga el lunes de esa semana).
-   La Agenda cuenta las piezas con fecha de esos siete días (publicadas o no) por su misión y lo enseña debajo de cada semana. */
-function objetivoSemana(lunes) {
-  const l = STATE.config_contenido?.objetivos;
-  if (!Array.isArray(l)) return null;
-  return l.find((o) => o && o.desde && lunes >= o.desde && (!o.hasta || lunes <= o.hasta)) || null;
-}
-function resumenSemana(lunes, piezas, extra = "") {
-  const obj = objetivoSemana(lunes);
-  if (!obj) return "";
-  const n = { atraccion: 0, nutricion: 0, conversion: 0, sin: 0 };
-  for (let k = 0; k < 7; k++) (piezas[masDias(lunes, k)] || []).forEach((i) => { const m = misionDe(STATE.contenido[i]); if (m) n[m]++; else n.sin++; });
-  const partes = MISIONES.filter(([k]) => Number(obj[k]) > 0 || n[k] > 0).map(([k, l]) => { const meta = Number(obj[k]) || 0;
-    return `<span class="${meta && n[k] >= meta ? "ok" : ""}"><i style="background:${MISION_COLOR[k]}"></i>${l} <b>${n[k]}/${meta}</b></span>`; });
-  if (n.sin) partes.push(`<span><i style="background:rgba(227,57,130,.35)"></i>sin misión <b>${n.sin}</b></span>`);
-  return `<div class="ag-sem${extra}">${partes.join("")}</div>`;
-}
 function chipsAgenda(f, piezas, semana) {
   let chips = (piezas[f] || []).map((i) => { const c = STATE.contenido[i]; const pub = estadoPieza(c) === "publicado"; const m = pub ? "" : misionDe(c);
     return `<span class="pieza-chip ${pub ? "pub" : "reel"}${m ? ` m-${m}` : ""}" onclick="event.stopPropagation();abrirPieza(${i})">${pub ? "✓ " : ""}${c.hora && !pub ? c.hora + " " : ""}${esc(c.titulo || "(sin título)")}${semana && !pub ? `<small>${esc(labelEstado(c))}</small>` : ""}</span>`; }).join("");
@@ -4362,7 +4339,7 @@ function vistaAgendaCal() {
   if (agVista === "semana") {
     const dias = Array.from({ length: 7 }, (_, k) => masDias(calSemana, k));
     titulo = rangoSemana(dias[0], dias[6]);
-    cuerpo = resumenSemana(calSemana, piezas, " semana") + `<div class="semcal">${dias.map((f) => { const d = new Date(f + "T12:00");
+    cuerpo = `<div class="semcal">${dias.map((f) => { const d = new Date(f + "T12:00");
       return `<div class="ag-dia${f === hoy ? " hoy" : f < hoy ? " pasado" : ""}"><div class="ag-dia-h"><span>${DIAS_CORTOS[d.getDay()]}</span><b>${d.getDate()}</b></div><div class="ag-dia-b">${chipsAgenda(f, piezas, true)}</div></div>`; }).join("")}</div>`;
   } else {
     const [y, m] = calMes.split("-").map(Number);
@@ -4376,7 +4353,6 @@ function vistaAgendaCal() {
     for (let d = 1; d <= nDias; d++) {
       const f = `${calMes}-${String(d).padStart(2, "0")}`;
       cuerpo += `<div class="day${f === hoy ? " hoy" : ""}"><span class="dn">${d}</span>${chipsAgenda(f, piezas, false)}</div>`;
-      if ((start + d) % 7 === 0 || d === nDias) cuerpo += resumenSemana(lunesDe(f), piezas);
     }
     cuerpo += `</div>`;
   }
