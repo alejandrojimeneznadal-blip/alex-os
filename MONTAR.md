@@ -243,6 +243,7 @@ Dockerfile        Node 22, puerto 3200.
 | `AUTH_USER` | No | Usuario de la primera cuenta. Por defecto `admin`. |
 | `SESSION_SECRET` | Muy recomendada | Firma las sesiones y cifra la clave del banco. Fija para siempre. |
 | `OWNER_NAME`, `OWNER_CONTEXT` | No | Nombre y contexto de la primera cuenta; luego se editan en Configuración. |
+| `PANEL_TZ`, `DIA_CIERRA_A` | No | Zona horaria y hora a la que acaba el día del panel (por defecto `Europe/Madrid` y `5`: lo de antes de las 5:00 cuenta para el día anterior). |
 | `PORT` | No | Por defecto 3200. |
 | `YOUTUBE_API_KEY`, `APIFY_TOKEN` | No | Métricas automáticas de vídeos publicados. |
 

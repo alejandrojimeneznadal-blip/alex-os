@@ -504,10 +504,20 @@ function resumenEtapa(e, days) {
   return { n: e.n, nombre: e.nombre || null, desde: e.desde, hasta: e.hasta, capital: r2(cap), pico: r2(pico), caida_pct: Math.round((cap / pico - 1) * 1000) / 10, media: reg ? Math.round(suma / reg) : null, dias: total, dias_registrados: reg, dias_blanco: blanco };
 }
 
-function todayISO() {
-  const d = new Date();
-  const tz = d.getTimezoneOffset() * 60000;
-  return new Date(d - tz).toISOString().slice(0, 10);
+/* EL DÍA DEL PANEL acaba a las 5:00 en Madrid, no a medianoche: lo que se hace o se apunta de madrugada
+   (trabajar hasta tarde, cenar a la 1) cuenta para el día anterior, y quien se levanta a las 5:30 ya está
+   en el día nuevo. Lo usan el score, la curva, el widget y lo que apunta Claude sin fecha.
+   Para otra persona: PANEL_TZ (zona horaria) y DIA_CIERRA_A (hora, 0 = medianoche). */
+const PANEL_TZ = (() => {
+  const tz = process.env.PANEL_TZ || "Europe/Madrid";
+  try { new Intl.DateTimeFormat("en-CA", { timeZone: tz }); return tz; } catch (e) { console.warn("PANEL_TZ no válida:", tz, "→ UTC"); return "UTC"; }
+})();
+const DIA_CIERRA_A = process.env.DIA_CIERRA_A ? Math.min(12, Math.max(0, Math.floor(Number(process.env.DIA_CIERRA_A)) || 0)) : 5;
+const FMT_PANEL = new Intl.DateTimeFormat("en-CA", { timeZone: PANEL_TZ, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", hourCycle: "h23" });
+function todayISO(ahora = new Date()) {
+  const p = Object.fromEntries(FMT_PANEL.formatToParts(ahora).map((x) => [x.type, x.value]));
+  const f = `${p.year}-${p.month}-${p.day}`;
+  return Number(p.hour) < DIA_CIERRA_A ? addDays(f, -1) : f;
 }
 
 function addDays(iso, n) {
@@ -531,8 +541,10 @@ function buildDashboard(data) {
 
   /* CURVA DE CAPITAL: el score del día es un tipo de interés, no una cantidad.
      Arranca en 100 el primer día registrado. Un día de 100 rinde +1 %, un día en el
-     equilibrio (config.equilibrio, 35 por defecto) deja el capital igual y un día en blanco
-     ya pasado resta como un 0. Hoy no descuenta hasta que se registre: el día sigue abierto.
+     equilibrio (config.equilibrio, 35 por defecto) deja el capital igual y un día que se cerró sin
+     nada apuntado cuenta como un 0 (en la serie, score 0 con vacio: true: se ve como 0 «sin registrar»
+     y entra en las medias; si luego se apunta, manda lo apuntado). Hoy no descuenta hasta que se
+     registre algo: el día sigue abierto hasta las 5:00 del siguiente (todayISO).
      Sin techo (sostener días buenos sigue multiplicando) y puede caer, que es lo que la hace honesta. */
   const eq = Math.min(99, Math.max(1, Number(config.equilibrio) || 35));
   const rendimiento = (score) => (score - eq) / (100 - eq); // en tanto por ciento (+1 = +1 %)
@@ -540,7 +552,8 @@ function buildDashboard(data) {
   let acumulado = 0, capital = 100, pico = { valor: 100, fecha: inicio };
   for (let f = start; f <= today; f = addDays(f, 1)) {
     const d = days[f];
-    const score = scoreOf(f);
+    const vacio = !d && f >= first && f < today; // cerrado sin nada apuntado: cuenta como 0
+    const score = vacio ? 0 : scoreOf(f);
     acumulado += score || 0;
     let rend = null;
     const enEtapa = f >= inicio;
@@ -549,7 +562,7 @@ function buildDashboard(data) {
       capital *= 1 + rend / 100;
       if (capital > pico.valor) pico = { valor: capital, fecha: f };
     }
-    serie.push({ fecha: f, score, acumulado, capital: enEtapa ? Math.round(capital * 100) / 100 : null, rend: rend === null ? null : Math.round(rend * 100) / 100, resumen: d?.resumen || null });
+    serie.push({ fecha: f, score, ...(vacio ? { vacio: true } : {}), acumulado, capital: enEtapa ? Math.round(capital * 100) / 100 : null, rend: rend === null ? null : Math.round(rend * 100) / 100, resumen: d?.resumen || null });
   }
   // ritmo: tasa diaria media de los últimos 30 días (geométrica) y qué multiplicador anual implica
   const capDe = (fecha) => serie.find((p) => p.fecha === fecha)?.capital;
@@ -690,8 +703,10 @@ function fraseDeFranja(frases, fecha, hora) {
 }
 
 function buildWidget(data, user, q = {}) {
-  const fecha = /^\d{4}-\d{2}-\d{2}$/.test(q.fecha || "") ? q.fecha : todayISO();
   const hora = hora2(q.hora) || new Date().toTimeString().slice(0, 5);
+  // el móvil manda su fecha de calendario: de madrugada (antes de DIA_CIERRA_A) el día del panel aún es el anterior
+  let fecha = /^\d{4}-\d{2}-\d{2}$/.test(q.fecha || "") ? q.fecha : todayISO();
+  if (q.fecha && hora2(q.hora) && Number(hora2(q.hora).slice(0, 2)) < DIA_CIERRA_A) fecha = addDays(fecha, -1);
   const config = data.config || DEFAULT_CONFIG;
   const kcalObj = Number(data.config_nutricion?.kcal_obj) || 2500;
   const dia = data.days?.[fecha] || null;
@@ -2103,11 +2118,11 @@ const systemPromptFor = (N, CTX, HAB) => `Eres el asistente personal de ${N}.${C
 Esta app es su panel de vida y tú estás conectado a ella por MCP: él te cuenta su día (al final o durante) y TÚ estructuras y guardas los datos con estas herramientas. El dashboard calcula un score diario 0-100 con matemática fija a partir de las señales — tú NUNCA calculas ni inventas el score, solo registras señales.
 
 Estructura del estado:
-- config.equilibrio (35 por defecto): el score que deja plana la CURVA DE CAPITAL. La curva trata el score del día como un tipo de interés: un día de 100 rinde +1 %, un día en el equilibrio no mueve nada y un día en blanco ya pasado resta como un 0; el capital arranca en 100 el primer día registrado, no tiene techo y puede caer. Es su medida de crecimiento a largo plazo ("ser un 1 % mejor cada día"): cuando pregunte cómo va, léela en get_dashboard.curva (capital, pico, caída, rend_hoy, anual = multiplicador si sostiene el ritmo de los últimos 30 días) y cuéntasela sin maquillar. Solo él cambia el equilibrio.
+- config.equilibrio (35 por defecto): el score que deja plana la CURVA DE CAPITAL. La curva trata el score del día como un tipo de interés: un día de 100 rinde +1 %, un día en el equilibrio no mueve nada y un día que se cerró sin registrar cuenta como un 0 (en get_dashboard.serie sale con score 0 y vacio: true; si ${N} te cuenta ese día después, regístralo con log_day y su fecha y manda lo registrado); el capital arranca en 100 el primer día registrado, no tiene techo y puede caer. Es su medida de crecimiento a largo plazo ("ser un 1 % mejor cada día"): cuando pregunte cómo va, léela en get_dashboard.curva (capital, pico, caída, rend_hoy, anual = multiplicador si sostiene el ritmo de los últimos 30 días) y cuéntasela sin maquillar. Solo él cambia el equilibrio.
 - config.senales: [{ id, label, tipo: "bool"|"horas"|"kcal", peso, umbral? }] — los HÁBITOS que puntúan (${N} los llama "hábitos": dile siempre hábito, nunca señal — la clave interna sigue siendo senales). Actuales: ${HAB}
 - config.modulos: [ids] — las PARTES del panel que ${N} usa (la barra lateral solo enseña esas). Catálogo: agenda (calendario por mes o semana: publicaciones, recordatorios y entrenos hechos; sin tareas), instagram (piezas de contenido: tablero, cola, grabación, edición con editor, referencias, visión), gym (rutina, series y peso), sueno, nutricion (kcal frente a objetivo), finanzas (cuentas, bancos, movimientos, suscripciones, ahorro), proyectos (carpetas con subproyectos, tareas y archivos), bandeja, ideas, notas (las tres del Cerebro) y skool (reservado, sin construir). El Panel siempre está. Si no existe la clave se ven las de siempre. Cámbiala solo con su OK, con set_value config.modulos y la lista entera.
 - config.etapa / config.etapas / config.proxima — ETAPAS de la curva. Cuando cambia el sistema de medida (hábitos nuevos, otro objetivo) la curva vuelve a empezar en 100 y la etapa anterior queda cerrada con SUS hábitos: los días pasados no se vuelven a puntuar con la vara nueva. Para cambiar los hábitos a partir de una fecha NO toques config.senales: programa set_value config.proxima = { desde: "YYYY-MM-DD", nombre?, senales: [...] } (mismo formato que config.senales; conserva los ids de los hábitos que sigan) y el servidor hace el cambio solo ese día. Cambiar config.senales a mano vuelve a puntuar toda la etapa en curso: solo para retoques pequeños y con su OK. Regla de ${N}: se cambia de etapa solo cuando cambia el sistema, nunca porque la curva vaya mal. get_dashboard.curva trae la etapa en curso, el cierre de las anteriores y la programada.
-- days: por fecha { senales: {id: valor}, resumen } — el registro diario.
+- days: por fecha { senales: {id: valor}, resumen } — el registro diario.${DIA_CIERRA_A ? ` EL DÍA ACABA A LAS ${DIA_CIERRA_A}:00 (${PANEL_TZ}), no a medianoche: lo que pase o te cuente antes de esa hora es del día anterior, y sin fecha log_day, log_gym, append_journal y add_item ya usan ese día.` : ""} Hoy sigue abierto hasta que acaba: si aún no hay nada apuntado, su score es null (no 0) y la curva no lo cuenta; un día que acabó sin nada cuenta como 0.
 - journal: [{ fecha, area, texto }] — apuntes de contexto por área: general|sueno|gym|nutricion|proyectos|contenido|finanzas.
 - memoria: [{ id, texto, fecha }] — TU memoria durable entre conversaciones. Va entera al final de estas instrucciones, así que la tienes delante desde el primer mensaje sin leerla: guarda ahí con add_item lo que deba sobrevivir a esta conversación.
 - tareas: [{ id, titulo, estado, prioridad: urgente|alta|normal|baja, inicio?, fecha?, proyecto?, sub?, notas? (pizarra: texto plano o HTML sencillo h2/h3/b/u/div/br, como contenido.notas), hecha (derivada: true solo si estado=completado — cambia SIEMPRE estado, nunca hecha), creada, hecha_el? }] — la lista de tareas (área Tareas). Estados (como un gestor de proyectos): pendiente (sin iniciar) | por_definir (activa pero falta concretar) | en_ejecucion | en_espera (bloqueada por alguien/algo) | falta_revision (hecha pero pendiente de revisar) | completado (cerrada). fecha = fecha límite/fin; inicio = arranque de su ventana (time frame: con inicio y fecha la tarea está "activa" ese rango). Solo pon fechas si ${N} las dice. «Apunta que tengo que llamar a María el jueves» → add_item con fecha del jueves. «Estoy con X» → en_ejecucion; «X espera a Y» → en_espera; «X hecho, falta repasarlo» → falta_revision; «esto es urgente/importante» → prioridad urgente/alta. Cuando diga que algo está terminado del todo, pon estado completado + hecha_el — NO la borres. Solo borra si lo pide explícitamente (set_value con delete).

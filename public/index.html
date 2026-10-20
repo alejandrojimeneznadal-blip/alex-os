@@ -506,7 +506,7 @@ function render() {
     new Date(d.fecha + "T12:00").toLocaleDateString("es", { weekday: "long", day: "numeric", month: "long" });
 
   // KPIs
-  setScoreDisplays(d.hoy.score);
+  setScoreDisplays(d.hoy.score ?? 0); // el día empieza en 0 y sube con lo que se apunta
   $("kRacha").textContent = d.racha + (d.racha === 1 ? " día" : " días");
   $("kMedia").textContent = d.media7 !== null ? d.media7 : "–";
   $("kAnual").textContent = d.curva ? fmtMult(d.curva.anual) : "–";
@@ -1168,10 +1168,9 @@ function makeChart(container, points, opts) {
 function renderScoreChart() {
   const full = DASH.serie;
   const serie = RANGE > 0 ? full.slice(-RANGE) : full;
-  const logged = serie.filter((p) => p.score !== null).length;
+  const logged = serie.filter((p) => p.score !== null && !p.vacio).length;
 
   // cabecera: score de hoy grande + delta media 7d vs 7 anteriores
-  if (DASH.hoy.score === null) $("scoreBigN").textContent = DASH.media7 ?? "–";
   const last7 = full.slice(-7).filter((p) => p.score !== null);
   const prev7 = full.slice(-14, -7).filter((p) => p.score !== null);
   const pill = $("scorePill");
@@ -1190,15 +1189,15 @@ function renderScoreChart() {
     ? `${logged} ${logged === 1 ? "día registrado" : "días registrados"} de ${serie.length}`
     : "Sin días registrados todavía — márcalos aquí o cuéntale el día a Claude";
 
-  makeChart($("chartScore"), serie.map((p) => ({ fecha: p.fecha, y: p.score, resumen: p.resumen })), {
+  makeChart($("chartScore"), serie.map((p) => ({ fecha: p.fecha, y: p.score, vacio: p.vacio, resumen: p.resumen })), {
     color: "var(--serie-1)",
     yMax: 100, yMin: 0,
     ticks: [0, 50, 100],
     dots: serie.length <= 45,
     // solo fecha y score: el resumen del día hacía crecer el tooltip a lo ancho y desbordaba en móvil
     tooltip: (pt) => pt.y === null
-      ? `<b>${fmtFecha(pt.fecha)}</b> · sin registrar`
-      : `<b>${fmtFecha(pt.fecha)}</b> · score <b>${pt.y}</b>`,
+      ? `<b>${fmtFecha(pt.fecha)}</b> · sin registrar todavía`
+      : `<b>${fmtFecha(pt.fecha)}</b> · score <b>${pt.y}</b>${pt.vacio ? " · sin registrar" : ""}`,
   });
 }
 
@@ -1241,7 +1240,7 @@ function renderCurvaChart() {
   const et = c.etapa || { n: 1 }, cerradas = c.etapas || [];
   const etLabel = cerradas.length || et.nombre ? `Etapa ${et.n}${et.nombre ? ` «${et.nombre}»` : ""} · ` : "";
   $("subCurva").textContent =
-    `${etLabel}Empezaste en 100 el ${fmtFecha(c.desde)}. Un día de 100 suma un 1 %, un día de ${c.equilibrio} no mueve nada, un día en blanco resta. ` +
+    `${etLabel}Empezaste en 100 el ${fmtFecha(c.desde)}. Un día de 100 suma un 1 %, un día de ${c.equilibrio} no mueve nada y un día sin registrar cuenta como 0. ` +
     (c.dias_ritmo > 1 ? `Ritmo de los últimos ${c.dias_ritmo} días: ${fmtPct(c.ritmo_dia_pct)} al día.` : `Primer día de la etapa.`);
   // cómo cerraron las etapas anteriores (quedan guardadas con sus hábitos)
   const ec = $("etapasCerradas");
@@ -1259,13 +1258,13 @@ function renderCurvaChart() {
   const ticks = [];
   for (let t = Math.ceil(yMin / step) * step; t <= yMax; t += step) ticks.push(t);
   // el color dice de qué lado del 100 estás: verde por encima de donde empezaste, rojo por debajo
-  makeChart($("chartCurva"), tramo.map((p) => ({ fecha: p.fecha, y: p.capital, rend: p.rend, score: p.score })), {
+  makeChart($("chartCurva"), tramo.map((p) => ({ fecha: p.fecha, y: p.capital, rend: p.rend, score: p.score, vacio: p.vacio })), {
     color: c.capital >= 100 ? "var(--ok)" : "var(--bad)",
     yMin, yMax, ticks, dots: false,
     baseline: 100,
     mark: c.pico.valor > 100 ? c.pico.fecha : null,
     tooltip: (pt) => `<b>${fmtFecha(pt.fecha)}</b> · capital <b>${Math.round(pt.y)}</b>` +
-      (pt.rend === null ? (pt.score === null ? " · sin cerrar" : "") : ` · ${fmtPct(pt.rend)}${pt.score === null ? " (en blanco)" : ""}`),
+      (pt.rend === null ? (pt.score === null ? " · sin cerrar" : "") : ` · ${fmtPct(pt.rend)}${pt.vacio ? " (sin registrar)" : ""}`),
   });
 }
 
