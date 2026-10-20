@@ -550,6 +550,7 @@ function buildDashboard(data) {
   const rendimiento = (score) => (score - eq) / (100 - eq); // en tanto por ciento (+1 = +1 %)
   const serie = [];
   let acumulado = 0, capital = 100, pico = { valor: 100, fecha: inicio };
+  const aplicados = []; // rendimiento de cada día que ya cuenta en la curva de la etapa, sin redondear
   for (let f = start; f <= today; f = addDays(f, 1)) {
     const d = days[f];
     const vacio = !d && f >= first && f < today; // cerrado sin nada apuntado: cuenta como 0
@@ -560,16 +561,17 @@ function buildDashboard(data) {
     if (enEtapa && !(f === today && score === null)) {
       rend = rendimiento(score ?? 0);
       capital *= 1 + rend / 100;
+      aplicados.push(rend);
       if (capital > pico.valor) pico = { valor: capital, fecha: f };
     }
     serie.push({ fecha: f, score, ...(vacio ? { vacio: true } : {}), acumulado, capital: enEtapa ? Math.round(capital * 100) / 100 : null, rend: rend === null ? null : Math.round(rend * 100) / 100, resumen: d?.resumen || null });
   }
-  // ritmo: tasa diaria media de los últimos 30 días (geométrica) y qué multiplicador anual implica
-  const capDe = (fecha) => serie.find((p) => p.fecha === fecha)?.capital;
-  const refFecha = addDays(today, -30) >= inicio ? addDays(today, -30) : inicio;
-  const capRef = capDe(refFecha) ?? 100;
-  const nDias = Math.max(1, Math.round((new Date(today) - new Date(refFecha)) / 86400000));
-  const ritmo = capRef > 0 ? Math.pow(capital / capRef, 1 / nDias) - 1 : 0;
+  // ritmo: media geométrica de los últimos 30 días que ya cuentan en la curva de la etapa (hoy, solo si tiene algo
+  // apuntado) y por cuánto se multiplicaría el capital en un año a ese paso. Antes se comparaba con el capital al
+  // cierre del primer día, que ya llevaba ese día dentro: el primer día de una etapa siempre daba ×1,0.
+  const ventana = aplicados.slice(-30);
+  const nDias = ventana.length;
+  const ritmo = nDias ? Math.pow(ventana.reduce((m, r) => m * (1 + r / 100), 1), 1 / nDias) - 1 : 0;
   const curva = {
     equilibrio: eq,
     capital: Math.round(capital * 100) / 100,

@@ -1241,7 +1241,9 @@ function renderCurvaChart() {
   const etLabel = cerradas.length || et.nombre ? `Etapa ${et.n}${et.nombre ? ` «${et.nombre}»` : ""} · ` : "";
   $("subCurva").textContent =
     `${etLabel}Empezaste en 100 el ${fmtFecha(c.desde)}. Un día de 100 suma un 1 %, un día de ${c.equilibrio} no mueve nada y un día sin registrar cuenta como 0. ` +
-    (c.dias_ritmo > 1 ? `Ritmo de los últimos ${c.dias_ritmo} días: ${fmtPct(c.ritmo_dia_pct)} al día.` : `Primer día de la etapa.`);
+    (c.dias_ritmo > 1 ? `Ritmo de los últimos ${c.dias_ritmo} días: ${fmtPct(c.ritmo_dia_pct)} al día; si lo mantienes un año, tu capital se multiplica por ${fmtMult(c.anual).slice(1)}.`
+      : c.dias_ritmo === 1 ? `De momento cuenta un solo día (${fmtPct(c.ritmo_dia_pct)}): si lo mantuvieras un año, tu capital se multiplicaría por ${fmtMult(c.anual).slice(1)}. Con más días, el ritmo se asienta.`
+      : `El ritmo sale en cuanto cuente el primer día de la etapa.`);
   // cómo cerraron las etapas anteriores (quedan guardadas con sus hábitos)
   const ec = $("etapasCerradas");
   ec.hidden = !cerradas.length;
