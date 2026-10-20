@@ -4383,7 +4383,7 @@ const ED_ESTADOS = [
   { id: "cambios", l: "Cambios pedidos" }, { id: "aprobada", l: "Aprobada" },
 ];
 const edLabel = (id) => (ED_ESTADOS.find((e) => e.id === id) || { l: id || "" }).l;
-const TIPOS_GANCHO = ["Pregunta incómoda", "Dato o cifra", "Historia", "Contraste", "Lista", "Frase ajena", "Otro"];
+const TIPOS_GANCHO = ["Dolor del que mira", "Dato o cifra", "Historia", "Contraste", "Lista", "Novedad", "Herramienta con nombre", "Pregunta incómoda", "Frase ajena", "Humor", "Otro"]; // las formas que paran a la gente en el nicho (research 20 oct) + las de antes
 let igBusca = "", igVerTodo = {}, EDITORES = null, grabFiltro = "pronto", refFiltro = "todo";
 const DIAS_CORTOS = ["dom", "lun", "mar", "mié", "jue", "vie", "sáb"];
 function fmtDiaCorto(f) {
