@@ -100,12 +100,20 @@
   .pieza-chip.gymok { background: var(--good-bg); color: var(--good); border: 1px solid transparent; }
   .ag-leyenda { display: flex; gap: 12px; flex-wrap: wrap; font-size: 11.5px; color: var(--ink-3); margin-top: 10px; }
   .ag-leyenda i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; vertical-align: -1px; margin-right: 4px; }
-  /* agenda: piezas sin publicar con el color de su carril (config_contenido.carriles = { nombres, defecto }):
-     el primero en rojo (el de siempre), el segundo en azul y el tercero en verde azulado; lo publicado sigue en verde tachado */
-  .pieza-chip.reel.ag-c1 { background: rgba(59,130,246,0.13); color: #2f74e0; border: 1px solid rgba(59,130,246,0.3); }
-  .pieza-chip.reel.ag-c2 { background: rgba(14,159,138,0.13); color: #0e8f7c; border: 1px solid rgba(14,159,138,0.3); }
-  :root[data-theme="negro"] .pieza-chip.reel.ag-c1, :root[data-theme="azul"] .pieza-chip.reel.ag-c1 { color: #6aa5ff; }
-  :root[data-theme="negro"] .pieza-chip.reel.ag-c2, :root[data-theme="azul"] .pieza-chip.reel.ag-c2 { color: #34d3b8; }
+  /* agenda: cada pieza sin publicar con el color de su misión (atracción azul · nutrición naranja · conversión violeta);
+     sin misión, el rosa de siempre; lo publicado sigue en verde tachado */
+  .pieza-chip.reel.m-atraccion { background: rgba(59,130,246,0.13); color: #2f74e0; border: 1px solid rgba(59,130,246,0.3); }
+  .pieza-chip.reel.m-nutricion { background: rgba(234,122,24,0.14); color: #c2620c; border: 1px solid rgba(234,122,24,0.32); }
+  .pieza-chip.reel.m-conversion { background: rgba(139,92,246,0.14); color: #7c4ddb; border: 1px solid rgba(139,92,246,0.32); }
+  :root[data-theme="negro"] .pieza-chip.reel.m-atraccion, :root[data-theme="azul"] .pieza-chip.reel.m-atraccion { color: #6aa5ff; }
+  :root[data-theme="negro"] .pieza-chip.reel.m-nutricion, :root[data-theme="azul"] .pieza-chip.reel.m-nutricion { color: #ffa65c; }
+  :root[data-theme="negro"] .pieza-chip.reel.m-conversion, :root[data-theme="azul"] .pieza-chip.reel.m-conversion { color: #b69cff; }
+  /* agenda: objetivo de la semana por misión (config_contenido.objetivos): cuántas hay de cada frente a cuántas tocan */
+  .ag-sem { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 3px 12px; font-size: 11px; color: var(--ink-3); padding: 0 2px 5px; }
+  .ag-sem b { font-weight: 650; color: var(--ink-2); }
+  .ag-sem .ok, .ag-sem .ok b { color: var(--good); }
+  .ag-sem i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; vertical-align: -0.5px; margin-right: 4px; }
+  .ag-sem.semana { padding: 0 2px 8px; }
   /* agenda: navegación (Hoy ‹ › título · Mes | Semana) y vista semanal */
   .ag-nav { flex-wrap: wrap; row-gap: 8px; }
   .ag-nav .ag-hoy { width: auto; padding: 0 10px; font-size: 12px; font-weight: 550; color: var(--ink-2); }
@@ -674,6 +682,12 @@
   .kb-meta { display: flex; flex-wrap: wrap; gap: 4px 8px; margin-top: 7px; font-size: 11.5px; color: var(--ink-3); }
   .kb-atras { color: var(--bad); }
   .kb-tag { border: 1px solid var(--border); border-radius: 4px; padding: 0 5px; }
+  .kb-tag.m-atraccion { color: #2f74e0; border-color: rgba(59,130,246,0.45); }
+  .kb-tag.m-nutricion { color: #c2620c; border-color: rgba(234,122,24,0.5); }
+  .kb-tag.m-conversion { color: #7c4ddb; border-color: rgba(139,92,246,0.5); }
+  :root[data-theme="negro"] .kb-tag.m-atraccion, :root[data-theme="azul"] .kb-tag.m-atraccion { color: #6aa5ff; }
+  :root[data-theme="negro"] .kb-tag.m-nutricion, :root[data-theme="azul"] .kb-tag.m-nutricion { color: #ffa65c; }
+  :root[data-theme="negro"] .kb-tag.m-conversion, :root[data-theme="azul"] .kb-tag.m-conversion { color: #b69cff; }
   .kb-ed { border-radius: 4px; padding: 0 5px; background: var(--surface-2); color: var(--ink-2); }
   .kb-ed.entregada { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
   .kb-ed.cambios { background: var(--warn-bg); color: var(--warn); }
@@ -2810,6 +2824,12 @@ const FICHA_TABS = [["guion", "Guion"], ["publicacion", "Publicación"], ["produ
 const palabrasDe = (c) => [c.gancho, c.cuerpo, c.cierre, c.cta].map((t) => String(t || "").trim()).filter(Boolean).join(" ").split(/\s+/).filter(Boolean).length;
 const duracionTxt = (n) => (n ? `Unos ${Math.max(1, Math.round(n / 2.5))} segundos hablados · ${n} palabras` : "Sin guion todavía");
 const CLASES = ["soft", "hard", "meme", "propio", "3D"]; // propio = lo edita Alex (pantalla partida, etc.), no el editor · 3D = reel 3D sin cara (pipeline de reels 3D)
+/* Misión de cada pieza (para qué sirve): atracción = que te vea y te siga alguien nuevo · nutrición = prueba para el que ya te sigue (sistema real, número, fallo) · conversión = el link / el Skool.
+   En la Agenda cada pieza sin publicar sale del color de su misión y config_contenido.objetivos = [{ desde, hasta?, atraccion, nutricion, conversion }] dice cuántas de cada tocan por semana. */
+const MISIONES = [["atraccion", "Atracción"], ["nutricion", "Nutrición"], ["conversion", "Conversión"]];
+const MISION_COLOR = { atraccion: "rgba(59,130,246,.45)", nutricion: "rgba(234,122,24,.5)", conversion: "rgba(139,92,246,.5)" };
+const misionLabel = (id) => (MISIONES.find(([k]) => k === id) || [id, id || ""])[1];
+function misionDe(c) { const m = String(c?.mision || "").trim().toLowerCase(); return MISIONES.some(([k]) => k === m) ? m : ""; }
 
 function htmlEdicionFicha(c) {
   const ed = c.edicion;
@@ -2870,6 +2890,7 @@ function renderPiezaPanel() {
         <div class="sp-prop"><label>${est === "publicado" ? "Publicada el" : "Se publica"}</label><div class="osui-dw"><input class="osui-date" id="spPub" type="text" readonly data-opt="1" data-iso="${fPub || ""}" value="${fPub ? fPub.split("-").reverse().join("/") : ""}" placeholder="sin fecha"></div></div>
         <div class="sp-prop"><label>Hora</label><input id="sp_hora" class="osui-time" inputmode="numeric" maxlength="5" value="${escA(c.hora)}" placeholder="18:00"></div>
         <div class="sp-prop"><label>Tipo</label><select id="sp_clase">${clases.map((k) => `<option value="${escA(k)}" ${(c.clase || "soft") === k ? "selected" : ""}>${esc(k)}</option>`).join("")}</select></div>
+        <div class="sp-prop"><label>Misión</label><select id="sp_mision"><option value="">Sin misión</option>${MISIONES.map(([k, l]) => `<option value="${k}" ${misionDe(c) === k ? "selected" : ""}>${l}</option>`).join("")}</select></div>
         <div class="sp-prop"><label>Edita</label><select id="spEdita"><option value="">Yo</option>${eds.map((u) => `<option value="${esc(u.id)}" ${ed && ed.editor === u.id ? "selected" : ""}>${esc(u.display_name || u.username)}</option>`).join("")}</select></div>
       </div>
       <div class="ft-tabs">${FICHA_TABS.filter(([id]) => id !== "edicion" || ed).map(([id, l]) => `<button class="${fichaTab === id ? "on" : ""}" data-tab="${id}">${l}${id === "edicion" && ed.estado === "entregada" ? " · revisar" : ""}</button>`).join("")}</div>
@@ -2942,6 +2963,7 @@ function renderPiezaPanel() {
     guardaPiezaQuiet();
   });
   $("sp_clase").onchange = () => { c.clase = $("sp_clase").value; guardaPiezaQuiet(); };
+  $("sp_mision").onchange = () => { const v = $("sp_mision").value; if (v) c.mision = v; else delete c.mision; guardaPiezaQuiet(); };
   const hora = $("sp_hora");
   hora.oninput = () => { let v = hora.value.replace(/[^\d]/g, "").slice(0, 4); if (v.length > 2) v = v.slice(0, 2) + ":" + v.slice(2); hora.value = v; };
   hora.onblur = () => {
@@ -4304,25 +4326,26 @@ function agVer(v) {
   else if (calSemana) calMes = masDias(calSemana, 3).slice(0, 7);
   location.hash = "agenda/" + v;
 }
-/* Carriles de publicación (p. ej. un día un tipo de vídeo y al siguiente otro): config_contenido.carriles = { nombres: [..], defecto }.
-   Cada pieza va al carril cuyo nombre coincide con su Tipo o con el nombre de su editor; si no, al de por defecto. */
-function carrilesCfg() {
-  const c = STATE.config_contenido?.carriles;
-  if (!c || !Array.isArray(c.nombres) || !c.nombres.length) return null;
-  const nombres = c.nombres.map((x) => String(x));
-  return { nombres, def: nombres.map(normCarril).indexOf(normCarril(c.defecto)) };
+/* Objetivo de la semana por misión: config_contenido.objetivos = [{ desde, hasta?, atraccion, nutricion, conversion }] (el que contenga el lunes de esa semana).
+   La Agenda cuenta las piezas con fecha de esos siete días (publicadas o no) por su misión y lo enseña debajo de cada semana. */
+function objetivoSemana(lunes) {
+  const l = STATE.config_contenido?.objetivos;
+  if (!Array.isArray(l)) return null;
+  return l.find((o) => o && o.desde && lunes >= o.desde && (!o.hasta || lunes <= o.hasta)) || null;
 }
-function normCarril(s) { return String(s || "").trim().toLowerCase(); }
-function carrilDePieza(c, cfg) {
-  if (!cfg) return -1;
-  const ns = cfg.nombres.map(normCarril);
-  let i = ns.indexOf(normCarril(c.clase));
-  if (i < 0 && c.edicion) i = ns.indexOf(normCarril(c.edicion.editor_nombre));
-  return i >= 0 ? i : cfg.def;
+function resumenSemana(lunes, piezas, extra = "") {
+  const obj = objetivoSemana(lunes);
+  if (!obj) return "";
+  const n = { atraccion: 0, nutricion: 0, conversion: 0, sin: 0 };
+  for (let k = 0; k < 7; k++) (piezas[masDias(lunes, k)] || []).forEach((i) => { const m = misionDe(STATE.contenido[i]); if (m) n[m]++; else n.sin++; });
+  const partes = MISIONES.filter(([k]) => Number(obj[k]) > 0 || n[k] > 0).map(([k, l]) => { const meta = Number(obj[k]) || 0;
+    return `<span class="${meta && n[k] >= meta ? "ok" : ""}"><i style="background:${MISION_COLOR[k]}"></i>${l} <b>${n[k]}/${meta}</b></span>`; });
+  if (n.sin) partes.push(`<span><i style="background:rgba(227,57,130,.35)"></i>sin misión <b>${n.sin}</b></span>`);
+  return `<div class="ag-sem${extra}">${partes.join("")}</div>`;
 }
-function chipsAgenda(f, piezas, semana, cfg = carrilesCfg()) {
-  let chips = (piezas[f] || []).map((i) => { const c = STATE.contenido[i]; const pub = estadoPieza(c) === "publicado"; const k = pub ? -1 : carrilDePieza(c, cfg);
-    return `<span class="pieza-chip ${pub ? "pub" : "reel"}${k > 0 ? ` ag-c${k % 3}` : ""}" onclick="event.stopPropagation();abrirPieza(${i})">${pub ? "✓ " : ""}${c.hora && !pub ? c.hora + " " : ""}${esc(c.titulo || "(sin título)")}${semana && !pub ? `<small>${esc(labelEstado(c))}</small>` : ""}</span>`; }).join("");
+function chipsAgenda(f, piezas, semana) {
+  let chips = (piezas[f] || []).map((i) => { const c = STATE.contenido[i]; const pub = estadoPieza(c) === "publicado"; const m = pub ? "" : misionDe(c);
+    return `<span class="pieza-chip ${pub ? "pub" : "reel"}${m ? ` m-${m}` : ""}" onclick="event.stopPropagation();abrirPieza(${i})">${pub ? "✓ " : ""}${c.hora && !pub ? c.hora + " " : ""}${esc(c.titulo || "(sin título)")}${semana && !pub ? `<small>${esc(labelEstado(c))}</small>` : ""}</span>`; }).join("");
   chips += (STATE.recordatorios || []).filter((r) => tocaRecordatorio(r, f)).map((r) => `<span class="pieza-chip rec${r.hechos?.[f] ? " pub" : ""}" onclick="event.stopPropagation();editarRecordatorio('${esc(r.id)}')">↻ ${esc(r.titulo)}</span>`).join("");
   if (STATE.entrenos?.[f]) chips += `<span class="pieza-chip gymok">✓ Gym</span>`;
   return chips;
@@ -4339,7 +4362,7 @@ function vistaAgendaCal() {
   if (agVista === "semana") {
     const dias = Array.from({ length: 7 }, (_, k) => masDias(calSemana, k));
     titulo = rangoSemana(dias[0], dias[6]);
-    cuerpo = `<div class="semcal">${dias.map((f) => { const d = new Date(f + "T12:00");
+    cuerpo = resumenSemana(calSemana, piezas, " semana") + `<div class="semcal">${dias.map((f) => { const d = new Date(f + "T12:00");
       return `<div class="ag-dia${f === hoy ? " hoy" : f < hoy ? " pasado" : ""}"><div class="ag-dia-h"><span>${DIAS_CORTOS[d.getDay()]}</span><b>${d.getDate()}</b></div><div class="ag-dia-b">${chipsAgenda(f, piezas, true)}</div></div>`; }).join("")}</div>`;
   } else {
     const [y, m] = calMes.split("-").map(Number);
@@ -4353,6 +4376,7 @@ function vistaAgendaCal() {
     for (let d = 1; d <= nDias; d++) {
       const f = `${calMes}-${String(d).padStart(2, "0")}`;
       cuerpo += `<div class="day${f === hoy ? " hoy" : ""}"><span class="dn">${d}</span>${chipsAgenda(f, piezas, false)}</div>`;
+      if ((start + d) % 7 === 0 || d === nDias) cuerpo += resumenSemana(lunesDe(f), piezas);
     }
     cuerpo += `</div>`;
   }
@@ -4365,8 +4389,7 @@ function vistaAgendaCal() {
     <div class="mes-nav ag-nav"><button class="ag-hoy" onclick="agHoy()">Hoy</button><button onclick="agMueve(-1)" aria-label="Anterior">‹</button><button onclick="agMueve(1)" aria-label="Siguiente">›</button><b>${titulo}</b>
       <span class="filtros ag-vista"><button class="${agVista === "mes" ? "on" : ""}" onclick="agVer('mes')">Mes</button><button class="${agVista === "semana" ? "on" : ""}" onclick="agVer('semana')">Semana</button></span></div>
     ${cuerpo}
-    <div class="ag-leyenda">${(() => { const cfg = carrilesCfg(); const col = ["rgba(227,57,130,.35)", "rgba(59,130,246,.45)", "rgba(14,159,138,.45)"];
-      return cfg ? cfg.nombres.map((n, k) => `<span><i style="background:${col[k % 3]}"></i>${esc(n)}</span>`).join("") : `<span><i style="background:rgba(227,57,130,.35)"></i>Publicación</span>`; })()}<span><i style="background:var(--surface);border:1px solid var(--border)"></i>Recordatorio</span><span><i style="background:var(--good-bg)"></i>Hecho</span></div>
+    <div class="ag-leyenda">${MISIONES.map(([k, l]) => `<span><i style="background:${MISION_COLOR[k]}"></i>${l}</span>`).join("")}<span><i style="background:rgba(227,57,130,.35)"></i>Sin misión</span><span><i style="background:var(--good-bg)"></i>Publicada · hecho</span><span><i style="background:var(--surface);border:1px solid var(--border)"></i>Recordatorio</span></div>
   </div>`;
 }
 
@@ -4460,6 +4483,7 @@ function cardIG({ c, i }, hoy) {
   const meta = [
     f ? `<span class="${atras ? "kb-atras" : ""}">${fmtDiaCorto(f)}${!pub && c.hora ? " · " + esc(c.hora) : ""}</span>` : "",
     c.clase && !/^soft/.test(c.clase) ? `<span class="kb-tag">${esc(c.clase)}</span>` : "",
+    misionDe(c) ? `<span class="kb-tag m-${misionDe(c)}">${misionLabel(misionDe(c))}</span>` : "",
     ed ? `<span class="kb-ed ${esc(ed.estado)}">${esc(ed.editor_nombre || "Editor")} · ${ed.estado === "entregada" ? "revisar" : edLabel(ed.estado).toLowerCase()}</span>` : "",
     est === "grabar" && ts.length ? `<span>${ts.length - tp}/${ts.length} tomas</span>` : "",
     pub && c.views ? `<span>${fmtN(c.views)} vistas</span>` : "",
