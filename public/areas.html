@@ -797,17 +797,6 @@
   .ed-enviar { display: flex; gap: 8px; }
   .ed-enviar input { flex: 1; min-width: 0; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--ink); font-family: inherit; font-size: 13.5px; padding: 8px 10px; }
   .ed-enviar input:focus { outline: none; border-color: var(--accent); }
-  /* teleprompter: fondo negro fijo a propósito, se usa grabando */
-  .tp-ov { position: fixed; inset: 0; background: #000; color: #fff; z-index: 600; display: flex; flex-direction: column; }
-  .tp-scroll { flex: 1; overflow-y: auto; padding: 0 7vw; scrollbar-width: none; cursor: pointer; }
-  .tp-scroll::-webkit-scrollbar { display: none; }
-  .tp-pad { height: 42vh; }
-  .tp-txt { line-height: 1.42; font-weight: 600; text-align: center; max-width: 1100px; margin: 0 auto; transform-origin: center; }
-  .tp-guia { position: absolute; left: 0; right: 0; top: 40vh; height: 2px; background: rgba(255,255,255,0.16); pointer-events: none; }
-  .tp-bar { display: flex; gap: 8px; justify-content: center; align-items: center; padding: 12px; padding-bottom: calc(12px + env(safe-area-inset-bottom)); background: #0c0c0c; flex-wrap: wrap; }
-  .tp-bar button { background: #1d1d1d; color: #fff; border: 1px solid #333; border-radius: 6px; padding: 8px 12px; font-family: inherit; font-size: 14px; cursor: pointer; }
-  .tp-bar button:hover { background: #2a2a2a; }
-  .tp-bar span { color: #aaa; min-width: 36px; text-align: center; font-variant-numeric: tabular-nums; }
 </style>
 </head>
 <body>
@@ -2710,7 +2699,7 @@ function cerrarPieza() {
 }
 
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape" && piezaIdx !== null && !document.querySelector(".osui-ov") && !document.querySelector(".tp-ov")) cerrarPieza();
+  if (e.key === "Escape" && piezaIdx !== null && !document.querySelector(".osui-ov")) cerrarPieza();
 });
 
 function guardaPiezaQuiet() {
@@ -2889,7 +2878,7 @@ function renderPiezaPanel() {
         ${campo("gancho", "Gancho", "La primera frase: lo que hace que se queden")}
         ${campo("cuerpo", "Cuerpo")}
         <div class="sp-grid2">${campo("cierre", "Cierre")}${campo("cta", "Llamada a la acción", "Comenta CLAUDE y te lo mando")}</div>
-        <div class="ft-dur"><span id="spDur">${duracionTxt(palabrasDe(c))}</span><button class="btn-mini" id="spTele">Teleprompter</button></div>
+        <div class="ft-dur"><span id="spDur">${duracionTxt(palabrasDe(c))}</span></div>
       </div>
 
       <div class="ft-sec" data-sec="publicacion">
@@ -2981,7 +2970,6 @@ function renderPiezaPanel() {
     const el = $("sp_" + k);
     el.oninput = () => { const n = Number(el.value); if (el.value !== "" && Number.isFinite(n)) c[k] = n; else delete c[k]; guardaPiezaQuiet(); };
   }
-  $("spTele").onclick = () => abrirTeleprompter(c);
 
   p.querySelectorAll(".ft-toma input").forEach((cb) => {
     cb.onchange = async () => {
@@ -4742,56 +4730,6 @@ async function editarGancho(id) {
   if (f === "borrar") STATE.ganchos.splice(STATE.ganchos.indexOf(g), 1);
   else { if (!f.texto.trim()) return; g.texto = f.texto.trim(); g.tipo = f.tipo; if (f.fuente.trim()) g.fuente = f.fuente.trim(); else delete g.fuente; }
   await guardaYPinta({ ganchos: STATE.ganchos });
-}
-
-/* ---------- Teleprompter ---------- */
-function abrirTeleprompter(c) {
-  const texto = [c.gancho, c.cuerpo, c.cierre, c.cta].map((t) => String(t || "").trim()).filter(Boolean).join("\n\n");
-  if (!texto) { OSUI.confirm("Sin guion", "Escribe el guion en la pestaña Guion y vuelve.", { ok: "Vale", danger: false }); return; }
-  const ov = document.createElement("div");
-  ov.className = "tp-ov";
-  ov.innerHTML = `<div class="tp-scroll"><div class="tp-pad"></div><div class="tp-txt">${esc(texto).replace(/\n/g, "<br>")}</div><div class="tp-pad"></div></div>
-    <div class="tp-guia"></div>
-    <div class="tp-bar"><button data-a="play">Empezar</button><button data-a="lento" title="Más lento">−</button><span data-v="vel"></span><button data-a="rapido" title="Más rápido">+</button>
-      <button data-a="menos" title="Letra más pequeña">A−</button><button data-a="mas" title="Letra más grande">A+</button><button data-a="espejo">Espejo</button><button data-a="cerrar">Cerrar</button></div>`;
-  document.body.appendChild(ov);
-  const sc = ov.querySelector(".tp-scroll"), txt = ov.querySelector(".tp-txt");
-  let vel = 1, tam = window.innerWidth < 600 ? 32 : 46, espejo = false, corre = false, raf = 0, ultimo = 0, acum = 0, empezado = false;
-  const pinta = () => {
-    txt.style.fontSize = tam + "px";
-    txt.style.transform = espejo ? "scaleX(-1)" : "";
-    ov.querySelector('[data-v="vel"]').textContent = (Math.round(vel * 100) / 100).toString().replace(".", ",") + "×";
-    ov.querySelector('[data-a="play"]').textContent = corre ? "Pausa" : empezado ? "Seguir" : "Empezar";
-  };
-  const paso = (t) => {
-    if (!corre) return;
-    if (ultimo) { acum += (t - ultimo) * 0.026 * vel; const px = Math.floor(acum); if (px) { sc.scrollTop += px; acum -= px; } }
-    ultimo = t;
-    raf = requestAnimationFrame(paso);
-  };
-  const play = () => { corre = !corre; empezado = true; ultimo = 0; if (corre) raf = requestAnimationFrame(paso); else cancelAnimationFrame(raf); pinta(); };
-  const cerrar = () => { corre = false; cancelAnimationFrame(raf); document.removeEventListener("keydown", tecla); ov.remove(); };
-  const tecla = (e) => {
-    if (e.key === "Escape") cerrar();
-    else if (e.key === " ") { e.preventDefault(); play(); }
-    else if (e.key === "ArrowUp") { vel = Math.min(4, vel + 0.25); pinta(); }
-    else if (e.key === "ArrowDown") { vel = Math.max(0.25, vel - 0.25); pinta(); }
-  };
-  document.addEventListener("keydown", tecla);
-  ov.querySelector(".tp-bar").onclick = (e) => {
-    const a = e.target.closest("button")?.dataset.a;
-    if (!a) return;
-    if (a === "play") return play();
-    if (a === "cerrar") return cerrar();
-    if (a === "lento") vel = Math.max(0.25, vel - 0.25);
-    if (a === "rapido") vel = Math.min(4, vel + 0.25);
-    if (a === "menos") tam = Math.max(22, tam - 6);
-    if (a === "mas") tam = Math.min(96, tam + 6);
-    if (a === "espejo") espejo = !espejo;
-    pinta();
-  };
-  sc.onclick = play;
-  pinta();
 }
 
 /* ---------- Visión (Creator Vision) con historial de versiones · 15 oct 2026 ----------
