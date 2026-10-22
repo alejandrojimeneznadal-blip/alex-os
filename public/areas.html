@@ -3316,16 +3316,7 @@ function renderPiezaPanel() {
     } catch (e) { alert("No se pudo asignar: " + e.message); renderPiezaPanel(); }
   };
   if (ed) {
-    const actualiza = async (body) => {
-      const r = await apiPost(`/api/edicion/${encodeURIComponent(c.cid)}`, body);
-      c.edicion = r.edicion;
-      if (body.estado === "aprobada") {
-        if (RANGO_PIEZA[estadoPieza(c)] < 4) c.estado = "lista";
-        const ult = (r.edicion.entregas || []).slice(-1)[0];
-        if (ult?.url) c.archivo = ult.url;
-      }
-      renderPiezaPanel();
-    };
+    const actualiza = async (body) => { await edActualiza(c, body); renderPiezaPanel(); };
     $("edEstado").onchange = () => actualiza({ estado: $("edEstado").value }).catch((e) => alert(e.message));
     OSUI.initDate($("edLimite"));
     $("edLimite").addEventListener("change", () => actualiza({ fecha_limite: $("edLimite").dataset.iso || null }).catch((e) => alert(e.message)));
@@ -4823,13 +4814,41 @@ function vistaEdicionIG() {
         c.fecha_plan ? `<span>sale ${fmtDiaCorto(c.fecha_plan)}</span>` : "",
         nV ? `<span>v${nV}</span>` : "",
         st.id === "entregada" ? `<span class="kb-ed entregada">revisar</span>` : ""].filter(Boolean).join("");
-      return `<div class="kb-card" onclick="abrirPieza(${i},'edicion')"><div class="kb-t">${esc(c.titulo || "(sin título)")}</div><div class="kb-meta">${meta}</div></div>`;
+      return `<div class="kb-card" draggable="true" ondragstart="igArrastra(event,${i})" onclick="abrirPieza(${i},'edicion')"><div class="kb-t">${esc(c.titulo || "(sin título)")}</div><div class="kb-meta">${meta}</div></div>`;
     }).join("");
-    return `<section class="kb-col"><div class="kb-head"><span>${st.l}</span><span class="kb-n">${items.length}</span></div><div class="kb-list">${cards || `<div class="kb-vacio">Nada aquí</div>`}</div></section>`;
+    return `<section class="kb-col" ondragover="igSobre(event)" ondragleave="igFuera(event)" ondrop="edSoltar(event,'${st.id}')"><div class="kb-head"><span>${st.l}</span><span class="kb-n">${items.length}</span></div><div class="kb-list">${cards || `<div class="kb-vacio">Nada aquí</div>`}</div></section>`;
   }).join("");
   return `<div class="card"><div class="row-h"><h2>Editores</h2><button class="btn-mini primary" onclick="nuevoEditor()">${OSIcons.nueva} Dar acceso</button></div>
       <div class="sub" style="margin-top:6px">Cada editor entra con su usuario en esta misma web y solo ve las piezas que le asignes. Nada más de Daily System.</div>${filasEd}</div>
-    <div class="card"><h2>Con el editor</h2><div class="sub">${asignadas.length ? "Toca una pieza para ver sus entregas, aprobarla o pedir cambios." : "Asigna una pieza al editor desde su ficha, en «Edita»."}</div><div class="kb kb-5">${cols}</div></div>`;
+    <div class="card"><h2>Con el editor</h2><div class="sub">${asignadas.length ? "Arrastra una pieza a otra columna para cambiar su estado, o tócala para ver sus entregas." : "Asigna una pieza al editor desde su ficha, en «Edita»."}</div><div class="kb kb-5">${cols}</div></div>`;
+}
+/* cambia la edición de una pieza (ficha y tablero de Edición); aprobar la pasa a «lista» con la última entrega como archivo */
+async function edActualiza(c, body) {
+  const r = await apiPost(`/api/edicion/${encodeURIComponent(c.cid)}`, body);
+  c.edicion = r.edicion;
+  if (body.estado === "aprobada") {
+    if (RANGO_PIEZA[estadoPieza(c)] < 4) c.estado = "lista";
+    const ult = (r.edicion.entregas || []).slice(-1)[0];
+    if (ult?.url) c.archivo = ult.url;
+  }
+}
+async function edSoltar(e, estado) {
+  e.preventDefault();
+  e.currentTarget.classList.remove("over");
+  const c = (STATE.contenido || [])[Number(e.dataTransfer.getData("text/plain"))];
+  if (!c?.edicion || c.edicion.estado === estado) return;
+  const body = { estado };
+  if (estado === "cambios") {
+    const nota = await OSUI.prompt("Pedir cambios", "", { label: "Qué hay que cambiar", placeholder: "Quita el corte del segundo 12 y sube la música", ok: "Enviar" });
+    if (nota === null) return;
+    body.nota = nota;
+  }
+  const antes = c.edicion.estado;
+  c.edicion.estado = estado;
+  renderContent();
+  try { await edActualiza(c, body); }
+  catch (err) { c.edicion.estado = antes; alert("No se pudo mover: " + err.message); }
+  renderContent();
 }
 async function nuevoEditor() {
   const r = await OSUI.form({ titulo: "Dar acceso a un editor", texto: "Solo verá las piezas que le asignes.", campos: [
