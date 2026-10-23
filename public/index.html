@@ -288,6 +288,17 @@
     border-radius: 999px; padding: 6px 14px; font-size: 12.5px; cursor: pointer; font-family: inherit; font-weight: 500;
   }
   .toggles button.active { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+  .toggles button:disabled { opacity: 0.45; cursor: default; }
+  /* simulación de la curva: «si sigues así» */
+  .proy-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 12px 0 4px; }
+  .proy-bar .k { font-size: 12.5px; color: var(--ink-3); }
+  .proy-bar .toggles { margin-left: 0; flex-wrap: wrap; }
+  .proy-txt { margin-top: 8px; font-size: 13px; color: var(--ink-2); line-height: 1.55; }
+  .proy-txt b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+  @media (max-width: 520px) {
+    .proy-bar .toggles { width: 100%; flex-wrap: nowrap; gap: 4px; }
+    .proy-bar .toggles button { flex: 1 1 auto; min-width: 0; padding: 6px 4px; font-size: 12px; white-space: nowrap; }
+  }
 
   /* móvil: sin selección de texto ni lupa/callout de iOS al mantener pulsado; el dedo mueve el crosshair
      (touch-action pan-y deja el scroll vertical nativo y nos cede el gesto horizontal) */
@@ -396,7 +407,10 @@
     </div>
     <div class="sub" id="subCurva"></div>
     <div class="etapas-cerradas" id="etapasCerradas" hidden></div>
+    <div class="proy-bar"><span class="k">Si sigues así</span>
+      <div class="toggles" id="proyToggles"><button data-m="0">Hoy</button><button data-m="1">+1 mes</button><button data-m="6">+6 meses</button><button data-m="12">+1 año</button><button data-m="60">+5 años</button></div></div>
     <div class="chart-box" id="chartCurva"></div>
+    <div class="proy-txt" id="proyTxt" hidden></div>
   </div>
 
 </div>
@@ -1080,15 +1094,23 @@ function makeChart(container, points, opts) {
     const yb = y(opts.baseline);
     svg += `<line x1="${PAD_L}" y1="${yb}" x2="${W - PAD_R}" y2="${yb}" stroke="var(--ink-3)" stroke-width="1.2" opacity="0.55"/>`;
   }
-  const xticks = n > 2 ? [0, Math.floor((n - 1) / 2), n - 1] : n === 2 ? [0, 1] : [0];
+  // con simulación (opts.hoy = índice del último día real): final, hoy e inicio, sin que se pisen las etiquetas
+  const proyecta = opts.hoy != null && opts.hoy < n - 1;
+  let xticks = n > 2 ? [0, Math.floor((n - 1) / 2), n - 1] : n === 2 ? [0, 1] : [0];
+  if (proyecta) {
+    xticks = [];
+    for (const i of [n - 1, opts.hoy, 0]) if (xticks.every((j) => Math.abs(x(i) - x(j)) > 64)) xticks.push(i);
+  }
   for (const i of xticks) {
-    svg += `<text x="${x(i)}" y="${H - 8}" text-anchor="${i === 0 ? "start" : i === n - 1 ? "end" : "middle"}" font-size="10" fill="var(--ink-3)">${fmtFecha(points[i].fecha)}</text>`;
+    const label = proyecta && i === opts.hoy ? "hoy" : opts.fmtX ? opts.fmtX(points[i]) : fmtFecha(points[i].fecha);
+    svg += `<text x="${x(i)}" y="${H - 8}" text-anchor="${i === 0 ? "start" : i === n - 1 ? "end" : "middle"}" font-size="10" fill="var(--ink-3)">${label}</text>`;
   }
 
   // segmentos contiguos (los días sin registrar parten la curva)
   const segs = [];
   let cur = [];
   points.forEach((pt, i) => {
+    if (pt.proy) return; // lo simulado va aparte, en gris
     if (pt.y === null || pt.y === undefined) { if (cur.length) segs.push(cur); cur = []; return; }
     cur.push({ x: x(i), y: y(pt.y) });
   });
@@ -1099,6 +1121,23 @@ function makeChart(container, points, opts) {
     const area = line + `L${seg[seg.length - 1].x},${y(yMin)}L${seg[0].x},${y(yMin)}Z`;
     svg += `<path d="${area}" fill="${opts.color}" opacity="0.08"/>`;
     svg += `<path d="${line}" fill="none" stroke="${opts.color}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>`;
+  }
+
+  // simulación: desde hoy hasta el final, gris y discontinua; al pulsar el botón se dibuja de izquierda a derecha
+  if (proyecta) {
+    const pts = [];
+    for (let i = opts.hoy; i < n; i++) if (points[i].y != null) pts.push({ x: x(i), y: y(points[i].y) });
+    const line = smoothPath(pts), a = pts[0], e = pts[pts.length - 1];
+    const anima = opts.anima && !matchMedia("(prefers-reduced-motion: reduce)").matches;
+    svg += `<line x1="${a.x}" y1="${PAD_T}" x2="${a.x}" y2="${PAD_T + ih}" stroke="var(--border-strong)" stroke-width="1"/>`;
+    if (anima) svg += `<clipPath id="proyClip"><rect x="${a.x}" y="0" width="0" height="${H}"><animate attributeName="width" from="0" to="${W - a.x}" dur="0.9s" fill="freeze" calcMode="spline" keyTimes="0;1" keySplines="0.3 0 0.2 1"/></rect></clipPath>`;
+    svg += `<g${anima ? ' clip-path="url(#proyClip)"' : ""}>`;
+    svg += `<path d="${line}L${e.x},${y(yMin)}L${a.x},${y(yMin)}Z" fill="var(--ink-3)" opacity="0.07"/>`;
+    svg += `<path d="${line}" fill="none" stroke="var(--ink-3)" stroke-width="2" stroke-dasharray="6 5" stroke-linecap="round"/>`;
+    svg += `<circle cx="${e.x.toFixed(1)}" cy="${e.y.toFixed(1)}" r="4" fill="var(--surface)" stroke="var(--ink-3)" stroke-width="2"/>`;
+    // la cifra final, por el lado donde no está la línea: encima si sube, debajo si baja
+    if (opts.finLabel) svg += `<text x="${e.x.toFixed(1)}" y="${(e.y <= a.y ? e.y - 11 : e.y + 19).toFixed(1)}" text-anchor="end" font-size="12" font-weight="600" fill="var(--ink-2)" font-variant-numeric="tabular-nums">${opts.finLabel}</text>`;
+    svg += `</g>`;
   }
 
   if (opts.mark) {
@@ -1137,6 +1176,7 @@ function makeChart(container, points, opts) {
     let pyCss = null;
     if (pt.y !== null && pt.y !== undefined) {
       hdot.setAttribute("cx", px); hdot.setAttribute("cy", y(pt.y));
+      hdot.setAttribute("fill", pt.proy ? "var(--ink-3)" : opts.color);
       hdot.setAttribute("opacity", "1");
       pyCss = y(pt.y) / scale;
     } else {
@@ -1217,6 +1257,17 @@ function renderEtapaAviso() {
     `La curva vuelve a empezar en 100 y la etapa actual queda guardada tal cual, con sus hábitos.`;
 }
 
+/* simulación «si sigues así»: alarga la curva N meses componiendo el ritmo de los últimos 30 días (curva.ritmo_dia) */
+let PROY_M = (() => { try { return Number(localStorage.getItem("os_curva_proy")) || 0; } catch (e) { return 0; } })();
+let proyAnima = false;
+const isoDe = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const sumaDias = (iso, n) => { const d = new Date(iso + "T12:00"); d.setDate(d.getDate() + n); return isoDe(d); };
+const sumaMeses = (iso, m) => { const d = new Date(iso + "T12:00"); d.setMonth(d.getMonth() + m); return isoDe(d); };
+const fmtFechaA = (iso) => { const d = new Date(iso + "T12:00"); return d.toLocaleDateString("es", { day: "numeric", month: "short", ...(d.getFullYear() !== new Date().getFullYear() ? { year: "numeric" } : {}) }); };
+const fmtNum = (v) => Math.round(v).toLocaleString("es");
+const fmtEje = (t) => t >= 1e6 ? (t / 1e6).toLocaleString("es", { maximumFractionDigits: 1 }) + "M" : t >= 1e4 ? Math.round(t / 1000) + "k" : t;
+const PROY_CUANDO = { 1: "dentro de un mes", 6: "dentro de seis meses", 12: "dentro de un año", 60: "dentro de cinco años" };
+
 function renderCurvaChart() {
   const d = DASH, c = d.curva, serie = d.serie;
   renderEtapaAviso();
@@ -1235,7 +1286,7 @@ function renderCurvaChart() {
   const caidaCls = c.caida_pct < 0 ? "bad" : "";
   $("curvaDatos").innerHTML =
     `<div><div class="v">${Math.round(c.pico.valor)}</div><div class="k">pico · ${fmtFecha(c.pico.fecha)}</div></div>` +
-    `<div><div class="v ${caidaCls}">${c.caida_pct === 0 ? "en máximos" : fmtPct(c.caida_pct, 0)}</div><div class="k">desde el pico</div></div>` +
+    `<div><div class="v ${caidaCls}">${c.caida_pct === 0 ? "en máximos" : fmtPct(c.caida_pct, Math.abs(c.caida_pct) < 1 ? 1 : 0)}</div><div class="k">desde el pico</div></div>` +
     `<div><div class="v ${c.anual >= 1.02 ? "ok" : c.anual <= 0.98 ? "bad" : ""}">${fmtMult(c.anual)}</div><div class="k">al año a este ritmo</div></div>`;
   const et = c.etapa || { n: 1 }, cerradas = c.etapas || [];
   const etLabel = cerradas.length || et.nombre ? `Etapa ${et.n}${et.nombre ? ` «${et.nombre}»` : ""} · ` : "";
@@ -1252,7 +1303,26 @@ function renderCurvaChart() {
 
   // la curva solo dibuja la etapa en curso
   const tramo = serie.filter((p) => p.fecha >= c.desde && p.capital !== null && p.capital !== undefined);
-  const vals = tramo.map((p) => p.capital);
+  const puede = c.dias_ritmo > 0 && tramo.length > 0;
+  const meses = puede ? PROY_M : 0;
+  document.querySelectorAll("#proyToggles button").forEach((b) => {
+    b.classList.toggle("active", Number(b.dataset.m) === meses);
+    b.disabled = !puede && b.dataset.m !== "0";
+  });
+  const proy = [];
+  if (meses) {
+    const r = c.ritmo_dia ?? c.ritmo_dia_pct / 100, hoy = tramo[tramo.length - 1].fecha, fin = sumaMeses(hoy, meses);
+    for (let f = sumaDias(hoy, 1), k = 1; f <= fin; f = sumaDias(f, 1), k++) proy.push({ fecha: f, y: c.capital * Math.pow(1 + r, k), proy: true });
+    const ult = proy[proy.length - 1], mult = ult.y / c.capital;
+    let t = `${c.dias_ritmo === 1 ? "Con el único día que cuenta de momento" : `A tu ritmo de los últimos ${c.dias_ritmo} días`} (${fmtPct(c.ritmo_dia_pct)} al día), ` +
+      `${PROY_CUANDO[meses]}, el ${fmtFechaA(ult.fecha)}, tu capital estaría en <b>${fmtNum(ult.y)}</b>` +
+      (mult >= 1.005 ? `: ${fmtMult(mult)} lo de hoy.` : mult <= 0.995 ? `: un ${Math.round((1 - mult) * 100)} % menos que hoy.` : `: igual que hoy.`);
+    // lo exponencial: cuánto de la subida se concentra al final
+    if (mult > 1.2 && r > 0) t += ` La mitad de esa subida llega en los últimos <b>${proy.length - Math.round(Math.log((1 + mult) / 2) / Math.log(1 + r))} días</b>.`;
+    $("proyTxt").innerHTML = t + " Lo gris es lo que falta.";
+  }
+  $("proyTxt").hidden = !proy.length;
+  const vals = tramo.map((p) => p.capital).concat(proy.map((p) => p.y));
   const lo = Math.min(...vals, 100), hi = Math.max(...vals, 100);
   const span = Math.max(hi - lo, 6);
   const yMin = Math.max(0, Math.floor((lo - span * 0.18) / 5) * 5), yMax = Math.ceil((hi + span * 0.18) / 5) * 5;
@@ -1260,14 +1330,21 @@ function renderCurvaChart() {
   const ticks = [];
   for (let t = Math.ceil(yMin / step) * step; t <= yMax; t += step) ticks.push(t);
   // el color dice de qué lado del 100 estás: verde por encima de donde empezaste, rojo por debajo
-  makeChart($("chartCurva"), tramo.map((p) => ({ fecha: p.fecha, y: p.capital, rend: p.rend, score: p.score, vacio: p.vacio })), {
+  makeChart($("chartCurva"), tramo.map((p) => ({ fecha: p.fecha, y: p.capital, rend: p.rend, score: p.score, vacio: p.vacio })).concat(proy), {
     color: c.capital >= 100 ? "var(--ok)" : "var(--bad)",
     yMin, yMax, ticks, dots: false,
     baseline: 100,
+    fmtTick: fmtEje,
     mark: c.pico.valor > 100 ? c.pico.fecha : null,
-    tooltip: (pt) => `<b>${fmtFecha(pt.fecha)}</b> · capital <b>${Math.round(pt.y)}</b>` +
+    hoy: proy.length ? tramo.length - 1 : null,
+    anima: proyAnima,
+    finLabel: proy.length ? fmtNum(proy[proy.length - 1].y) : null,
+    fmtX: (pt) => fmtFechaA(pt.fecha),
+    tooltip: (pt) => pt.proy ? `<b>${fmtFechaA(pt.fecha)}</b> · si sigues así <b>${fmtNum(pt.y)}</b>`
+      : `<b>${fmtFecha(pt.fecha)}</b> · capital <b>${Math.round(pt.y)}</b>` +
       (pt.rend === null ? (pt.score === null ? " · sin cerrar" : "") : ` · ${fmtPct(pt.rend)}${pt.vacio ? " (sin registrar)" : ""}`),
   });
+  proyAnima = false;
 }
 
 function niceStep(max) {
@@ -1287,6 +1364,15 @@ document.querySelectorAll("#rangeToggles button").forEach((b) => {
     RANGE = Number(b.dataset.r);
     document.querySelectorAll("#rangeToggles button").forEach((x) => x.classList.toggle("active", x === b));
     if (DASH) renderScoreChart();
+  };
+});
+
+document.querySelectorAll("#proyToggles button").forEach((b) => {
+  b.onclick = () => {
+    PROY_M = Number(b.dataset.m);
+    try { localStorage.setItem("os_curva_proy", String(PROY_M)); } catch (e) {}
+    proyAnima = PROY_M > 0;
+    if (DASH) renderCurvaChart();
   };
 });
 

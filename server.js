@@ -616,6 +616,7 @@ function buildDashboard(data) {
     caida_pct: Math.round((capital / pico.valor - 1) * 1000) / 10,
     rend_hoy: days[today] ? Math.round(rendimiento(computeScore(days[today].senales, config)) * 100) / 100 : null,
     ritmo_dia_pct: Math.round(ritmo * 10000) / 100,
+    ritmo_dia: Math.round(ritmo * 1e8) / 1e8, // sin redondear a %: la proyección del panel lo compone cientos de días
     anual: Math.round(Math.pow(1 + ritmo, 365) * 100) / 100,
     dias_ritmo: nDias,
     desde: inicio,
