@@ -743,31 +743,6 @@
   .ed-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; font-size: 13.5px; }
   .ed-main span { color: var(--ink-3); font-size: 12px; }
   .ed-acts { display: flex; gap: 6px; flex-wrap: wrap; }
-  /* cola */
-  .cola-dia { display: flex; gap: 14px; padding: 9px 0; border-bottom: 1px solid var(--hairline); }
-  .cola-dia:last-child { border-bottom: 0; }
-  .cola-f { width: 66px; flex-shrink: 0; display: flex; flex-direction: column; font-size: 12px; color: var(--ink-3); padding-top: 3px; }
-  .cola-f b { color: var(--ink); font-size: 13px; font-weight: 600; }
-  .cola-dia.hoy .cola-f b { text-decoration: underline; text-underline-offset: 3px; }
-  .cola-items { flex: 1; min-width: 0; display: grid; gap: 6px; }
-  .cola-p { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; cursor: pointer; font-size: 13.5px; padding: 3px 0; }
-  .cola-p .t { font-weight: 550; color: var(--ink); min-width: 0; }
-  .cola-p.pub .t { color: var(--ink-2); font-weight: 500; }
-  .cola-p .m { color: var(--ink-3); font-size: 12px; }
-  .cola-falta { display: inline-flex; gap: 4px; flex-wrap: wrap; margin-left: auto; }
-  .cola-falta i { font-style: normal; font-size: 11px; color: var(--ink-3); border: 1px solid var(--border); border-radius: 4px; padding: 0 5px; }
-  .cola-falta i.ok { color: var(--good); border-color: transparent; background: var(--good-bg); }
-  .cola-hueco { background: none; border: 1px dashed var(--border-strong); color: var(--ink-3); border-radius: 6px; padding: 6px 10px; font-family: inherit; font-size: 12.5px; cursor: pointer; text-align: left; }
-  .cola-hueco:hover { color: var(--ink); border-color: var(--ink-3); }
-  /* grabación */
-  .gr-toma { display: flex; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--hairline); align-items: flex-start; }
-  .gr-toma:last-child { border-bottom: 0; }
-  .gr-main { flex: 1; min-width: 0; }
-  .gr-d { font-size: 13.5px; color: var(--ink); font-weight: 500; }
-  .gr-como { font-size: 12px; color: var(--ink-3); margin-top: 2px; }
-  .gr-ps { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
-  .gr-pieza { background: var(--surface-2); border: 0; border-radius: 4px; padding: 2px 7px; font-family: inherit; font-size: 11.5px; color: var(--ink-2); cursor: pointer; }
-  .gr-pieza:hover { color: var(--ink); }
   /* referencias y ganchos */
   .gancho { padding: 10px 0; border-bottom: 1px solid var(--hairline); cursor: pointer; }
   .gancho:last-child { border-bottom: 0; }
@@ -928,7 +903,7 @@ function parseHash() {
   finSub = FIN_SUBS.some((x) => x.id === s) ? s : "resumen";
   proySub = a === "proyectos" && s ? decodeURIComponent(s) : null;
   contSub = a === "instagram"
-    ? (s === "referencias" ? "ganchos" : ["tablero", "edicion", "cola", "grabacion", "ganchos", "vision"].includes(s) ? s : "tablero") // referencias = nombre antiguo de Ganchos
+    ? (s === "referencias" ? "ganchos" : ["tablero", "edicion", "ganchos", "vision"].includes(s) ? s : "tablero") // referencias = nombre antiguo de Ganchos; cola y grabacion (quitadas el 24 oct) caen en el tablero
     : (a === "contenido" && ["reto", "piezas", "calendario"].includes(s) ? s : "reto");
   gymSub = a === "gym" && ["resumen", "tracker", "rutina"].includes(s) ? s : "resumen";
 }
@@ -3920,7 +3895,7 @@ const VIEWS = {
   instagram() {
     const nRev = (STATE.contenido || []).filter((c) => c.edicion?.estado === "entregada").length;
     const nav = `<div class="subnav">${IG_TABS.map((t) => `<button class="${contSub === t.id ? "active" : ""}" onclick="location.hash='instagram/${t.id}'">${t.l}${t.id === "edicion" && nRev ? ` · ${nRev}` : ""}</button>`).join("")}</div>`;
-    const vista = contSub === "edicion" ? vistaEdicionIG() : contSub === "cola" ? vistaColaIG() : contSub === "grabacion" ? vistaGrabacionIG() : contSub === "ganchos" ? vistaGanchosIG() : contSub === "vision" ? vistaVisionIG() : vistaTableroIG();
+    const vista = contSub === "edicion" ? vistaEdicionIG() : contSub === "ganchos" ? vistaGanchosIG() : contSub === "vision" ? vistaVisionIG() : vistaTableroIG();
     return nav + vista;
   },
   agenda() { return vistaAgendaCal(); },
@@ -4676,12 +4651,11 @@ function vistaAgendaCal() {
 }
 
 /* ======================== INSTAGRAM · rediseño 15 oct 2026 ========================
-   Tablero (pipeline + archivo de publicadas) · Edición (editores y lo que tienen entre manos) ·
-   Cola (qué sale cada día y colchón) · Grabación (tomas pendientes por sitio) · Ganchos (banco de ganchos).
+   Tablero (pipeline + archivo de publicadas) · Edición (editores y lo que tienen entre manos) · Ganchos (banco de ganchos).
+   Cola y Grabación se quitaron el 24 oct (Alex: «de momento»); las tomas siguen en la ficha, en Producción.
    La ficha de cada pieza (renderPiezaPanel) va en pestañas: Guion · Publicación · Producción · Edición · Notas. */
 const IG_TABS = [
-  { id: "tablero", l: "Tablero" }, { id: "edicion", l: "Edición" }, { id: "cola", l: "Cola" },
-  { id: "grabacion", l: "Grabación" }, { id: "ganchos", l: "Ganchos" }, { id: "vision", l: "Visión" },
+  { id: "tablero", l: "Tablero" }, { id: "edicion", l: "Edición" }, { id: "ganchos", l: "Ganchos" }, { id: "vision", l: "Visión" },
 ];
 const RANGO_PIEZA = { idea: 0, guion: 1, grabar: 2, editar: 3, lista: 4, publicado: 5 };
 const ED_ESTADOS = [
@@ -4690,7 +4664,7 @@ const ED_ESTADOS = [
 ];
 const edLabel = (id) => (ED_ESTADOS.find((e) => e.id === id) || { l: id || "" }).l;
 const TIPOS_GANCHO = ["Dolor del que mira", "Dato o cifra", "Historia", "Contraste", "Lista", "Novedad", "Herramienta con nombre", "Pregunta incómoda", "Frase ajena", "Humor", "Otro"]; // las formas que paran a la gente en el nicho (research 20 oct) + las de antes
-let igBusca = "", igVerTodo = {}, EDITORES = null, grabFiltro = "pronto", refFiltro = "todo";
+let igBusca = "", igVerTodo = {}, EDITORES = null, refFiltro = "todo";
 const DIAS_CORTOS = ["dom", "lun", "mar", "mié", "jue", "vie", "sáb"];
 function fmtDiaCorto(f) {
   if (!f) return "";
@@ -4882,102 +4856,7 @@ async function editorActivo(id, activo) {
   catch (e) { alert("No se pudo: " + e.message); }
 }
 
-/* ---------- Cola y colchón ---------- */
-function faltaDe(c) {
-  const r = RANGO_PIEZA[estadoPieza(c)] ?? 0, f = [];
-  if (r < 2) f.push("guion");
-  if (r < 3) f.push("grabar");
-  if (r < 4) f.push(c.edicion ? "edición: " + edLabel(c.edicion.estado).toLowerCase() : "editar");
-  if (!String(c.caption || "").trim()) f.push("caption");
-  return f;
-}
-function vistaColaIG() {
-  const hoy = isoLocal(new Date());
-  const todas = (STATE.contenido || []).map((c, i) => ({ c, i }));
-  const esPub = (x) => estadoPieza(x.c) === "publicado";
-  const pend = todas.filter((x) => !esPub(x));
-  const listas = pend.filter((x) => estadoPieza(x.c) === "lista");
-  const d0 = new Date(hoy + "T12:00");
-  const lunes = isoLocal(new Date(d0.getTime() - ((d0.getDay() + 6) % 7) * 86400000));
-  const domingo = isoLocal(new Date(new Date(lunes + "T12:00").getTime() + 6 * 86400000));
-  const pubSemana = todas.filter((x) => esPub(x) && (x.c.fecha_pub || "") >= lunes && (x.c.fecha_pub || "") <= domingo).length;
-  const objetivo = Number(STATE.config_contenido?.por_semana) || 7;
-  const dias = Array.from({ length: 14 }, (_, k) => isoLocal(new Date(d0.getTime() + k * 86400000)));
-  const ocupado = (f) => pend.some((x) => x.c.fecha_plan === f) || todas.some((x) => esPub(x) && x.c.fecha_pub === f);
-  const huecos7 = dias.slice(0, 7).filter((f) => !ocupado(f)).length;
-  const atrasadas = pend.filter((x) => x.c.fecha_plan && x.c.fecha_plan < hoy);
-  const fila = ({ c, i }) => {
-    const f = faltaDe(c);
-    return `<div class="cola-p" onclick="abrirPieza(${i})"><span class="badge ${estadoPieza(c)}">${labelEstado(c)}</span><span class="t">${esc(c.titulo || "(sin título)")}</span>${c.hora ? `<span class="m">${esc(c.hora)}</span>` : ""}<span class="cola-falta">${f.length ? f.map((x) => `<i>falta ${esc(x)}</i>`).join("") : `<i class="ok">lista para publicar</i>`}</span></div>`;
-  };
-  const filasDias = dias.map((f) => {
-    const delDia = pend.filter((x) => x.c.fecha_plan === f);
-    const pubDia = todas.filter((x) => esPub(x) && x.c.fecha_pub === f);
-    const d = new Date(f + "T12:00");
-    return `<div class="cola-dia${f === hoy ? " hoy" : ""}"><div class="cola-f"><b>${f === hoy ? "Hoy" : fmtDiaCorto(f)}</b><span>${d.toLocaleDateString("es", { day: "numeric", month: "short" })}</span></div>
-      <div class="cola-items">${pubDia.map(({ c, i }) => `<div class="cola-p pub" onclick="abrirPieza(${i})"><span class="badge publicado">Publicada</span><span class="t">${esc(c.titulo || "")}</span></div>`).join("")}${delDia.map(fila).join("")}${!delDia.length && !pubDia.length ? `<button class="cola-hueco" onclick="asignaHueco('${f}')">Sin pieza · asignar una</button>` : ""}</div></div>`;
-  }).join("");
-  const sinFecha = listas.filter((x) => !x.c.fecha_plan);
-  return `<div class="mini-kpis">
-      <div class="mkpi"><div class="n">${listas.length}</div><div class="l">${listas.length === 1 ? "Pieza lista · un día de margen" : `Piezas listas · ${listas.length} días de margen`}</div></div>
-      <div class="mkpi"><div class="n">${pubSemana}<small>/${objetivo}</small></div><div class="l">Publicadas esta semana</div></div>
-      <div class="mkpi"><div class="n">${huecos7}</div><div class="l">Días sin pieza en la próxima semana</div></div>
-    </div>` +
-    (atrasadas.length ? `<div class="card"><h2>Atrasadas</h2><div class="sub">Tenían fecha y no constan como publicadas. Márcalas como publicadas en el tablero o cámbiales la fecha.</div>${atrasadas.map((x) => `<div class="cola-dia"><div class="cola-f"><b>${fmtDiaCorto(x.c.fecha_plan)}</b></div><div class="cola-items">${fila(x)}</div></div>`).join("")}</div>` : "") +
-    `<div class="card"><h2>Próximos 14 días</h2>${filasDias}</div>` +
-    (sinFecha.length ? `<div class="card"><h2>Listas sin fecha</h2>${sinFecha.map(fila).join("")}</div>` : "");
-}
-async function asignaHueco(f) {
-  const cands = (STATE.contenido || []).map((c, i) => ({ c, i })).filter((x) => estadoPieza(x.c) !== "publicado" && !x.c.fecha_plan);
-  if (!cands.length) { await OSUI.confirm("No hay piezas sin fecha", "Todas las piezas pendientes ya tienen día. Crea una en el tablero o cambia la fecha de otra.", { ok: "Vale", danger: false }); return; }
-  cands.sort((a, b) => RANGO_PIEZA[estadoPieza(b.c)] - RANGO_PIEZA[estadoPieza(a.c)]);
-  const dia = fmtDiaCorto(f);
-  const r = await OSUI.form({ titulo: dia === "hoy" || dia === "mañana" ? `Publicar ${dia}` : `Publicar el ${dia}`, campos: [
-    { id: "i", label: "Pieza", tipo: "select", buscar: true, opciones: cands.map((x) => ({ v: String(x.i), l: `${labelEstado(x.c)} · ${x.c.titulo || "(sin título)"}` })) },
-    { id: "hora", label: "Hora (opcional)", tipo: "time", valor: "" },
-  ], ok: "Asignar" });
-  if (!r) return;
-  const c = STATE.contenido[Number(r.i)];
-  if (!c) return;
-  c.fecha_plan = f;
-  if (r.hora) c.hora = r.hora;
-  renderContent();
-  await guardaContenido();
-}
-
-/* ---------- Plan de grabación ---------- */
-function vistaGrabacionIG() {
-  const en14 = isoLocal(new Date(Date.now() + 14 * 86400000));
-  const porCid = new Map((STATE.contenido || []).map((c, i) => [c.cid, { c, i }]));
-  const tomas = (STATE.tomas || []).map((t, k) => ({ t, k }));
-  const vivas = (t) => (t.piezas || []).map((cid) => porCid.get(cid)).filter((x) => x && estadoPieza(x.c) !== "publicado");
-  const pronto = (t) => vivas(t).some(({ c }) => estadoPieza(c) === "grabar" || (c.fecha_plan && c.fecha_plan <= en14));
-  const pend = tomas.filter(({ t }) => t.estado !== "grabada" && vivas(t).length && (grabFiltro === "todas" || pronto(t)));
-  const grupos = new Map();
-  for (const x of pend) { const l = String(x.t.lugar || "Sin sitio").trim() || "Sin sitio"; if (!grupos.has(l)) grupos.set(l, []); grupos.get(l).push(x); }
-  const primera = (arr) => arr.flatMap(({ t }) => vivas(t).map(({ c }) => c.fecha_plan || "9999")).sort()[0] || "9999";
-  const orden = [...grupos.entries()].sort((a, b) => (primera(a[1]) < primera(b[1]) ? -1 : 1));
-  const chip = ({ c, i }) => `<button class="gr-pieza" onclick="abrirPieza(${i},'produccion')">${esc((c.titulo || "").slice(0, 40))}${(c.titulo || "").length > 40 ? "…" : ""}${c.fecha_plan ? " · " + fmtDiaCorto(c.fecha_plan) : ""}</button>`;
-  const html = orden.map(([lugar, arr]) => `<div class="card"><div class="row-h"><h2>${esc(lugar)}</h2><span class="kb-n">${arr.length} toma${arr.length === 1 ? "" : "s"}</span></div>
-    ${arr.map(({ t, k }) => `<div class="gr-toma"><button class="t-check" title="Marcar como grabada" onclick="tomaGrabada(${k})">${OSIcons.check}</button>
-      <div class="gr-main"><div class="gr-d">${esc(t.descripcion || "")}</div>${t.como ? `<div class="gr-como">${esc(t.como)}</div>` : ""}<div class="gr-ps">${vivas(t).map(chip).join("")}</div></div></div>`).join("")}</div>`).join("");
-  const nGrab = tomas.filter(({ t }) => t.estado === "grabada").length;
-  return `<div class="kb-bar"><div class="filtros" style="margin:0">
-      <button class="${grabFiltro === "pronto" ? "on" : ""}" onclick="grabFiltro='pronto';renderContent()">Próximas dos semanas</button>
-      <button class="${grabFiltro === "todas" ? "on" : ""}" onclick="grabFiltro='todas';renderContent()">Todas</button></div>
-      <span style="flex:1"></span><button class="btn-mini primary" onclick="nuevaToma()">${OSIcons.nueva} Toma</button></div>
-    ${html || `<div class="card"><div class="empty-note">No hay tomas pendientes${grabFiltro === "pronto" ? " para las piezas de las próximas dos semanas" : ""}.</div></div>`}
-    <div class="empty-note" style="margin-top:6px">Agrupadas por sitio, empezando por el que tiene la pieza más cercana. Llevas ${nGrab} tomas grabadas.</div>`;
-}
-async function tomaGrabada(k) {
-  const t = (STATE.tomas || [])[k];
-  if (!t) return;
-  t.estado = "grabada";
-  t.grabada_el = isoLocal(new Date());
-  renderContent();
-  await postClaves({ tomas: STATE.tomas });
-  load();
-}
+/* ---------- Tomas: se añaden desde la ficha (Producción) ---------- */
 async function nuevaToma(cidFijo) {
   const lugares = [...new Set((STATE.tomas || []).map((t) => String(t.lugar || "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, "es"));
   const piezas = (STATE.contenido || []).filter((c) => estadoPieza(c) !== "publicado");

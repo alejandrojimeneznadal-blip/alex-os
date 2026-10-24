@@ -59,7 +59,7 @@ for (const ev of ["pagereveal", "pageswap"]) {
 window.OS_MODULOS = (function () {
   const catalogo = [
     { id: "agenda", grupo: "Resumen", label: "Agenda", href: "/areas.html#agenda", icon: "calendario", fb: "▦", desc: "Calendario por mes o por semana con lo que toca cada día: publicaciones, recordatorios y entrenos hechos." },
-    { id: "instagram", grupo: "Áreas", label: "Instagram", href: "/areas.html#instagram", icon: "instagram", fb: "◎", desc: "Piezas de contenido de la idea a la publicación: tablero, cola, grabación, edición con editor, ganchos y visión; cada pieza con su guion, notas de voz y reels de referencia." },
+    { id: "instagram", grupo: "Áreas", label: "Instagram", href: "/areas.html#instagram", icon: "instagram", fb: "◎", desc: "Piezas de contenido de la idea a la publicación: tablero, edición con editor, ganchos y visión; cada pieza con su guion, notas de voz y reels de referencia." },
     { id: "skool", grupo: "Áreas", label: "Skool", href: "/areas.html#skool", icon: "users", fb: "◌", desc: "Reservado: todavía sin construir.", reservado: true },
     { id: "gym", grupo: "Áreas", label: "Gym", href: "/areas.html#gym", icon: "gym", fb: "⚓", desc: "Rutina semanal, las series de cada día frente a la última vez y el peso corporal." },
     { id: "sueno", grupo: "Áreas", label: "Sueño", href: "/areas.html#sueno", icon: "sueno", fb: "☾", desc: "Horas por noche, medias, racha y rutinas de despertar." },
