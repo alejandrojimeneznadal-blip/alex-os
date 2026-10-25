@@ -138,7 +138,7 @@ Reglas: el panel sale de su vida, no copies el de nadie; no inventes datos; si a
 |---|---|
 | Panel | Siempre está: hábitos del día, score de 0 a 100 y la curva de crecimiento. |
 | Agenda | Calendario por mes o por semana con lo que toca cada día: publicaciones, recordatorios y entrenos hechos. |
-| Instagram | Piezas de contenido de la idea a la publicación: tablero, edición con un editor que solo ve lo que le asignas, banco de ganchos y la «visión» de tu marca; en cada pieza, guion con notas de voz transcritas y reels de referencia. |
+| Instagram | Piezas de contenido de la idea a la publicación: tablero, edición con un editor que solo ve lo que le asignas, banco de ganchos y la «visión» de tu marca; en cada pieza, guion con notas de voz transcritas y reels de referencia. Con tu app de Meta (Instagram → Conectar Instagram), los números oficiales de cada reel: vistas, alcance, omisión, tiempo medio, guardados y compartidos. |
 | Gym | Rutina semanal, las series de cada día frente a la última vez y el peso corporal. |
 | Sueño | Horas por noche, medias, racha y rutinas de despertar. |
 | Nutrición | Calorías de cada día frente a tu objetivo. |

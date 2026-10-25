@@ -760,6 +760,21 @@
   .ft-dur { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 12.5px; color: var(--ink-3); margin-top: 2px; }
   .ft-cnt { float: right; color: var(--ink-3); font-variant-numeric: tabular-nums; font-weight: 500; text-transform: none; letter-spacing: 0; }
   .ft-nota { font-size: 12px; color: var(--ink-3); margin-top: -6px; }
+  .ft-nota a { color: inherit; }
+  /* Instagram conectado: botón junto a las pestañas y números de cada reel en la ficha */
+  .ig-nav { display: flex; flex-wrap: wrap; align-items: flex-start; column-gap: 10px; }
+  .ig-nav > .subnav { flex: 1 1 auto; }
+  .ig-nav > .ig-con { margin: 0 0 14px auto; flex-shrink: 0; }
+  .ig-con.mal { color: var(--bad); border-color: var(--bad); }
+  .ig-url { display: flex; align-items: center; gap: 8px; margin: 8px 0 4px; padding: 6px 6px 6px 10px; border-radius: 6px; background: var(--surface-2); }
+  .ig-url code { flex: 1; min-width: 0; font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; overflow-wrap: anywhere; user-select: all; color: var(--ink); }
+  .ig-url .btn-mini { flex-shrink: 0; }
+  .ig-err { margin-top: 10px; color: var(--bad); font-size: 13px; }
+  .ig-nums { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px 10px; margin: 6px 0 16px; }
+  .ig-nums .v { font-size: 17px; font-weight: 650; color: var(--ink); font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+  .ig-nums .v.bien { color: var(--good); } .ig-nums .v.mal { color: var(--bad); }
+  .ig-nums .k { font-size: 10.5px; color: var(--ink-3); margin-top: 2px; text-transform: uppercase; letter-spacing: 0.04em; overflow-wrap: anywhere; }
+  @media (max-width: 520px) { .ig-nums { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   .sp-grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0 12px; }
   .ft-toma { display: flex; gap: 8px; align-items: flex-start; font-size: 13.5px; padding: 5px 0; color: var(--ink); cursor: pointer; }
   .ft-toma i { color: var(--ink-3); font-style: normal; }
@@ -3182,8 +3197,8 @@ function renderPiezaPanel() {
         <div class="sp-campo"><label for="sp_caption">Caption <span class="ft-cnt" id="spCapN">${String(c.caption || "").length} / 2.200</span></label><textarea id="sp_caption" rows="1" placeholder="Vacío">${esc(c.caption)}</textarea></div>
         <div class="sp-grid2">${input("hashtags", "Hashtags", "#claudecode #ia")}${input("palabra", "Palabra clave de la llamada a la acción", "CLAUDE")}</div>
         ${input("url", "Enlace del reel publicado", "https://www.instagram.com/reel/…")}
-        <div class="sp-grid3">${input("views", "Visualizaciones", "—", "number")}${input("likes", "Likes", "—", "number")}${input("comments", "Comentarios", "—", "number")}</div>
-        <div class="ft-nota">Los números se rellenarán solos cuando conectemos Instagram.</div>
+        ${c.ig ? htmlIgFicha(c.ig) : `<div class="sp-grid3">${input("views", "Visualizaciones", "—", "number")}${input("likes", "Likes", "—", "number")}${input("comments", "Comentarios", "—", "number")}</div>
+        <div class="ft-nota">${IG_CON?.conectado ? "Sin números de Instagram todavía: si ya está publicada, pega arriba el enlace del reel y se enlaza en la próxima actualización." : "Los números se rellenan solos al conectar Instagram (arriba, en «Conectar Instagram»)."}</div>`}
       </div>
 
       <div class="ft-sec" data-sec="produccion">
@@ -3269,6 +3284,7 @@ function renderPiezaPanel() {
   }
   for (const k of ["views", "likes", "comments", "nota"]) {
     const el = $("sp_" + k);
+    if (!el) continue; // con los números de Instagram no hay campos a mano
     el.oninput = () => { const n = Number(el.value); if (el.value !== "" && Number.isFinite(n)) c[k] = n; else delete c[k]; guardaPiezaQuiet(); };
   }
 
@@ -3896,7 +3912,7 @@ const VIEWS = {
     const nRev = (STATE.contenido || []).filter((c) => c.edicion?.estado === "entregada").length;
     const nav = `<div class="subnav">${IG_TABS.map((t) => `<button class="${contSub === t.id ? "active" : ""}" onclick="location.hash='instagram/${t.id}'">${t.l}${t.id === "edicion" && nRev ? ` · ${nRev}` : ""}</button>`).join("")}</div>`;
     const vista = contSub === "edicion" ? vistaEdicionIG() : contSub === "ganchos" ? vistaGanchosIG() : contSub === "vision" ? vistaVisionIG() : vistaTableroIG();
-    return nav + vista;
+    return `<div class="ig-nav">${nav}${igConBoton()}</div>` + vista;
   },
   agenda() { return vistaAgendaCal(); },
   skool() { return pendiente("Skool", "Miembros de la comunidad, de qué pieza viene cada alta y el embudo: visitas al perfil, clics al enlace, altas. Se monta cuando abra la comunidad.", 4); },
@@ -4742,10 +4758,83 @@ function cardIG({ c, i }, hoy) {
     misionDe(c) ? `<span class="kb-tag m-${misionDe(c)}">${misionLabel(misionDe(c))}</span>` : "",
     ed ? `<span class="kb-ed ${esc(ed.estado)}">${esc(ed.editor_nombre || "Editor")} · ${ed.estado === "entregada" ? "revisar" : edLabel(ed.estado).toLowerCase()}</span>` : "",
     est === "grabar" && ts.length ? `<span>${ts.length - tp}/${ts.length} tomas</span>` : "",
-    pub && c.views ? `<span>${fmtN(c.views)} vistas</span>` : "",
+    pub && (c.ig?.views ?? c.views) ? `<span>${fmtN(c.ig?.views ?? c.views)} vistas${c.ig?.omision_pct != null ? ` · ${String(c.ig.omision_pct).replace(".", ",")} % omisión` : ""}</span>` : "",
   ].filter(Boolean).join("");
   return `<div class="kb-card" draggable="true" ondragstart="igArrastra(event,${i})" onclick="abrirPieza(${i})">
     <div class="kb-t">${esc(c.titulo || "(sin título)")}</div>${meta ? `<div class="kb-meta">${meta}</div>` : ""}</div>`;
+}
+/* ---------- Conexión con Instagram (API oficial, 25 oct 2026) ---------- */
+let IG_CON = null, igCargando = false;
+async function cargaIgCon() {
+  try { const r = await fetch("/api/instagram", { credentials: "include" }); IG_CON = r.ok ? await r.json() : { error: "No se pudo leer la conexión con Instagram" }; }
+  catch (e) { IG_CON = IG_CON || {}; }
+  return IG_CON;
+}
+const haceIg = (ms) => {
+  if (!ms) return "nunca";
+  const m = Math.round((Date.now() - ms) / 60000);
+  return m < 1 ? "ahora mismo" : m < 60 ? `hace ${m} min` : m < 1440 ? `hace ${Math.round(m / 60)} h` : `hace ${Math.round(m / 1440)} d`;
+};
+function igConBoton() {
+  if (IG_CON === null) {
+    if (!igCargando) { igCargando = true; cargaIgCon().then(() => { igCargando = false; if (active === "instagram") renderContent(); }); }
+    return "";
+  }
+  const c = IG_CON;
+  if (c.sincronizando) return `<button class="btn-mini ig-con" disabled>Actualizando…</button>`;
+  if (c.conectado) return `<button class="btn-mini ig-con${c.error ? " mal" : ""}" onclick="igConMenu()" title="Conexión con Instagram">@${esc(c.username || "instagram")} · ${c.error ? "revisar" : haceIg(c.ultima_sync)}</button>`;
+  return `<button class="btn-mini ig-con${c.error ? " mal" : ""}" onclick="igConecta()">Conectar Instagram</button>`;
+}
+async function igConecta() {
+  const c = IG_CON || {};
+  const r = await OSUI.form({
+    titulo: "Conectar Instagram",
+    texto: `Pega el identificador y la clave secreta de tu app de Instagram (developers.facebook.com → tu app → configuración de la API con inicio de sesión de Instagram). En esa misma página, la dirección de redirección tiene que ser esta:<span class="ig-url"><code>${esc(c.redirect_uri || "")}</code><button type="button" class="btn-mini" onclick="navigator.clipboard.writeText(this.previousElementSibling.textContent).then(() => { this.textContent = 'Copiada'; })">Copiar</button></span>` +
+      (c.error ? `<div class="ig-err">${esc(c.error)}</div>` : ""),
+    campos: [
+      { id: "app_id", label: "Identificador de la app de Instagram", valor: c.app_id || "", placeholder: "Solo números" },
+      { id: "app_secret", label: "Clave secreta de la app de Instagram", tipo: "password", placeholder: c.configurado ? "Guardada: déjala vacía para no cambiarla" : "" },
+    ],
+    ok: "Guardar y conectar",
+  });
+  if (!r) return;
+  try { IG_CON = await apiPost("/api/instagram/credenciales", { app_id: r.app_id.trim(), app_secret: r.app_secret.trim() }); }
+  catch (e) { alert(e.message); return; }
+  location.href = "/api/instagram/conectar"; // Instagram pide el permiso y vuelve aquí
+}
+async function igConMenu() {
+  const c = IG_CON;
+  const caducado = /vuelve a conectar/.test(c.error || "");
+  const r = await OSUI.form({
+    titulo: `Instagram · @${esc(c.username || "")}`,
+    texto: `${c.seguidores != null ? `${fmtN(c.seguidores)} seguidores · ` : ""}números actualizados ${haceIg(c.ultima_sync)}. Se actualizan solos cada 6 horas; los de un reel nuevo pueden tardar hasta 48 horas en llegar.` +
+      (c.error ? `<div class="ig-err">${esc(c.error)}</div>` : ""),
+    campos: [], ok: caducado ? "Volver a conectar" : "Actualizar ahora", borrar: "Desconectar",
+  });
+  if (r === "borrar") {
+    if (!(await OSUI.confirm("Desconectar Instagram", "Dejan de llegar números nuevos. Los que ya tienes se quedan.", { ok: "Desconectar" }))) return;
+    try { const x = await fetch("/api/instagram", { method: "DELETE", credentials: "include" }); IG_CON = await x.json(); } catch (e) { alert("No se pudo desconectar: " + e.message); }
+    renderContent();
+    return;
+  }
+  if (!r) return;
+  if (caducado) { location.href = "/api/instagram/conectar"; return; }
+  IG_CON = { ...c, sincronizando: true };
+  renderContent();
+  try { const x = await apiPost("/api/instagram/sincronizar", {}); IG_CON = x.estado; if (x.ok === false && x.error) alert(x.error); }
+  catch (e) { IG_CON = { ...c }; alert("No se pudo actualizar: " + e.message); }
+  await load(); // trae los números nuevos de cada pieza
+}
+function htmlIgFicha(g) {
+  const n = (v) => (v == null ? "—" : fmtN(v));
+  const dec = (v, u) => (v == null ? "—" : `${String(v).replace(".", ",")} ${u}`);
+  const om = g.omision_pct == null ? "" : g.omision_pct < 35 ? "bien" : g.omision_pct > 45 ? "mal" : "";
+  const celdas = [["Vistas", n(g.views)], ["Alcance", n(g.reach)], ["Omisión", dec(g.omision_pct, "%"), om], ["Tiempo medio", dec(g.tiempo_medio_s, "s")],
+    ["Likes", n(g.likes)], ["Comentarios", n(g.comments)], ["Guardados", n(g.saved)], ["Compartidos", n(g.shares)]];
+  if (g.reposts != null) celdas.push(["Reposts", n(g.reposts)]);
+  if (g.follows != null) celdas.push(["Seguidores ganados", n(g.follows)]);
+  return `<div class="ig-nums">${celdas.map(([k, v, cl]) => `<div><div class="v${cl ? " " + cl : ""}">${v}</div><div class="k">${k}</div></div>`).join("")}</div>
+    <div class="ft-nota">Números de Instagram, actualizados ${haceIg(g.actualizado)}${g.url ? ` · <a href="${escA(g.url)}" target="_blank" rel="noopener">ver el reel</a>` : ""}</div>`;
 }
 function igArrastra(e, i) { e.dataTransfer.setData("text/plain", String(i)); e.dataTransfer.effectAllowed = "move"; }
 function igSobre(e) { e.preventDefault(); e.currentTarget.classList.add("over"); }
@@ -5161,7 +5250,12 @@ function renderContent() {
   initProyPizarra(); // pizarra editable de la página de proyecto
 }
 
-window.addEventListener("hashchange", () => { parseHash(); renderContent(); });
+window.addEventListener("hashchange", () => {
+  const antes = active;
+  parseHash();
+  if (active === "instagram" && antes !== "instagram") IG_CON = null; // al volver a Instagram, el estado de la conexión se vuelve a leer
+  renderContent();
+});
 
 async function load() {
   try {

@@ -3,7 +3,7 @@ import pg from "pg";
 import path from "path";
 import crypto from "crypto";
 import { fileURLToPath } from "url";
-import { providerStatus, testProviders, runSync, ebCreds, ebAspsps, ebStartAuth, ebCreateSession, ebCloseSession, encryptSecret, ebNombreCuenta } from "./sync.js";
+import { providerStatus, testProviders, runSync, ebCreds, ebAspsps, ebStartAuth, ebCreateSession, ebCloseSession, encryptSecret, decryptSecret, ebNombreCuenta } from "./sync.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -162,6 +162,46 @@ async function initSchema() {
       error TEXT
     );
     CREATE INDEX IF NOT EXISTS audios_owner_cid ON audios (owner_id, cid);
+  `);
+  /* Instagram por la API oficial (25 oct 2026): conexión (credenciales y token cifrados), números de cada
+     publicación y seguidores por día. Fuera del JSONB, como la edición: la sincronización nunca pisa al panel. */
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS ig_conexion (
+      owner_id TEXT PRIMARY KEY REFERENCES users(id),
+      app_id TEXT,
+      app_secret JSONB,
+      token JSONB,
+      token_expira BIGINT,
+      token_creado BIGINT,
+      ig_user_id TEXT,
+      username TEXT,
+      seguidores INTEGER,
+      conectado BIGINT,
+      ultima_sync BIGINT,
+      error TEXT,
+      oauth_state TEXT,
+      oauth_ts BIGINT,
+      metricas_no JSONB NOT NULL DEFAULT '{}'::jsonb
+    );
+    CREATE TABLE IF NOT EXISTS ig_media (
+      owner_id TEXT NOT NULL REFERENCES users(id),
+      media_id TEXT NOT NULL,
+      cid TEXT,
+      permalink TEXT,
+      publicado BIGINT,
+      tipo TEXT,
+      caption TEXT,
+      miniatura TEXT,
+      metricas JSONB NOT NULL DEFAULT '{}'::jsonb,
+      metricas_at BIGINT,
+      PRIMARY KEY (owner_id, media_id)
+    );
+    CREATE TABLE IF NOT EXISTS ig_seguidores (
+      owner_id TEXT NOT NULL REFERENCES users(id),
+      fecha TEXT NOT NULL,
+      n INTEGER NOT NULL,
+      PRIMARY KEY (owner_id, fecha)
+    );
   `);
   /* visión (Creator Vision): la plantilla una vez por cuenta + una fila por versión (15 oct 2026) */
   await pool.query(`
@@ -338,6 +378,7 @@ function normalizarPiezas(data) {
     vistos.add(c.cid);
     delete c.edicion;
     delete c.audios;
+    delete c.ig;
   }
   return data;
 }
@@ -382,6 +423,31 @@ async function adjuntaAudios(ownerId, data) {
   return data;
 }
 
+/* números de Instagram de cada pieza (los guarda igSincroniza en ig_media): c.ig, solo lectura */
+function igPublica(m) {
+  const x = m.metricas || {};
+  const num = (v) => (v === undefined || v === null || v === "" ? null : Number(v));
+  const skip = num(x.reels_skip_rate);
+  return {
+    media_id: m.media_id, url: m.permalink || null, tipo: m.tipo || null, publicado: Number(m.publicado) || null,
+    views: num(x.views), reach: num(x.reach), likes: num(x.likes), comments: num(x.comments), saved: num(x.saved),
+    shares: num(x.shares), reposts: num(x.reposts), interacciones: num(x.total_interactions),
+    // la API da la omisión como porcentaje o como fracción según la versión: siempre en %
+    omision_pct: skip === null ? null : Math.round((skip <= 1 ? skip * 100 : skip) * 10) / 10,
+    tiempo_medio_s: x.ig_reels_avg_watch_time == null ? null : Math.round(Number(x.ig_reels_avg_watch_time) / 100) / 10,
+    follows: num(x.follows), visitas_perfil: num(x.profile_visits),
+    actualizado: Number(m.metricas_at) || null,
+  };
+}
+async function adjuntaInstagram(ownerId, data) {
+  if (!Array.isArray(data?.contenido) || !data.contenido.length) return data;
+  const r = await pool.query("SELECT * FROM ig_media WHERE owner_id = $1 AND cid IS NOT NULL", [ownerId]);
+  if (!r.rows.length) return data;
+  const porCid = new Map(r.rows.map((m) => [m.cid, m]));
+  for (const c of data.contenido) { const m = c && porCid.get(c.cid); if (m) c.ig = igPublica(m); }
+  return data;
+}
+
 async function readData(userId) {
   if (!userId) throw new Error("readData sin usuario");
   const { rows } = await pool.query("SELECT data FROM user_state WHERE user_id = $1", [userId]);
@@ -393,6 +459,7 @@ async function readData(userId) {
   if (seeded || !rows.length || (teniaProxima && !out.config?.proxima)) await writeData(userId, out);
   await adjuntaEdiciones(userId, out);
   await adjuntaAudios(userId, out);
+  await adjuntaInstagram(userId, out);
   return out;
 }
 
@@ -2255,6 +2322,231 @@ setInterval(async () => {
 }, 60 * 60 * 1000);
 
 /* ======================================================================
+   INSTAGRAM — API oficial con inicio de sesión de Instagram (25 oct 2026)
+   La app de Meta es de la persona (modo desarrollo, acceso estándar: solo su propia cuenta).
+   1) guarda el identificador y la clave de su app (cifrada) · 2) /api/instagram/conectar la manda a
+   Instagram · 3) Instagram vuelve a /api/instagram/callback con un code → token de 60 días (cifrado),
+   que se renueva solo · 4) igSincroniza trae cada 6 h los números de cada publicación y los seguidores.
+   ====================================================================== */
+const IG_WWW = process.env.IG_WWW_BASE || "https://www.instagram.com";
+const IG_API = process.env.IG_API_BASE || "https://api.instagram.com";
+const IG_GRAPH = process.env.IG_GRAPH_BASE || "https://graph.instagram.com";
+// fase 1 (medir): solo lectura. Publicar, comentarios y mensajes piden volver a conectar con más permisos.
+const IG_SCOPES = ["instagram_business_basic", "instagram_business_manage_insights"];
+const IG_METRICAS = {
+  REELS: ["views", "reach", "likes", "comments", "saved", "shares", "total_interactions", "ig_reels_avg_watch_time", "reels_skip_rate", "reposts"],
+  FEED: ["views", "reach", "likes", "comments", "saved", "shares", "total_interactions", "follows", "profile_visits"],
+};
+const igCallbackUrl = (req) => process.env.IG_REDIRECT_URI || `${req.protocol}://${req.get("host")}/api/instagram/callback`;
+const igCon = async (ownerId) => (await pool.query("SELECT * FROM ig_conexion WHERE owner_id = $1", [ownerId])).rows[0] || null;
+async function igPon(ownerId, campos) {
+  const ks = Object.keys(campos);
+  const vals = ks.map((k) => (campos[k] !== null && typeof campos[k] === "object" ? JSON.stringify(campos[k]) : campos[k]));
+  await pool.query(
+    `INSERT INTO ig_conexion (owner_id, ${ks.join(", ")}) VALUES ($1, ${ks.map((_, i) => `$${i + 2}`).join(", ")})
+     ON CONFLICT (owner_id) DO UPDATE SET ${ks.map((k) => `${k} = EXCLUDED.${k}`).join(", ")}`, [ownerId, ...vals]);
+}
+async function igPide(url, opts = {}) {
+  const r = await fetch(url, { ...opts, signal: AbortSignal.timeout(30000) });
+  const txt = await r.text();
+  let j = null; try { j = JSON.parse(txt); } catch (e) { /* respuesta no JSON */ }
+  if (!r.ok || j?.error || j?.error_message) {
+    const err = j?.error || {};
+    const e = new Error(err.message || j?.error_message || `Instagram respondió ${r.status}`);
+    e.code = err.code ?? j?.code; e.status = r.status;
+    throw e;
+  }
+  return j;
+}
+function igEstado(row, req) {
+  return {
+    configurado: !!(row?.app_id && row?.app_secret), app_id: row?.app_id || null,
+    conectado: !!row?.token, username: row?.username || null, seguidores: row?.seguidores ?? null,
+    conectado_el: Number(row?.conectado) || null, ultima_sync: Number(row?.ultima_sync) || null,
+    token_expira: Number(row?.token_expira) || null, error: row?.error || null,
+    redirect_uri: req ? igCallbackUrl(req) : null,
+  };
+}
+/* el token dura 60 días y se puede renovar cuando tiene más de 24 h: se renueva si le quedan menos de 20 */
+async function igToken(ownerId, row) {
+  let token = decryptSecret(row.token, SECRET);
+  const ahora = Date.now();
+  if (Number(row.token_expira) - ahora < 20 * 86400000 && ahora - Number(row.token_creado || 0) > 86400000) {
+    const j = await igPide(`${IG_GRAPH}/refresh_access_token?grant_type=ig_refresh_token&access_token=${encodeURIComponent(token)}`);
+    token = j.access_token;
+    await igPon(ownerId, { token: encryptSecret(token, SECRET), token_creado: ahora, token_expira: ahora + (Number(j.expires_in) || 5184000) * 1000 });
+  }
+  return token;
+}
+/* números de una publicación; si Instagram rechaza alguna métrica (cambian de nombre según la versión),
+   se piden de una en una y las que fallan se apuntan para no volver a pedirlas */
+async function igMetricas(ownerId, token, mediaId, familia, noVan) {
+  const lista = IG_METRICAS[familia].filter((m) => !(noVan[familia] || []).includes(m));
+  const lee = (j) => Object.fromEntries((j.data || []).map((d) => [d.name, d.values?.[0]?.value ?? d.total_value?.value ?? null]));
+  try {
+    return lee(await igPide(`${IG_GRAPH}/${mediaId}/insights?metric=${lista.join(",")}&access_token=${encodeURIComponent(token)}`));
+  } catch (e) {
+    if (Number(e.code) === 190) throw e; // token caducado o revocado: que lo vea quien llama
+    const out = {}, fallan = [];
+    for (const m of lista) {
+      try { Object.assign(out, lee(await igPide(`${IG_GRAPH}/${mediaId}/insights?metric=${m}&access_token=${encodeURIComponent(token)}`))); }
+      catch (e2) {
+        if (Number(e2.code) === 190) throw e2;
+        if (Number(e2.code) === 100) fallan.push(m);
+      }
+    }
+    // solo cuentan como «no van» si otras métricas de la misma publicación sí han llegado
+    if (Object.keys(out).length && fallan.length) noVan[familia] = [...new Set([...(noVan[familia] || []), ...fallan])];
+    return out;
+  }
+}
+const igCodigo = (url) => (String(url || "").match(/instagram\.com\/(?:[^/?#]+\/)?(?:reels?|p|tv)\/([A-Za-z0-9_-]+)/) || [])[1] || null;
+async function igSincroniza(ownerId) {
+  const row = await igCon(ownerId);
+  if (!row?.token) return { ok: false, motivo: "sin conectar" };
+  try {
+    const token = await igToken(ownerId, row);
+    const me = await igPide(`${IG_GRAPH}/me?fields=user_id,username,followers_count,media_count&access_token=${encodeURIComponent(token)}`);
+    if (me.followers_count != null) {
+      await pool.query(`INSERT INTO ig_seguidores (owner_id, fecha, n) VALUES ($1, $2, $3) ON CONFLICT (owner_id, fecha) DO UPDATE SET n = EXCLUDED.n`,
+        [ownerId, todayISO(), Number(me.followers_count)]);
+    }
+    // publicaciones (hasta 200, las más recientes primero)
+    const medias = [];
+    let url = `${IG_GRAPH}/me/media?fields=id,caption,media_type,media_product_type,permalink,timestamp,thumbnail_url,media_url&limit=50&access_token=${encodeURIComponent(token)}`;
+    for (let pag = 0; url && pag < 4; pag++) { const j = await igPide(url); medias.push(...(j.data || [])); url = j.paging?.next || null; }
+    const prev = new Map((await pool.query("SELECT media_id, metricas_at, publicado FROM ig_media WHERE owner_id = $1", [ownerId])).rows.map((m) => [m.media_id, m]));
+    const noVan = row.metricas_no || {};
+    const ahora = Date.now();
+    let conNumeros = 0;
+    for (const m of medias) {
+      const publicado = m.timestamp ? new Date(m.timestamp).getTime() : null;
+      const familia = m.media_product_type === "REELS" ? "REELS" : m.media_product_type === "FEED" ? "FEED" : null;
+      await pool.query(
+        `INSERT INTO ig_media (owner_id, media_id, permalink, publicado, tipo, caption, miniatura) VALUES ($1, $2, $3, $4, $5, $6, $7)
+         ON CONFLICT (owner_id, media_id) DO UPDATE SET permalink = EXCLUDED.permalink, publicado = EXCLUDED.publicado, tipo = EXCLUDED.tipo, caption = EXCLUDED.caption, miniatura = EXCLUDED.miniatura`,
+        [ownerId, m.id, m.permalink || null, publicado, m.media_product_type || m.media_type || null, String(m.caption || "").slice(0, 2200), m.thumbnail_url || (m.media_type === "IMAGE" ? m.media_url : null) || null]);
+      // números: las de los últimos 45 días en cada vuelta; las viejas, una vez por semana
+      const p = prev.get(m.id);
+      const reciente = publicado && ahora - publicado < 45 * 86400000;
+      if (!familia || (!reciente && p?.metricas_at && ahora - Number(p.metricas_at) < 7 * 86400000)) continue;
+      const met = await igMetricas(ownerId, token, m.id, familia, noVan);
+      await pool.query("UPDATE ig_media SET metricas = $3, metricas_at = $4 WHERE owner_id = $1 AND media_id = $2", [ownerId, m.id, JSON.stringify(met), ahora]);
+      conNumeros++;
+    }
+    await igEnlazaPiezas(ownerId);
+    await igPon(ownerId, { username: me.username || row.username, seguidores: me.followers_count ?? row.seguidores, ultima_sync: ahora, error: null, metricas_no: noVan });
+    return { ok: true, publicaciones: medias.length, con_numeros: conNumeros, seguidores: me.followers_count ?? null };
+  } catch (e) {
+    const msg = Number(e.code) === 190 ? "Instagram ha cerrado el acceso: vuelve a conectar." : `No se pudieron traer los números: ${String(e.message).slice(0, 200)}`;
+    await igPon(ownerId, { error: msg, ultima_sync: Date.now() });
+    return { ok: false, error: msg };
+  }
+}
+/* cada publicación con su pieza: por el enlace (c.url) y, si la pieza no lo tiene, por el día en que se publicó
+   cuando ese día solo hay una pieza publicada y una publicación de Instagram sin pieza */
+async function igEnlazaPiezas(ownerId) {
+  const st = await pool.query("SELECT data->'contenido' AS contenido FROM user_state WHERE user_id = $1", [ownerId]);
+  const piezas = Array.isArray(st.rows[0]?.contenido) ? st.rows[0].contenido : [];
+  const medias = (await pool.query("SELECT media_id, cid, permalink, publicado FROM ig_media WHERE owner_id = $1", [ownerId])).rows;
+  const cids = new Set(piezas.map((c) => c?.cid));
+  const usados = new Set(medias.filter((m) => m.cid && cids.has(m.cid)).map((m) => m.cid));
+  const porCodigo = new Map(piezas.filter((c) => igCodigo(c?.url)).map((c) => [igCodigo(c.url), c]));
+  const libres = [];
+  for (const m of medias) {
+    if (m.cid && cids.has(m.cid)) continue;
+    const c = porCodigo.get(igCodigo(m.permalink));
+    if (c && !usados.has(c.cid)) { await pool.query("UPDATE ig_media SET cid = $3 WHERE owner_id = $1 AND media_id = $2", [ownerId, m.media_id, c.cid]); usados.add(c.cid); }
+    else libres.push(m);
+  }
+  const dia = (ms) => todayISO(new Date(Number(ms)));
+  for (const m of libres) {
+    if (!m.publicado) continue;
+    const f = dia(m.publicado);
+    const mismasDia = libres.filter((x) => x.publicado && dia(x.publicado) === f);
+    const cands = piezas.filter((c) => c && c.estado === "publicado" && c.tipo !== "youtube" && !c.url && !usados.has(c.cid) && c.fecha_pub === f);
+    if (mismasDia.length === 1 && cands.length === 1) {
+      await pool.query("UPDATE ig_media SET cid = $3 WHERE owner_id = $1 AND media_id = $2", [ownerId, m.media_id, cands[0].cid]);
+      usados.add(cands[0].cid);
+    }
+  }
+}
+
+app.get("/api/instagram", async (req, res) => {
+  try { res.json(igEstado(await igCon(req.user.id), req)); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.post("/api/instagram/credenciales", async (req, res) => {
+  try {
+    if (req.viewingAs) return res.status(400).json({ error: "estás viendo otra cuenta: Instagram se conecta desde la suya" });
+    const appId = String(req.body?.app_id || "").trim(), secreto = String(req.body?.app_secret || "").trim();
+    const row = await igCon(req.user.id);
+    if (!/^\d{6,25}$/.test(appId)) return res.status(400).json({ error: "El identificador de la app de Instagram son solo números" });
+    if (!secreto && !row?.app_secret) return res.status(400).json({ error: "Falta la clave secreta de la app de Instagram" });
+    if (secreto && !/^[A-Za-z0-9]{16,64}$/.test(secreto)) return res.status(400).json({ error: "La clave secreta no tiene pinta de la de Instagram (letras y números, sin espacios)" });
+    await igPon(req.user.id, { app_id: appId, ...(secreto ? { app_secret: encryptSecret(secreto, SECRET) } : {}), error: null });
+    res.json(igEstado(await igCon(req.user.id), req));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.get("/api/instagram/conectar", async (req, res) => {
+  try {
+    if (req.viewingAs) return res.redirect("/areas.html#instagram");
+    const row = await igCon(req.user.id);
+    if (!row?.app_id || !row?.app_secret) return res.redirect("/areas.html#instagram");
+    const state = crypto.randomBytes(16).toString("hex");
+    await igPon(req.user.id, { oauth_state: state, oauth_ts: Date.now() });
+    const q = new URLSearchParams({ client_id: row.app_id, redirect_uri: igCallbackUrl(req), response_type: "code", scope: IG_SCOPES.join(","), state });
+    res.redirect(`${IG_WWW}/oauth/authorize?${q}`);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.get("/api/instagram/callback", async (req, res) => {
+  const volver = async (error) => { await igPon(req.user.id, { error, oauth_state: null }); res.redirect("/areas.html#instagram"); };
+  try {
+    const row = await igCon(req.user.id);
+    const { code, state, error, error_description } = req.query;
+    if (!row?.app_id) return res.redirect("/areas.html#instagram");
+    if (error) return volver(`Instagram no dio permiso: ${String(error_description || error).slice(0, 160)}`);
+    if (!code || !state || state !== row.oauth_state || Date.now() - Number(row.oauth_ts) > 3600000) return volver("La vuelta de Instagram no era válida. Pulsa «Conectar» otra vez.");
+    const form = new URLSearchParams({ client_id: row.app_id, client_secret: decryptSecret(row.app_secret, SECRET), grant_type: "authorization_code", redirect_uri: igCallbackUrl(req), code: String(code).replace(/#_$/, "") });
+    const corto = await igPide(`${IG_API}/oauth/access_token`, { method: "POST", body: form });
+    const t = corto.data?.[0] || corto; // la respuesta viene en data[0] o suelta según la versión
+    const largo = await igPide(`${IG_GRAPH}/access_token?grant_type=ig_exchange_token&client_secret=${encodeURIComponent(decryptSecret(row.app_secret, SECRET))}&access_token=${encodeURIComponent(t.access_token)}`);
+    const ahora = Date.now();
+    await igPon(req.user.id, {
+      token: encryptSecret(largo.access_token, SECRET), token_creado: ahora, token_expira: ahora + (Number(largo.expires_in) || 5184000) * 1000,
+      ig_user_id: String(t.user_id || ""), conectado: ahora, error: null, oauth_state: null,
+    });
+    await igSincroniza(req.user.id); // primera vuelta ya: al volver al panel se ven los números
+    res.redirect("/areas.html#instagram");
+  } catch (e) {
+    console.error("callback instagram:", e.message);
+    return volver(`No se pudo conectar: ${String(e.message).slice(0, 200)}`);
+  }
+});
+app.post("/api/instagram/sincronizar", async (req, res) => {
+  try {
+    const r = await igSincroniza(req.user.id);
+    res.json({ ...r, estado: igEstado(await igCon(req.user.id), req) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.delete("/api/instagram", async (req, res) => {
+  try {
+    // desconectar = olvidar el token; los números ya traídos y el identificador de la app se quedan
+    await pool.query("UPDATE ig_conexion SET token = NULL, token_expira = NULL, error = NULL WHERE owner_id = $1", [req.user.id]);
+    res.json(igEstado(await igCon(req.user.id), req));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+/* cada hora mira quién lleva más de 6 h sin sincronizar */
+async function igSincronizaTodos() {
+  const { rows } = await pool.query("SELECT owner_id FROM ig_conexion WHERE token IS NOT NULL AND (ultima_sync IS NULL OR ultima_sync < $1)", [Date.now() - 6 * 3600 * 1000]);
+  for (const r of rows) {
+    const out = await igSincroniza(r.owner_id);
+    console.log("instagram (auto)", r.owner_id, JSON.stringify(out));
+  }
+}
+setInterval(() => igSincronizaTodos().catch((e) => console.error("instagram (auto):", e.message)), 60 * 60 * 1000);
+
+/* ======================================================================
    CHAT IA
    ====================================================================== */
 const systemPromptFor = (N, CTX, HAB) => `Eres el asistente personal de ${N}.${CTX ? " Contexto sobre esta persona: " + CTX : ""}
@@ -2275,7 +2567,7 @@ Estructura del estado:
 - entrenos: { "<fecha>": { dia, sets: { "<nombre ejercicio>": [{ kg, reps }, ...una entrada por serie] } } } — lo que ${N} levanta cada día (Gym → Tracker). Si dice «hoy press inclinado 3×10 con 40kg», regístralo aquí con set_value y marca la señal entreno. REGLAS AL ESCRIBIR AQUÍ, el historial se indexa por nombre y se rompe si te desvías: (1) el campo "dia" = el id del día de la semana de ESA fecha (lunes|martes|miercoles|jueves|viernes|sabado|domingo), nunca el título del día ("Push", "Pierna 1"…). (2) El nombre del ejercicio debe coincidir LETRA POR LETRA con el de rutina_gym[dia].ejercicios[].nombre; léelo antes con read_state si no lo tienes delante. (3) Si el ejercicio no está en la rutina de ese día, usa el nombre tal cual aparece en otro día de la rutina. (4) Si no existe en ningún día, pregunta antes de inventarte un nombre nuevo: cada variante crea un historial separado.
 - days.<fecha>.sueno_horario: { acostar: "23:00", levantar: "06:00" } — opcional. Si ${N} dice a qué hora se acostó y se levantó, calcula las horas dormidas (si se acostó antes de medianoche, suma las 24h), regístralas como señal sueno con log_day y guarda el horario con set_value en days.<fecha>.sueno_horario.
 - proyectos: [{ id, nombre, icono (rocket|briefcase|code|video|mic|school|presentation|tienda|coin|chart|users|robot|server|camera|pencil|book|world|tool|flask|gamepad|palette|home|bolt|bulb), tipo: normal|periodico, estado: activo|en_cola|pausado|entregado|cerrado, desc?, siguiente?, subs, notas? (pizarra HTML sencillo, como contenido.notas), archivos? (NO tocar: se gestionan desde la página), updated }]. Un proyecto es una CARPETA: dentro viven sus tareas (campo proyecto en tareas), subproyectos, archivos y pizarra. Cada sub de subs es un SUBPROYECTO con vida propia: { id, nombre, estado: en_curso|en_cola|pausado|hecho, done (derivado: true solo si estado=hecho — para cambiarlo cambia SIEMPRE estado, nunca done), fecha? (día en que se completó, ponla al pasar a hecho), notas? (pizarra HTML sencillo, como la de contenido), archivos?: [{id, nombre, mime, size}] — NO toques archivos, se gestionan desde el panel }. Las tareas pueden colgar de un subproyecto vía su campo sub (id del sub). Si añades un sub nuevo no le pongas id (se genera solo) y usa estado en_curso o en_cola.
-- contenido: las PIEZAS del área Instagram: [{ cid?, num?, fecha (creada), tipo: reel|youtube, clase?: soft|hard|meme|propio|3D (propio = lo edita ${N} (pantalla partida, etc.) y no va al editor; 3D = reel 3D sin cara, del pipeline de reels 3D; «idea propia: …» → add_item contenido con estado idea y clase propio), mision?: atraccion|nutricion|conversion (para qué sirve la pieza: atracción = que la vea y le siga alguien nuevo; nutrición = prueba para el que ya le sigue: un sistema real, un número suyo, un fallo; conversión = manda al link de la bio o al Skool; «esta es de atracción» → mision atraccion; en la Agenda cada pieza sale del color de su misión), titulo, estado: idea|guion|grabar|editar|lista|publicado (pipeline en ese orden: idea → guion escrito → por grabar → en edición → lista para publicar → publicada), fecha_plan? (día en que se publica), hora?, fecha_pub?, url?, views?, likes?, comments?, gancho?, cuerpo?, cierre?, cta?, caption?, hashtags?, fuente?, formato?, broll?, pantalla?, carpeta?, archivo?, editor?: {enviada, recibida, aprobada, cambios}, produccion?, nota? (1-10), porque_no_10?, notas? }]. «Ya grabé la 3» → estado editar (o lista si no hay editor); «la 1 está lista» → lista; «publiqué la 1» → publicado + fecha_pub. palabra? = palabra clave del CTA («comenta CLAUDE» → CLAUDE). edicion = SOLO LECTURA, la añade el servidor cuando la pieza está asignada a un editor ({ editor_nombre, estado: por_editar|en_edicion|entregada|cambios|aprobada, fecha_limite, brief, entregas, mensajes }); no la escribas: la gestionan ${N} y el editor desde el panel. audios = SOLO LECTURA, también la añade el servidor: las notas de voz de ${N} para el guion de esa pieza, [{ id, nombre, fecha, duracion (s), estado: pendiente|lista|error|sin_clave, transcripcion }] (se graban, se escuchan y se borran en la ficha; no las escribas). Cuando te pida montar o mejorar el guion de una pieza, lee sus transcripciones y propón gancho/cuerpo/cierre/cta con sus palabras y su tono; escribe solo lo que te confirme. reels_ref?: [{ url, nota? }] = reels de referencia de la pieza y qué coger de cada uno («ponle de referencia este reel» → añádelo ahí). Las tomas pendientes de cada pieza están en tomas (por cid). — las métricas de piezas con link (YouTube e Instagram) se actualizan solas desde sus APIs; no hace falta que ${N} las dicte salvo que quiera corregirlas. video_url es interno (mp4 del reel para el player del panel, lo rellena la API — no lo toques). notas es la "pizarra" de la pieza y puede llevar HTML sencillo (h2/h3, b, u, div, br); si escribes tú, texto plano o ese HTML simple. — al marcar publicado, pon fecha_pub con el día al que cuenta la publicación: el día real, salvo si se publicó de madrugada (00:00-05:59), que cuenta como el vídeo del día anterior (regla de ${N}: llega tarde a casa y lo sube para el día que acaba de terminar). fecha_plan = día en que ${N} planea publicarla (calendario de publicación; «el reel del Excel sale el jueves» → fecha_plan). Si ${N} pasa el link («publiqué un reel: <link>»), guárdalo en url (sirve para la miniatura y el player del panel). Si menciona métricas («el reel lleva 4k views»), actualiza views/likes de esa pieza.
+- contenido: las PIEZAS del área Instagram: [{ cid?, num?, fecha (creada), tipo: reel|youtube, clase?: soft|hard|meme|propio|3D (propio = lo edita ${N} (pantalla partida, etc.) y no va al editor; 3D = reel 3D sin cara, del pipeline de reels 3D; «idea propia: …» → add_item contenido con estado idea y clase propio), mision?: atraccion|nutricion|conversion (para qué sirve la pieza: atracción = que la vea y le siga alguien nuevo; nutrición = prueba para el que ya le sigue: un sistema real, un número suyo, un fallo; conversión = manda al link de la bio o al Skool; «esta es de atracción» → mision atraccion; en la Agenda cada pieza sale del color de su misión), titulo, estado: idea|guion|grabar|editar|lista|publicado (pipeline en ese orden: idea → guion escrito → por grabar → en edición → lista para publicar → publicada), fecha_plan? (día en que se publica), hora?, fecha_pub?, url?, views?, likes?, comments?, gancho?, cuerpo?, cierre?, cta?, caption?, hashtags?, fuente?, formato?, broll?, pantalla?, carpeta?, archivo?, editor?: {enviada, recibida, aprobada, cambios}, produccion?, nota? (1-10), porque_no_10?, notas? }]. «Ya grabé la 3» → estado editar (o lista si no hay editor); «la 1 está lista» → lista; «publiqué la 1» → publicado + fecha_pub. palabra? = palabra clave del CTA («comenta CLAUDE» → CLAUDE). edicion = SOLO LECTURA, la añade el servidor cuando la pieza está asignada a un editor ({ editor_nombre, estado: por_editar|en_edicion|entregada|cambios|aprobada, fecha_limite, brief, entregas, mensajes }); no la escribas: la gestionan ${N} y el editor desde el panel. audios = SOLO LECTURA, también la añade el servidor: las notas de voz de ${N} para el guion de esa pieza, [{ id, nombre, fecha, duracion (s), estado: pendiente|lista|error|sin_clave, transcripcion }] (se graban, se escuchan y se borran en la ficha; no las escribas). Cuando te pida montar o mejorar el guion de una pieza, lee sus transcripciones y propón gancho/cuerpo/cierre/cta con sus palabras y su tono; escribe solo lo que te confirme. reels_ref?: [{ url, nota? }] = reels de referencia de la pieza y qué coger de cada uno («ponle de referencia este reel» → añádelo ahí). Las tomas pendientes de cada pieza están en tomas (por cid). ig = SOLO LECTURA, la añade el servidor cuando ${N} ha conectado Instagram (Instagram → Conectar Instagram, API oficial): los números oficiales de la publicación de esa pieza { url, views, reach, likes, comments, saved, shares, reposts, interacciones, omision_pct (% que la pasa en los 3 primeros segundos), tiempo_medio_s, follows y visitas_perfil (solo publicaciones del feed), actualizado }; se actualizan solos cada 6 h y pueden tardar hasta 48 h en llegar. Si hay ig, manda sobre views/likes/comments (esos quedan para lo que ${N} dicte a mano). video_url es interno (mp4 del reel para el player del panel, lo rellena la API — no lo toques). notas es la "pizarra" de la pieza y puede llevar HTML sencillo (h2/h3, b, u, div, br); si escribes tú, texto plano o ese HTML simple. — al marcar publicado, pon fecha_pub con el día al que cuenta la publicación: el día real, salvo si se publicó de madrugada (00:00-05:59), que cuenta como el vídeo del día anterior (regla de ${N}: llega tarde a casa y lo sube para el día que acaba de terminar). fecha_plan = día en que ${N} planea publicarla (calendario de publicación; «el reel del Excel sale el jueves» → fecha_plan). Si ${N} pasa el link («publiqué un reel: <link>»), guárdalo en url (sirve para la miniatura y el player del panel). Si menciona métricas («el reel lleva 4k views»), actualiza views/likes de esa pieza.
 - referencias: [{ id, cuenta, url?, titulo?, nota (qué se lleva de ella), formato?, creada }] — ARCHIVO de reels y cuentas modelo: desde el 20 oct ya no tiene pantalla en el panel (la pestaña es solo Ganchos). Un reel de referencia para una pieza va en su contenido[].reels_ref; «guárdame este reel como referencia» sin pieza concreta → pregúntale para qué pieza es.
 - ganchos: [{ id, texto, tipo?, fuente?, nota?, creada }] — banco de ganchos reutilizables. Los ganchos de sus propias piezas ya salen solos del campo gancho de contenido; aquí van los ajenos o sueltos.
 - VISIÓN (su «Creator Vision»: mensaje, pilares, a quién le habla, su historia, rueda LIFE, tres porqués, ganchos y planificador): vive aparte del estado, con historial de versiones (Instagram → Visión). Léela con get_vision cuando vayas a idear, escribir un guion o decidir algo de contenido: es la base de la que partir. Cambiarla es delicado: SOLO con update_vision y SOLO cuando ${N} esté hablando de su visión y te pida cambiarla. Antes de guardar, enséñale el texto exacto que quedará en cada casilla y espera su OK; guarda con un resumen de una frase (qué cambia y por qué). Cada guardado es una versión nueva y la anterior se puede restaurar desde el panel. Nunca la toques de paso en otra tarea.
@@ -2622,6 +2914,7 @@ initSchema()
   .then(() => {
     app.listen(PORT, () => console.log(`OS up on :${PORT}`));
     transcribePendientes().catch((e) => console.warn("transcripciones pendientes:", e.message));
+    setTimeout(() => igSincronizaTodos().catch((e) => console.warn("instagram al arrancar:", e.message)), 60 * 1000);
   })
   .catch((e) => {
     console.error("Schema init failed:", e.message);
