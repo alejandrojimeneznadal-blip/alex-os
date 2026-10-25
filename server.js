@@ -194,8 +194,10 @@ async function initSchema() {
       miniatura TEXT,
       metricas JSONB NOT NULL DEFAULT '{}'::jsonb,
       metricas_at BIGINT,
+      manual BOOLEAN NOT NULL DEFAULT false,
       PRIMARY KEY (owner_id, media_id)
     );
+    ALTER TABLE ig_media ADD COLUMN IF NOT EXISTS manual BOOLEAN NOT NULL DEFAULT false;
     CREATE TABLE IF NOT EXISTS ig_seguidores (
       owner_id TEXT NOT NULL REFERENCES users(id),
       fecha TEXT NOT NULL,
@@ -2443,38 +2445,107 @@ async function igSincroniza(ownerId) {
     return { ok: false, error: msg };
   }
 }
-/* cada publicación con su pieza: por el enlace (c.url) y, si la pieza no lo tiene, por el día en que se publicó
-   cuando ese día solo hay una pieza publicada y una publicación de Instagram sin pieza */
-async function igEnlazaPiezas(ownerId) {
+/* día al que cuenta una publicación: de madrugada (antes de las 6:00) es el vídeo del día anterior (regla de Alex) */
+function diaPublicacionIG(ms) {
+  const p = Object.fromEntries(FMT_PANEL.formatToParts(new Date(Number(ms))).map((x) => [x.type, x.value]));
+  const f = `${p.year}-${p.month}-${p.day}`;
+  return Number(p.hour) < 6 ? addDays(f, -1) : f;
+}
+const IG_NINGUNA = "-"; // publicación que la persona marcó como «no es ninguna pieza»
+const piezasDe = async (ownerId) => {
   const st = await pool.query("SELECT data->'contenido' AS contenido FROM user_state WHERE user_id = $1", [ownerId]);
-  const piezas = Array.isArray(st.rows[0]?.contenido) ? st.rows[0].contenido : [];
-  const medias = (await pool.query("SELECT media_id, cid, permalink, publicado FROM ig_media WHERE owner_id = $1", [ownerId])).rows;
+  return Array.isArray(st.rows[0]?.contenido) ? st.rows[0].contenido : [];
+};
+const guardaPiezas = (ownerId, piezas) =>
+  pool.query("UPDATE user_state SET data = jsonb_set(data, '{contenido}', $2::jsonb), updated_at = NOW() WHERE user_id = $1", [ownerId, JSON.stringify(piezas)]);
+/* cada publicación con su pieza: por el enlace (c.url) y, si no, por el día: una pieza ya publicada ese día sin
+   enlace o una aún sin publicar planificada para ese día, cuando ese día solo hay una de cada. Las que no se pueden
+   unir solas las une la persona desde el tablero («reels sin pieza»). */
+async function igEnlazaPiezas(ownerId) {
+  const piezas = await piezasDe(ownerId);
+  const medias = (await pool.query("SELECT media_id, cid, permalink, publicado, manual FROM ig_media WHERE owner_id = $1", [ownerId])).rows;
   const cids = new Set(piezas.map((c) => c?.cid));
+  const unida = (m) => m.cid === IG_NINGUNA || (m.cid && cids.has(m.cid));
   const usados = new Set(medias.filter((m) => m.cid && cids.has(m.cid)).map((m) => m.cid));
   const porCodigo = new Map(piezas.filter((c) => igCodigo(c?.url)).map((c) => [igCodigo(c.url), c]));
   const libres = [];
   for (const m of medias) {
-    if (m.cid && cids.has(m.cid)) continue;
+    if (unida(m) || (m.manual && !m.cid)) continue;
     const c = porCodigo.get(igCodigo(m.permalink));
     if (c && !usados.has(c.cid)) { await pool.query("UPDATE ig_media SET cid = $3 WHERE owner_id = $1 AND media_id = $2", [ownerId, m.media_id, c.cid]); usados.add(c.cid); }
-    else libres.push(m);
+    else if (!m.manual) libres.push(m);
   }
-  const dia = (ms) => todayISO(new Date(Number(ms)));
   for (const m of libres) {
     if (!m.publicado) continue;
-    const f = dia(m.publicado);
-    const mismasDia = libres.filter((x) => x.publicado && dia(x.publicado) === f);
-    const cands = piezas.filter((c) => c && c.estado === "publicado" && c.tipo !== "youtube" && !c.url && !usados.has(c.cid) && c.fecha_pub === f);
-    if (mismasDia.length === 1 && cands.length === 1) {
+    const f = diaPublicacionIG(m.publicado);
+    const mismoDia = libres.filter((x) => x.publicado && diaPublicacionIG(x.publicado) === f);
+    const cands = piezas.filter((c) => c && c.tipo !== "youtube" && !c.url && !usados.has(c.cid) &&
+      (c.estado === "publicado" ? c.fecha_pub === f : c.fecha_plan === f));
+    if (mismoDia.length === 1 && cands.length === 1) {
       await pool.query("UPDATE ig_media SET cid = $3 WHERE owner_id = $1 AND media_id = $2", [ownerId, m.media_id, cands[0].cid]);
       usados.add(cands[0].cid);
     }
   }
+  await igMarcaPublicadas(ownerId);
 }
+/* una pieza unida a su reel está publicada: estado, día y enlace (solo rellena lo que falta) */
+async function igMarcaPublicadas(ownerId) {
+  const piezas = await piezasDe(ownerId);
+  const porCid = new Map((await pool.query("SELECT cid, permalink, publicado FROM ig_media WHERE owner_id = $1 AND cid IS NOT NULL", [ownerId])).rows.map((m) => [m.cid, m]));
+  let cambia = false;
+  for (const c of piezas) {
+    const m = c && porCid.get(c.cid);
+    if (!m) continue;
+    if (c.estado !== "publicado") { c.estado = "publicado"; cambia = true; }
+    if (!c.fecha_pub && m.publicado) { c.fecha_pub = diaPublicacionIG(m.publicado); cambia = true; }
+    if (!c.url && m.permalink) { c.url = m.permalink; cambia = true; }
+  }
+  if (cambia) await guardaPiezas(ownerId, piezas);
+}
+const igSinPieza = async (ownerId) => Number((await pool.query(
+  "SELECT count(*) AS n FROM ig_media WHERE owner_id = $1 AND cid IS NULL AND publicado > $2", [ownerId, Date.now() - 30 * 86400000])).rows[0].n);
 
 app.get("/api/instagram", async (req, res) => {
-  try { res.json(igEstado(await igCon(req.user.id), req)); }
+  try { res.json({ ...igEstado(await igCon(req.user.id), req), sin_pieza: await igSinPieza(req.user.id) }); }
   catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.get("/api/instagram/publicaciones", async (req, res) => {
+  try {
+    const r = await pool.query("SELECT * FROM ig_media WHERE owner_id = $1 ORDER BY publicado DESC NULLS LAST", [req.user.id]);
+    res.json({ publicaciones: r.rows.map((m) => ({ ...igPublica(m), cid: m.cid === IG_NINGUNA ? null : m.cid, ninguna: m.cid === IG_NINGUNA, caption: String(m.caption || "").slice(0, 300), miniatura: m.miniatura || null, dia: m.publicado ? diaPublicacionIG(m.publicado) : null })) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+/* unir a mano: { cid } a una pieza, { nueva: true } crea la pieza, { ninguna: true } no la sigue, { soltar: true } la desune */
+app.post("/api/instagram/publicaciones/:id/pieza", async (req, res) => {
+  try {
+    const uidOw = req.user.id, b = req.body || {};
+    const m = (await pool.query("SELECT * FROM ig_media WHERE owner_id = $1 AND media_id = $2", [uidOw, req.params.id])).rows[0];
+    if (!m) return res.status(404).json({ error: "esa publicación no está" });
+    const pon = (cid) => pool.query("UPDATE ig_media SET cid = $3, manual = true WHERE owner_id = $1 AND media_id = $2", [uidOw, m.media_id, cid]);
+    if (b.soltar) {
+      await pon(null);
+      const piezas = await piezasDe(uidOw);
+      const c = m.cid && piezas.find((x) => x?.cid === m.cid);
+      if (c && igCodigo(c.url) && igCodigo(c.url) === igCodigo(m.permalink)) { delete c.url; await guardaPiezas(uidOw, piezas); }
+    }
+    else if (b.ninguna) await pon(IG_NINGUNA);
+    else if (b.nueva) {
+      const piezas = await piezasDe(uidOw);
+      const dia = m.publicado ? diaPublicacionIG(m.publicado) : todayISO();
+      const titulo = String(m.caption || "").split("\n").map((x) => x.trim()).find(Boolean)?.slice(0, 90) || `Reel del ${dia}`;
+      const cid = "p" + crypto.randomBytes(6).toString("hex");
+      piezas.push({ cid, fecha: dia, tipo: "reel", titulo, estado: "publicado", fecha_pub: dia, url: m.permalink || undefined });
+      await guardaPiezas(uidOw, piezas);
+      await pon(cid);
+    } else {
+      const cid = String(b.cid || "");
+      if (!(await piezasDe(uidOw)).some((c) => c?.cid === cid)) return res.status(400).json({ error: "esa pieza no existe" });
+      await pool.query("UPDATE ig_media SET cid = NULL WHERE owner_id = $1 AND cid = $2 AND media_id <> $3", [uidOw, cid, m.media_id]); // una pieza, un reel
+      await pon(cid);
+    }
+    await igMarcaPublicadas(uidOw);
+    res.json({ ok: true, sin_pieza: await igSinPieza(uidOw) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 app.post("/api/instagram/credenciales", async (req, res) => {
   try {
@@ -2567,7 +2638,7 @@ Estructura del estado:
 - entrenos: { "<fecha>": { dia, sets: { "<nombre ejercicio>": [{ kg, reps }, ...una entrada por serie] } } } — lo que ${N} levanta cada día (Gym → Tracker). Si dice «hoy press inclinado 3×10 con 40kg», regístralo aquí con set_value y marca la señal entreno. REGLAS AL ESCRIBIR AQUÍ, el historial se indexa por nombre y se rompe si te desvías: (1) el campo "dia" = el id del día de la semana de ESA fecha (lunes|martes|miercoles|jueves|viernes|sabado|domingo), nunca el título del día ("Push", "Pierna 1"…). (2) El nombre del ejercicio debe coincidir LETRA POR LETRA con el de rutina_gym[dia].ejercicios[].nombre; léelo antes con read_state si no lo tienes delante. (3) Si el ejercicio no está en la rutina de ese día, usa el nombre tal cual aparece en otro día de la rutina. (4) Si no existe en ningún día, pregunta antes de inventarte un nombre nuevo: cada variante crea un historial separado.
 - days.<fecha>.sueno_horario: { acostar: "23:00", levantar: "06:00" } — opcional. Si ${N} dice a qué hora se acostó y se levantó, calcula las horas dormidas (si se acostó antes de medianoche, suma las 24h), regístralas como señal sueno con log_day y guarda el horario con set_value en days.<fecha>.sueno_horario.
 - proyectos: [{ id, nombre, icono (rocket|briefcase|code|video|mic|school|presentation|tienda|coin|chart|users|robot|server|camera|pencil|book|world|tool|flask|gamepad|palette|home|bolt|bulb), tipo: normal|periodico, estado: activo|en_cola|pausado|entregado|cerrado, desc?, siguiente?, subs, notas? (pizarra HTML sencillo, como contenido.notas), archivos? (NO tocar: se gestionan desde la página), updated }]. Un proyecto es una CARPETA: dentro viven sus tareas (campo proyecto en tareas), subproyectos, archivos y pizarra. Cada sub de subs es un SUBPROYECTO con vida propia: { id, nombre, estado: en_curso|en_cola|pausado|hecho, done (derivado: true solo si estado=hecho — para cambiarlo cambia SIEMPRE estado, nunca done), fecha? (día en que se completó, ponla al pasar a hecho), notas? (pizarra HTML sencillo, como la de contenido), archivos?: [{id, nombre, mime, size}] — NO toques archivos, se gestionan desde el panel }. Las tareas pueden colgar de un subproyecto vía su campo sub (id del sub). Si añades un sub nuevo no le pongas id (se genera solo) y usa estado en_curso o en_cola.
-- contenido: las PIEZAS del área Instagram: [{ cid?, num?, fecha (creada), tipo: reel|youtube, clase?: soft|hard|meme|propio|3D (propio = lo edita ${N} (pantalla partida, etc.) y no va al editor; 3D = reel 3D sin cara, del pipeline de reels 3D; «idea propia: …» → add_item contenido con estado idea y clase propio), mision?: atraccion|nutricion|conversion (para qué sirve la pieza: atracción = que la vea y le siga alguien nuevo; nutrición = prueba para el que ya le sigue: un sistema real, un número suyo, un fallo; conversión = manda al link de la bio o al Skool; «esta es de atracción» → mision atraccion; en la Agenda cada pieza sale del color de su misión), titulo, estado: idea|guion|grabar|editar|lista|publicado (pipeline en ese orden: idea → guion escrito → por grabar → en edición → lista para publicar → publicada), fecha_plan? (día en que se publica), hora?, fecha_pub?, url?, views?, likes?, comments?, gancho?, cuerpo?, cierre?, cta?, caption?, hashtags?, fuente?, formato?, broll?, pantalla?, carpeta?, archivo?, editor?: {enviada, recibida, aprobada, cambios}, produccion?, nota? (1-10), porque_no_10?, notas? }]. «Ya grabé la 3» → estado editar (o lista si no hay editor); «la 1 está lista» → lista; «publiqué la 1» → publicado + fecha_pub. palabra? = palabra clave del CTA («comenta CLAUDE» → CLAUDE). edicion = SOLO LECTURA, la añade el servidor cuando la pieza está asignada a un editor ({ editor_nombre, estado: por_editar|en_edicion|entregada|cambios|aprobada, fecha_limite, brief, entregas, mensajes }); no la escribas: la gestionan ${N} y el editor desde el panel. audios = SOLO LECTURA, también la añade el servidor: las notas de voz de ${N} para el guion de esa pieza, [{ id, nombre, fecha, duracion (s), estado: pendiente|lista|error|sin_clave, transcripcion }] (se graban, se escuchan y se borran en la ficha; no las escribas). Cuando te pida montar o mejorar el guion de una pieza, lee sus transcripciones y propón gancho/cuerpo/cierre/cta con sus palabras y su tono; escribe solo lo que te confirme. reels_ref?: [{ url, nota? }] = reels de referencia de la pieza y qué coger de cada uno («ponle de referencia este reel» → añádelo ahí). Las tomas pendientes de cada pieza están en tomas (por cid). ig = SOLO LECTURA, la añade el servidor cuando ${N} ha conectado Instagram (Instagram → Conectar Instagram, API oficial): los números oficiales de la publicación de esa pieza { url, views, reach, likes, comments, saved, shares, reposts, interacciones, omision_pct (% que la pasa en los 3 primeros segundos), tiempo_medio_s, follows y visitas_perfil (solo publicaciones del feed), actualizado }; se actualizan solos cada 6 h y pueden tardar hasta 48 h en llegar. Si hay ig, manda sobre views/likes/comments (esos quedan para lo que ${N} dicte a mano). video_url es interno (mp4 del reel para el player del panel, lo rellena la API — no lo toques). notas es la "pizarra" de la pieza y puede llevar HTML sencillo (h2/h3, b, u, div, br); si escribes tú, texto plano o ese HTML simple. — al marcar publicado, pon fecha_pub con el día al que cuenta la publicación: el día real, salvo si se publicó de madrugada (00:00-05:59), que cuenta como el vídeo del día anterior (regla de ${N}: llega tarde a casa y lo sube para el día que acaba de terminar). fecha_plan = día en que ${N} planea publicarla (calendario de publicación; «el reel del Excel sale el jueves» → fecha_plan). Si ${N} pasa el link («publiqué un reel: <link>»), guárdalo en url (sirve para la miniatura y el player del panel). Si menciona métricas («el reel lleva 4k views»), actualiza views/likes de esa pieza.
+- contenido: las PIEZAS del área Instagram: [{ cid?, num?, fecha (creada), tipo: reel|youtube, clase?: soft|hard|meme|propio|3D (propio = lo edita ${N} (pantalla partida, etc.) y no va al editor; 3D = reel 3D sin cara, del pipeline de reels 3D; «idea propia: …» → add_item contenido con estado idea y clase propio), mision?: atraccion|nutricion|conversion (para qué sirve la pieza: atracción = que la vea y le siga alguien nuevo; nutrición = prueba para el que ya le sigue: un sistema real, un número suyo, un fallo; conversión = manda al link de la bio o al Skool; «esta es de atracción» → mision atraccion; en la Agenda cada pieza sale del color de su misión), titulo, estado: idea|guion|grabar|editar|lista|publicado (pipeline en ese orden: idea → guion escrito → por grabar → en edición → lista para publicar → publicada), fecha_plan? (día en que se publica), hora?, fecha_pub?, url?, views?, likes?, comments?, gancho?, cuerpo?, cierre?, cta?, caption?, hashtags?, fuente?, formato?, broll?, pantalla?, carpeta?, archivo?, editor?: {enviada, recibida, aprobada, cambios}, produccion?, nota? (1-10), porque_no_10?, notas? }]. «Ya grabé la 3» → estado editar (o lista si no hay editor); «la 1 está lista» → lista; «publiqué la 1» → publicado + fecha_pub. palabra? = palabra clave del CTA («comenta CLAUDE» → CLAUDE). edicion = SOLO LECTURA, la añade el servidor cuando la pieza está asignada a un editor ({ editor_nombre, estado: por_editar|en_edicion|entregada|cambios|aprobada, fecha_limite, brief, entregas, mensajes }); no la escribas: la gestionan ${N} y el editor desde el panel. audios = SOLO LECTURA, también la añade el servidor: las notas de voz de ${N} para el guion de esa pieza, [{ id, nombre, fecha, duracion (s), estado: pendiente|lista|error|sin_clave, transcripcion }] (se graban, se escuchan y se borran en la ficha; no las escribas). Cuando te pida montar o mejorar el guion de una pieza, lee sus transcripciones y propón gancho/cuerpo/cierre/cta con sus palabras y su tono; escribe solo lo que te confirme. reels_ref?: [{ url, nota? }] = reels de referencia de la pieza y qué coger de cada uno («ponle de referencia este reel» → añádelo ahí). Las tomas pendientes de cada pieza están en tomas (por cid). ig = SOLO LECTURA, la añade el servidor cuando ${N} ha conectado Instagram (Instagram → Conectar Instagram, API oficial): los números oficiales de la publicación de esa pieza { url, views, reach, likes, comments, saved, shares, reposts, interacciones, omision_pct (% que la pasa en los 3 primeros segundos), tiempo_medio_s, follows y visitas_perfil (solo publicaciones del feed), actualizado }; se actualizan solos cada 6 h y pueden tardar hasta 48 h en llegar. Si hay ig, manda sobre views/likes/comments (esos quedan para lo que ${N} dicte a mano). Cuando el servidor une una pieza con su reel (por el enlace o por el día, o porque ${N} lo une en el tablero), la marca él solo como publicado con fecha_pub y url: no hace falta que lo hagas tú. video_url es interno (mp4 del reel para el player del panel, lo rellena la API — no lo toques). notas es la "pizarra" de la pieza y puede llevar HTML sencillo (h2/h3, b, u, div, br); si escribes tú, texto plano o ese HTML simple. — al marcar publicado, pon fecha_pub con el día al que cuenta la publicación: el día real, salvo si se publicó de madrugada (00:00-05:59), que cuenta como el vídeo del día anterior (regla de ${N}: llega tarde a casa y lo sube para el día que acaba de terminar). fecha_plan = día en que ${N} planea publicarla (calendario de publicación; «el reel del Excel sale el jueves» → fecha_plan). Si ${N} pasa el link («publiqué un reel: <link>»), guárdalo en url (sirve para la miniatura y el player del panel). Si menciona métricas («el reel lleva 4k views»), actualiza views/likes de esa pieza.
 - referencias: [{ id, cuenta, url?, titulo?, nota (qué se lleva de ella), formato?, creada }] — ARCHIVO de reels y cuentas modelo: desde el 20 oct ya no tiene pantalla en el panel (la pestaña es solo Ganchos). Un reel de referencia para una pieza va en su contenido[].reels_ref; «guárdame este reel como referencia» sin pieza concreta → pregúntale para qué pieza es.
 - ganchos: [{ id, texto, tipo?, fuente?, nota?, creada }] — banco de ganchos reutilizables. Los ganchos de sus propias piezas ya salen solos del campo gancho de contenido; aquí van los ajenos o sueltos.
 - VISIÓN (su «Creator Vision»: mensaje, pilares, a quién le habla, su historia, rueda LIFE, tres porqués, ganchos y planificador): vive aparte del estado, con historial de versiones (Instagram → Visión). Léela con get_vision cuando vayas a idear, escribir un guion o decidir algo de contenido: es la base de la que partir. Cambiarla es delicado: SOLO con update_vision y SOLO cuando ${N} esté hablando de su visión y te pida cambiarla. Antes de guardar, enséñale el texto exacto que quedará en cada casilla y espera su OK; guarda con un resumen de una frase (qué cambia y por qué). Cada guardado es una versión nueva y la anterior se puede restaurar desde el panel. Nunca la toques de paso en otra tarea.

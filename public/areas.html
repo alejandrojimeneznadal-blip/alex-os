@@ -770,6 +770,13 @@
   .ig-url code { flex: 1; min-width: 0; font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; overflow-wrap: anywhere; user-select: all; color: var(--ink); }
   .ig-url .btn-mini { flex-shrink: 0; }
   .ig-err { margin-top: 10px; color: var(--bad); font-size: 13px; }
+  .ig-aviso { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 0 0 12px; padding: 10px 12px; border: 1px dashed var(--border-strong); border-radius: 8px; font-size: 13px; color: var(--ink-2); }
+  .ig-aviso span { flex: 1; min-width: 200px; }
+  .ig-pub { display: flex; gap: 12px; align-items: flex-start; margin-top: 4px; }
+  .ig-pub img { width: 64px; height: 114px; object-fit: cover; border-radius: 6px; flex-shrink: 0; background: var(--surface-2); }
+  .ig-cap { font-size: 13px; color: var(--ink); max-height: 5.4em; overflow: hidden; white-space: pre-line; }
+  .ig-cap-m { font-size: 12px; color: var(--ink-3); margin-top: 6px; }
+  .ig-cap-m a { color: inherit; }
   .ig-nums { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px 10px; margin: 6px 0 16px; }
   .ig-nums .v { font-size: 17px; font-weight: 650; color: var(--ink); font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
   .ig-nums .v.bien { color: var(--good); } .ig-nums .v.mal { color: var(--bad); }
@@ -4722,7 +4729,7 @@ function vistaTableroIG() {
   return `<div class="kb-bar">
       <input id="kbBusca" type="search" placeholder="Buscar en todas las piezas, también en las publicadas" value="${escA(igBusca)}" oninput="igBusca=this.value;pintaTablero()">
       <button class="btn-mini primary" onclick="nuevaPiezaIG()">${OSIcons.nueva} Pieza</button>
-    </div><div id="kbWrap">${htmlTablero()}</div>`;
+    </div>${IG_CON?.sin_pieza ? `<div class="ig-aviso"><span>${IG_CON.sin_pieza === 1 ? "Hay una publicación de Instagram sin su pieza" : `Hay ${IG_CON.sin_pieza} publicaciones de Instagram sin su pieza`}: dime cuál es cada una y quedan publicadas con sus números.</span><button class="btn-mini primary" onclick="igEnlazar()">Enlazar</button></div>` : ""}<div id="kbWrap">${htmlTablero()}</div>`;
 }
 function pintaTablero() { const w = $("kbWrap"); if (w) w.innerHTML = htmlTablero(); }
 function htmlTablero() {
@@ -4825,6 +4832,43 @@ async function igConMenu() {
   catch (e) { IG_CON = { ...c }; alert("No se pudo actualizar: " + e.message); }
   await load(); // trae los números nuevos de cada pieza
 }
+async function igEnlazar() {
+  let pubs;
+  try { const r = await fetch("/api/instagram/publicaciones", { credentials: "include" }); pubs = (await r.json()).publicaciones || []; }
+  catch (e) { alert("No se pudieron leer las publicaciones: " + e.message); return; }
+  const hace30 = Date.now() - 30 * 86400000;
+  const pendientes = pubs.filter((p) => !p.cid && !p.ninguna && p.publicado > hace30);
+  const dist = (a, b) => (a && b ? Math.abs(new Date(a + "T12:00") - new Date(b + "T12:00")) : Infinity);
+  for (const [k, p] of pendientes.entries()) {
+    const cands = (STATE.contenido || []).filter((c) => c.tipo !== "youtube" && !c.ig)
+      .sort((a, b) => dist(a.fecha_plan || a.fecha_pub, p.dia) - dist(b.fecha_plan || b.fecha_pub, p.dia));
+    const num = [p.views != null ? `${fmtN(p.views)} vistas` : "", p.omision_pct != null ? `${String(p.omision_pct).replace(".", ",")} % omisión` : ""].filter(Boolean).join(" · ");
+    const r = await OSUI.form({
+      titulo: `${p.tipo === "REELS" ? "Reel" : "Publicación"} del ${fmtDiaCorto(p.dia)}${pendientes.length > 1 ? ` · ${k + 1} de ${pendientes.length}` : ""}`,
+      texto: `<div class="ig-pub">${p.miniatura ? `<img src="${escA(p.miniatura)}" alt="" onerror="this.remove()">` : ""}<div><div class="ig-cap">${esc(p.caption || "(sin texto)")}</div>
+        <div class="ig-cap-m">${num}${p.url ? ` · <a href="${escA(p.url)}" target="_blank" rel="noopener">verla en Instagram</a>` : ""}</div></div></div>`,
+      campos: [{ id: "cid", label: "¿Qué pieza es?", tipo: "select", buscar: true, opciones: [
+        ...cands.map((c) => ({ v: c.cid, l: `${c.fecha_plan || c.fecha_pub ? fmtDiaCorto(c.fecha_plan || c.fecha_pub) + " · " : ""}${c.titulo || "(sin título)"}` })),
+        { v: "__nueva", l: "Es una pieza nueva: créala" }, { v: "__ninguna", l: "No es ninguna pieza: no la sigas" }] }],
+      ok: "Enlazar",
+    });
+    if (!r) break;
+    const body = r.cid === "__nueva" ? { nueva: true } : r.cid === "__ninguna" ? { ninguna: true } : { cid: r.cid };
+    try { await apiPost(`/api/instagram/publicaciones/${encodeURIComponent(p.media_id)}/pieza`, body); }
+    catch (e) { alert("No se pudo enlazar: " + e.message); break; }
+  }
+  IG_CON = null;
+  await load();
+  renderContent();
+}
+async function igDesune(mediaId) {
+  if (!(await OSUI.confirm("No es este reel", "Esta pieza deja de tener estos números y el reel pasa a «sin pieza» en el tablero para que lo enlaces bien. El estado de la pieza no cambia.", { ok: "Soltar" }))) return;
+  try { await apiPost(`/api/instagram/publicaciones/${encodeURIComponent(mediaId)}/pieza`, { soltar: true }); }
+  catch (e) { alert(e.message); return; }
+  IG_CON = null;
+  await load();
+  renderPiezaPanel();
+}
 function htmlIgFicha(g) {
   const n = (v) => (v == null ? "—" : fmtN(v));
   const dec = (v, u) => (v == null ? "—" : `${String(v).replace(".", ",")} ${u}`);
@@ -4834,7 +4878,7 @@ function htmlIgFicha(g) {
   if (g.reposts != null) celdas.push(["Reposts", n(g.reposts)]);
   if (g.follows != null) celdas.push(["Seguidores ganados", n(g.follows)]);
   return `<div class="ig-nums">${celdas.map(([k, v, cl]) => `<div><div class="v${cl ? " " + cl : ""}">${v}</div><div class="k">${k}</div></div>`).join("")}</div>
-    <div class="ft-nota">Números de Instagram, actualizados ${haceIg(g.actualizado)}${g.url ? ` · <a href="${escA(g.url)}" target="_blank" rel="noopener">ver el reel</a>` : ""}</div>`;
+    <div class="ft-nota">Números de Instagram, actualizados ${haceIg(g.actualizado)}${g.url ? ` · <a href="${escA(g.url)}" target="_blank" rel="noopener">ver el reel</a>` : ""} · <a href="#" onclick="event.preventDefault();igDesune('${escA(g.media_id)}')">¿no es este reel?</a></div>`;
 }
 function igArrastra(e, i) { e.dataTransfer.setData("text/plain", String(i)); e.dataTransfer.effectAllowed = "move"; }
 function igSobre(e) { e.preventDefault(); e.currentTarget.classList.add("over"); }
